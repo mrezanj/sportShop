@@ -1,16 +1,31 @@
-import logging
 
-logger = logging.getLogger(__name__)
+from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
+
+
+class SMSDeliveryError(Exception):
+    """Raised when an SMS provider fails to deliver a message."""
 
 
 def send_otp_sms(mobile, code):
     """
-    Mock SMS service.
-    In development, prints the code to the terminal.
-    In production, replace with Kavenegar / MelliPayamak / etc.
+    SMS provider entry point.
+
+    Current provider: Mock
+    Future provider: Kavenegar
+
+    Never log or expose OTP codes here.
     """
-    print("\n" + "=" * 60)
-    print(f"  SMS به {mobile}")
-    print(f"  کد تایید: {code}")
-    print("=" * 60 + "\n")
-    logger.info(f"OTP for {mobile}: {code}")
+    backend = getattr(settings, "SMS_BACKEND", "mock")
+
+    if backend == "mock":
+        if not settings.DEBUG:
+            raise ImproperlyConfigured(
+                "Mock SMS backend cannot be used in production."
+            )
+
+        return True
+
+    raise ImproperlyConfigured(
+        f"Unsupported SMS backend: {backend}"
+    )
