@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>پرداخت قبلاً پردازش شده</title>
+    <style>
+        body {
+            font-family: Tahoma, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 420px;
+            text-align: center;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+        }
+        h1 { color: #831843; font-size: 18px; margin: 0 0 12px; }
+        p { color: #666; font-size: 14px; line-height: 1.7; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>این پرداخت قبلاً پردازش شده است</h1>
+        <p>
+            سفارش <strong dir="ltr">{{ order.order_number }}</strong><br>
+            وضعیت پرداخت: <strong>{{ payment.get_status_display }}</strong>
+        </p>
+    </div>
+</body>
+</html>

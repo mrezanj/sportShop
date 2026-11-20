@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>درگاه پرداخت آزمایشی</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Tahoma, Arial, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            padding: 32px;
+            max-width: 480px;
+            width: 100%;
+            border-top: 4px solid #9d174d;
+        }
+        .badge {
+            display: inline-block;
+            background: #fce7f3;
+            color: #9d174d;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            margin-bottom: 20px;
+        }
+        h1 { color: #831843; font-size: 20px; margin-bottom: 24px; }
+        .info {
+            background: #fafafa;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 14px;
+            border-bottom: 1px solid #eee;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: #666; }
+        .info-value { color: #111; font-weight: 600; }
+        .info-value.amount { color: #9d174d; font-size: 18px; }
+        .buttons { display: grid; gap: 12px; }
+        button {
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-success { background: #9d174d; color: white; }
+        .btn-success:hover { background: #831843; }
+        .btn-cancel {
+            background: white;
+            color: #666;
+            border: 1px solid #ddd;
+        }
+        .btn-cancel:hover { background: #f5f5f5; }
+        .warning {
+            margin-top: 20px;
+            padding: 12px;
+            background: #fef3c7;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #92400e;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <span class="badge">درگاه آزمایشی (Mock)</span>
+        <h1>پرداخت سفارش</h1>
+
+        <div class="info">
+            <div class="info-row">
+                <span class="info-label">شماره سفارش</span>
+                <span class="info-value" dir="ltr">{{ order.order_number }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">مبلغ قابل پرداخت</span>
+                <span class="info-value amount">
+                    {{ payment.amount|floatformat:"0" }} تومان
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">درگاه</span>
+                <span class="info-value">Mock</span>
+            </div>
+        </div>
+
+        <form method="post" class="buttons">
+            {% csrf_token %}
+            <button type="submit" name="status" value="success" class="btn-success">
+                ✓ پرداخت موفق
+            </button>
+            <button type="submit" name="status" value="cancelled" class="btn-cancel">
+                ✕ انصراف از پرداخت
+            </button>
+        </form>
+
+        <p class="warning">
+            ⚠️ این یک درگاه آزمایشی است. هیچ مبلغی از حساب شما کسر نمی‌شود.
+        </p>
+    </div>
+</body>
+</html>
