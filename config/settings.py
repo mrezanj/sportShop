@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     "catalog",
     "users",
     "orders",
+    "cart.apps.CartConfig",
     "payments",
     "core",
 ]
