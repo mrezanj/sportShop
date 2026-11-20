@@ -11,6 +11,7 @@ from rest_framework.test import APIClient
 from catalog.models import Brand, Category, Product, ProductVariant
 from orders.models import (
     Order,
+    OrderStatusHistory,
     ShippingMethod,
     ShippingRate,
     StockReservation,
@@ -136,6 +137,25 @@ class PaymentFlowTests(TestCase):
         self.variant.refresh_from_db()
 
         self.assertEqual(order.status, "paid")
+        histories = OrderStatusHistory.objects.filter(order=order).order_by("id")
+
+        self.assertEqual(histories.count(), 2)
+
+        initial_history = histories.first()
+        payment_history = histories.last()
+
+        self.assertEqual(initial_history.old_status, "")
+        self.assertEqual(initial_history.new_status, "pending")
+        self.assertEqual(initial_history.changed_by, self.user)
+
+        self.assertEqual(payment_history.old_status, "pending")
+        self.assertEqual(payment_history.new_status, "paid")
+        self.assertIsNone(payment_history.changed_by)
+        self.assertEqual(
+            payment_history.note,
+            "پرداخت سفارش با موفقیت تأیید شد.",
+        )
+
         self.assertEqual(payment.status, "success")
         self.assertEqual(reservation.status, "consumed")
         self.assertIsNotNone(reservation.consumed_at)

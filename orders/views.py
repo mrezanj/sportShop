@@ -124,7 +124,13 @@ def cancel_order(request, order_number):
         )
 
         now = timezone.now()
-        cancel_locked_order(order, reservations, now)
+        cancel_locked_order(
+            order,
+            reservations,
+            now,
+            changed_by=request.user,
+            note="لغو سفارش به درخواست مشتری.",
+        )
         Payment.objects.filter(
             order=order,
             status="pending",

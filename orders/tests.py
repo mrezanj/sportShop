@@ -2,8 +2,8 @@ from datetime import timedelta
 from decimal import Decimal
 from io import StringIO
 from types import SimpleNamespace
-
-from django.contrib.auth.models import User
+from orders.admin import OrderAdmin
+from django.contrib.auth.models import User, Permission
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
@@ -15,12 +15,18 @@ from catalog.models import Brand, Category, Product, ProductVariant
 from orders.models import (
     Order,
     OrderItem,
+    OrderStatusHistory,
     ShippingMethod,
     ShippingRate,
     StockReservation,
 )
 from orders.serializers import CreateOrderSerializer
 from payments.models import Payment
+from orders.services import (
+    ALLOWED_ORDER_TRANSITIONS,
+    InvalidOrderStatusTransition,
+    transition_order_status,
+)
 
 
 class CreateOrderReservationTests(TestCase):
@@ -208,6 +214,23 @@ class CreateOrderReservationTests(TestCase):
         self.variant.refresh_from_db()
         self.assertEqual(self.variant.stock, 5)
 
+    def test_order_creation_records_initial_status_history(self):
+        order = self.create_order(
+            [
+                {
+                    "variant_id": self.variant.id,
+                    "quantity": 2,
+                }
+            ]
+        )
+
+        history = OrderStatusHistory.objects.get(order=order)
+
+        self.assertEqual(history.old_status, "")
+        self.assertEqual(history.new_status, "pending")
+        self.assertEqual(history.changed_by, self.user)
+        self.assertEqual(history.note, "ایجاد سفارش توسط مشتری.")
+
 
 class CancelOrderTests(APITestCase):
     def setUp(self):
@@ -313,6 +336,16 @@ class CancelOrderTests(APITestCase):
 
         # Physical stock must not change.
         self.assertEqual(self.variant.stock, 5)
+
+        history = OrderStatusHistory.objects.get(order=self.order)
+
+        self.assertEqual(history.old_status, "pending")
+        self.assertEqual(history.new_status, "cancelled")
+        self.assertEqual(history.changed_by, self.user)
+        self.assertEqual(
+            history.note,
+            "لغو سفارش به درخواست مشتری.",
+        )
 
     def test_another_user_cannot_cancel_order(self):
         self.client.force_authenticate(user=self.other_user)
@@ -475,6 +508,15 @@ class ExpireOrdersCommandTests(TestCase):
         # Expiring an order must not change physical stock.
         self.variant.refresh_from_db()
         self.assertEqual(self.variant.stock, 5)
+        history = OrderStatusHistory.objects.get(order=order)
+
+        self.assertEqual(history.old_status, "pending")
+        self.assertEqual(history.new_status, "cancelled")
+        self.assertIsNone(history.changed_by)
+        self.assertEqual(
+            history.note,
+            "لغو خودکار سفارش به علت پایان مهلت رزرو موجودی.",
+        )
 
     def test_expiration_command_is_idempotent(self):
         order, reservation = self.create_order_with_reservation(
@@ -557,3 +599,206 @@ class ExpireOrdersCommandTests(TestCase):
         self.assertEqual(order.status, "cancelled")
         self.assertEqual(reservation.status, "expired")
         self.assertEqual(payment.status, "failed")
+
+
+class OrderStatusTransitionTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="status-user",
+            password="test-password",
+        )
+
+        self.order = Order.objects.create(
+            user=self.user,
+            first_name="Test",
+            last_name="User",
+            mobile="09123456789",
+            province="tehran",
+            city="تهران",
+            address="آدرس آزمایشی معتبر",
+            subtotal=Decimal("200000"),
+            vat_amount=Decimal("20000"),
+            total_amount=Decimal("270000"),
+            status="pending",
+        )
+
+    def test_valid_transition_creates_history(self):
+        changed = transition_order_status(
+            order=self.order,
+            new_status="paid",
+            changed_by=self.user,
+            note="تست تغییر وضعیت",
+        )
+
+        self.assertTrue(changed)
+
+        self.order.refresh_from_db()
+
+        history = OrderStatusHistory.objects.get(order=self.order)
+
+        self.assertEqual(self.order.status, "paid")
+        self.assertEqual(history.old_status, "pending")
+        self.assertEqual(history.new_status, "paid")
+        self.assertEqual(history.changed_by, self.user)
+        self.assertEqual(history.note, "تست تغییر وضعیت")
+
+    def test_invalid_transition_is_rejected(self):
+        with self.assertRaises(InvalidOrderStatusTransition):
+            transition_order_status(
+                order=self.order,
+                new_status="shipped",
+            )
+
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.order.status, "pending")
+        self.assertEqual(
+            OrderStatusHistory.objects.filter(order=self.order).count(),
+            0,
+        )
+
+    def test_unknown_status_is_rejected(self):
+        with self.assertRaises(InvalidOrderStatusTransition):
+            transition_order_status(
+                order=self.order,
+                new_status="unknown",
+            )
+
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.order.status, "pending")
+
+    def test_same_status_does_not_create_duplicate_history(self):
+        changed = transition_order_status(
+            order=self.order,
+            new_status="pending",
+        )
+
+        self.assertFalse(changed)
+        self.assertEqual(
+            OrderStatusHistory.objects.filter(order=self.order).count(),
+            0,
+        )
+
+
+class OrderAdminStatusActionTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="order-manager",
+            password="test-password",
+            is_staff=True,
+        )
+
+        self.change_permission = Permission.objects.get(
+            content_type__app_label="orders",
+            codename="change_order",
+        )
+
+        self.manage_permission = Permission.objects.get(
+            content_type__app_label="orders",
+            codename="can_manage_order_status",
+        )
+
+        self.user.user_permissions.add(
+            self.change_permission,
+            self.manage_permission,
+        )
+
+        self.order = Order.objects.create(
+            user=self.user,
+            first_name="Test",
+            last_name="Manager",
+            mobile="09123456789",
+            province="tehran",
+            city="تهران",
+            address="آدرس آزمایشی معتبر",
+            subtotal=Decimal("200000"),
+            vat_amount=Decimal("20000"),
+            total_amount=Decimal("270000"),
+            status="paid",
+        )
+
+        self.changelist_url = reverse("admin:orders_order_changelist")
+
+    def post_admin_action(self, action, order):
+        return self.client.post(
+            self.changelist_url,
+            {
+                "action": action,
+                "index": "0",
+                "_selected_action": [str(order.pk)],
+                "select_across": "0",
+            },
+        )
+
+    def test_authorized_user_can_complete_valid_status_transitions(self):
+        self.client.force_login(self.user)
+
+        response = self.post_admin_action("mark_processing", self.order)
+        self.assertEqual(response.status_code, 302)
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, "processing")
+
+        response = self.post_admin_action("mark_shipped", self.order)
+        self.assertEqual(response.status_code, 302)
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, "shipped")
+
+        response = self.post_admin_action("mark_delivered", self.order)
+        self.assertEqual(response.status_code, 302)
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, "delivered")
+
+        history = OrderStatusHistory.objects.filter(order=self.order).order_by("id")
+
+        self.assertEqual(history.count(), 3)
+
+        self.assertEqual(
+            list(history.values_list("new_status", flat=True)),
+            ["processing", "shipped", "delivered"],
+        )
+
+        for record in history:
+            self.assertEqual(record.changed_by, self.user)
+
+    def test_unauthorized_user_cannot_change_order_status(self):
+        unauthorized_user = User.objects.create_user(
+            username="unauthorized-manager",
+            password="test-password",
+            is_staff=True,
+        )
+
+        unauthorized_user.user_permissions.add(
+            self.change_permission,
+        )
+
+        self.client.force_login(unauthorized_user)
+
+        self.post_admin_action("mark_processing", self.order)
+
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.order.status, "paid")
+        self.assertEqual(
+            OrderStatusHistory.objects.filter(order=self.order).count(),
+            0,
+        )
+
+    def test_invalid_admin_transition_does_not_change_order(self):
+        self.client.force_login(self.user)
+
+        self.order.status = "pending"
+        self.order.save(update_fields=["status"])
+
+        self.post_admin_action("mark_shipped", self.order)
+
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.order.status, "pending")
+        self.assertEqual(
+            OrderStatusHistory.objects.filter(order=self.order).count(),
+            0,
+        )

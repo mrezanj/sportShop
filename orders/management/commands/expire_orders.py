@@ -1,4 +1,3 @@
-
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -65,7 +64,12 @@ class Command(BaseCommand):
                     .order_by("variant_id")
                 )
 
-                cancel_locked_order(order, reservations, now)
+                cancel_locked_order(
+                    order,
+                    reservations,
+                    now,
+                    note="لغو خودکار سفارش به علت پایان مهلت رزرو موجودی.",
+                )
 
                 updated_payments = Payment.objects.filter(
                     order=order,
@@ -78,13 +82,7 @@ class Command(BaseCommand):
                 cancelled_payment_count += updated_payments
                 expired_count += 1
 
+        self.stdout.write(self.style.SUCCESS(f"Expired orders: {expired_count}"))
         self.stdout.write(
-            self.style.SUCCESS(
-                f"Expired orders: {expired_count}"
-            )
-        )
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Cancelled pending payments: {cancelled_payment_count}"
-            )
+            self.style.SUCCESS(f"Cancelled pending payments: {cancelled_payment_count}")
         )

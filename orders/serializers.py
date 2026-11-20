@@ -12,6 +12,7 @@ from .models import (
     ShippingMethod,
     ShippingRate,
     StockReservation,
+    OrderStatusHistory,
 )
 
 
@@ -306,7 +307,13 @@ class CreateOrderSerializer(serializers.Serializer):
                 notes=validated_data.get("notes", ""),
                 reservation_expires_at=expires_at,
             )
-
+            OrderStatusHistory.objects.create(
+                order=order,
+                old_status="",
+                new_status="pending",
+                changed_by=user,
+                note="ایجاد سفارش توسط مشتری.",
+            )
             for item in items_data:
                 variant = item.pop("variant")
                 quantity = item["quantity"]

@@ -146,6 +146,12 @@ class Order(models.Model):
         verbose_name = "سفارش"
         verbose_name_plural = "سفارش‌ها"
         ordering = ["-created_at"]
+        permissions = [
+            (
+                "can_manage_order_status",
+                "Can manage order status",
+            ),
+        ]
 
     def __str__(self):
         return self.order_number
@@ -168,6 +174,60 @@ class Order(models.Model):
                 n = 1
             self.order_number = f"{prefix}-{n:04d}"
         super().save(*args, **kwargs)
+
+
+class OrderStatusHistory(models.Model):
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name="status_history",
+        verbose_name="سفارش",
+    )
+    old_status = models.CharField(
+        max_length=20,
+        choices=Order.STATUS_CHOICES,
+        blank=True,
+        default="",
+        verbose_name="وضعیت قبلی",
+    )
+    new_status = models.CharField(
+        max_length=20,
+        choices=Order.STATUS_CHOICES,
+        verbose_name="وضعیت جدید",
+    )
+    changed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="order_status_changes",
+        verbose_name="تغییردهنده",
+    )
+    note = models.TextField(
+        blank=True,
+        verbose_name="توضیحات",
+    )
+    created_at = JalaliDateTimeField(
+        auto_now_add=True,
+        verbose_name="زمان تغییر",
+    )
+
+    class Meta:
+        verbose_name = "تاریخچه وضعیت سفارش"
+        verbose_name_plural = "تاریخچه وضعیت سفارش‌ها"
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(
+                fields=["order", "created_at"],
+                name="order_status_history_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.order.order_number}: "
+            f"{self.old_status or '—'} → {self.new_status}"
+        )
 
 
 class OrderItem(models.Model):

@@ -11,7 +11,10 @@ from catalog.models import ProductVariant
 from orders.models import Order, StockReservation
 from .models import Payment
 from .gateways import get_gateway
-from orders.services import cancel_locked_order
+from orders.services import (
+    cancel_locked_order,
+    transition_order_status,
+)
 
 
 def _lock_and_validate_reservations(order, now):
@@ -114,7 +117,12 @@ def initiate_payment(request):
         )
 
         if not valid:
-            cancel_locked_order(order, reservations, now)
+            cancel_locked_order(
+                order,
+                reservations,
+                now,
+                note="لغو خودکار به علت پایان مهلت یا نامعتبر بودن رزرو موجودی.",
+            )
             return Response(
                 {"error": "مهلت رزرو موجودی پایان یافته یا رزرو معتبر نیست."},
                 status=400,
@@ -228,8 +236,12 @@ def verify_payment(request):
         )
 
         if not valid:
-            cancel_locked_order(order, reservations, now)
-
+            cancel_locked_order(
+                order,
+                reservations,
+                now,
+                note="لغو خودکار به علت پایان مهلت یا نامعتبر بودن رزرو موجودی.",
+            )
             payment.status = "cancelled"
             payment.gateway_response = {
                 "reason": "reservation_expired_or_invalid",
@@ -289,8 +301,12 @@ def verify_payment(request):
             ]
         )
 
-        order.status = "paid"
-        order.save(update_fields=["status", "updated_at"])
+        transition_order_status(
+            order=order,
+            new_status="paid",
+            changed_by=None,
+            note="پرداخت سفارش با موفقیت تأیید شد.",
+        )
 
         return Response(
             {
