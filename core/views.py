@@ -51,12 +51,14 @@ def homepage_data(request):
             .order_by("-created_at")[:needed]
         )
         bestsellers = bestsellers + fillers
-        new_products = (
-            Product.objects.filter(is_active=True)
-            .prefetch_related("images", "variants")
-            .select_related("brand", "category")
-            .order_by("-created_at")[:4]
-        )
+
+    # Newest products must be available regardless of bestseller count.
+    new_products = (
+        Product.objects.filter(is_active=True)
+        .prefetch_related("images", "variants")
+        .select_related("brand", "category")
+        .order_by("-created_at")[:4]
+    )
 
     categories = Category.objects.filter(is_active=True, parent__isnull=True).order_by(
         "name"
