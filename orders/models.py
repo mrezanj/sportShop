@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from catalog.models import ProductVariant
-from jalali_suite.models import JalaliDateTimeField 
+from jalali_suite.models import JalaliDateTimeField
 
 PROVINCE_CHOICES = [
     ("tehran", "تهران"),
@@ -130,12 +130,17 @@ class Order(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="pending", verbose_name="وضعیت"
     )
+    reservation_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="مهلت پایان رزرو موجودی",
+    )
     tracking_code = models.CharField(
         max_length=100, blank=True, verbose_name="کد رهگیری"
     )
     notes = models.TextField(blank=True, verbose_name="یادداشت")
-    created_at = JalaliDateTimeField(auto_now_add=True, verbose_name='تاریخ ایجاد')
-    updated_at = JalaliDateTimeField(auto_now=True, verbose_name='تاریخ بروزرسانی')
+    created_at = JalaliDateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
+    updated_at = JalaliDateTimeField(auto_now=True, verbose_name="تاریخ بروزرسانی")
 
     class Meta:
         verbose_name = "سفارش"
@@ -187,3 +192,70 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.order.order_number} - {self.product_name}"
+
+
+class StockReservation(models.Model):
+    STATUS_CHOICES = [
+        ("active", "فعال"),
+        ("consumed", "مصرف‌شده"),
+        ("released", "آزادشده"),
+        ("expired", "منقضی‌شده"),
+    ]
+
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name="stock_reservations",
+        verbose_name="سفارش",
+    )
+    variant = models.ForeignKey(
+        ProductVariant,
+        on_delete=models.PROTECT,
+        related_name="stock_reservations",
+        verbose_name="تنوع محصول",
+    )
+    quantity = models.PositiveIntegerField(verbose_name="تعداد رزروشده")
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="active",
+        verbose_name="وضعیت",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="زمان ایجاد",
+    )
+    expires_at = models.DateTimeField(verbose_name="زمان انقضا")
+    released_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان آزادسازی",
+    )
+    consumed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان مصرف",
+    )
+
+    class Meta:
+        verbose_name = "رزرو موجودی"
+        verbose_name_plural = "رزروهای موجودی"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order", "variant"],
+                name="unique_order_variant_reservation",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(quantity__gt=0),
+                name="stock_reservation_quantity_positive",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "expires_at"],
+                name="reservation_status_exp_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.order.order_number} - " f"{self.variant} - {self.quantity}"

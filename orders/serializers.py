@@ -3,7 +3,16 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import transaction
 from catalog.models import ProductVariant
-from .models import Order, OrderItem, ShippingMethod, ShippingRate
+from datetime import timedelta
+from django.utils import timezone
+from django.db.models import Sum
+from .models import (
+    Order,
+    OrderItem,
+    ShippingMethod,
+    ShippingRate,
+    StockReservation,
+)
 
 
 class ShippingMethodSerializer(serializers.ModelSerializer):
@@ -88,48 +97,39 @@ class CreateOrderSerializer(serializers.Serializer):
         if not data["items"]:
             raise serializers.ValidationError({"items": "سبد خرید خالی است."})
 
-        # Parse and validate items
-        parsed = []
-        variant_ids = []
+        quantities = {}
+
         for item in data["items"]:
             try:
                 vid = int(item["variant_id"])
                 qty = int(item["quantity"])
             except (KeyError, ValueError, TypeError):
                 raise serializers.ValidationError({"items": "داده ارسالی نامعتبر است."})
-            if qty <= 0:
-                raise serializers.ValidationError(
-                    {"items": "تعداد باید بزرگ‌تر از صفر باشد."}
-                )
-            parsed.append((vid, qty))
-            variant_ids.append(vid)
 
-        variants = {
-            v.id: v
-            for v in ProductVariant.objects.select_related("product__brand").filter(
-                id__in=variant_ids
-            )
-        }
-
-        for vid, qty in parsed:
-            if vid not in variants:
+            if vid <= 0 or qty <= 0:
                 raise serializers.ValidationError(
-                    {"items": "محصولی در سبد شما یافت نشد."}
-                )
-            v = variants[vid]
-            if not v.is_active or not v.product.is_active:
-                raise serializers.ValidationError(
-                    {"items": f"{v.product.name_fa} دیگر موجود نیست."}
-                )
-            if v.stock < qty:
-                raise serializers.ValidationError(
-                    {"items": f"موجودی {v.product.name_fa} کافی نیست."}
+                    {"items": "شناسه و تعداد باید بزرگ‌تر از صفر باشند."}
                 )
 
-        # Validate shipping method
+            quantities[vid] = quantities.get(vid, 0) + qty
+
+        variants = ProductVariant.objects.select_related("product__brand").filter(
+            id__in=quantities
+        )
+
+        if variants.count() != len(quantities):
+            raise serializers.ValidationError({"items": "محصولی در سبد شما یافت نشد."})
+
+        for variant in variants:
+            if not variant.is_active or not variant.product.is_active:
+                raise serializers.ValidationError(
+                    {"items": f"{variant.product.name_fa} دیگر موجود نیست."}
+                )
+
         try:
             method = ShippingMethod.objects.get(
-                slug=data["shipping_method_slug"], is_active=True
+                slug=data["shipping_method_slug"],
+                is_active=True,
             )
         except ShippingMethod.DoesNotExist:
             raise serializers.ValidationError(
@@ -137,58 +137,153 @@ class CreateOrderSerializer(serializers.Serializer):
             )
 
         rate = method.rates.filter(province=data["province"]).first()
+
         if not rate:
             raise serializers.ValidationError(
                 {"shipping_method_slug": "این روش برای استان شما موجود نیست."}
             )
 
-        data["_parsed"] = parsed
-        data["_variants"] = variants
+        data["_quantities"] = quantities
         data["_method"] = method
         data["_rate"] = rate
+
         return data
 
     def create(self, validated_data):
         user = self.context["request"].user
-        variants = validated_data["_variants"]
+        quantities = validated_data["_quantities"]
+        now = timezone.now()
+
+        reservation_minutes = getattr(
+            settings,
+            "STOCK_RESERVATION_MINUTES",
+            30,
+        )
+        expires_at = now + timedelta(minutes=reservation_minutes)
 
         with transaction.atomic():
-            # Build order items from server-side data
+            # Lock variants in a consistent order to prevent overselling.
+            variants = list(
+                ProductVariant.objects.select_for_update()
+                .select_related("product__brand")
+                .filter(id__in=quantities)
+                .order_by("id")
+            )
+
+            if len(variants) != len(quantities):
+                raise serializers.ValidationError(
+                    {"items": "یکی از محصولات دیگر در دسترس نیست."}
+                )
+
+            variants_by_id = {variant.id: variant for variant in variants}
+
+            # Recheck product availability after acquiring locks.
+            for variant_id, qty in quantities.items():
+                variant = variants_by_id[variant_id]
+
+                if not variant.is_active or not variant.product.is_active:
+                    raise serializers.ValidationError(
+                        {"items": f"{variant.product.name_fa} دیگر موجود نیست."}
+                    )
+
+            variant_ids = list(quantities.keys())
+
+            # Mark old active reservations as expired.
+            StockReservation.objects.filter(
+                variant_id__in=variant_ids,
+                status="active",
+                expires_at__lte=now,
+            ).update(
+                status="expired",
+                released_at=now,
+            )
+
+            # Calculate currently reserved quantities.
+            reserved_rows = (
+                StockReservation.objects.filter(
+                    variant_id__in=variant_ids,
+                    status="active",
+                    expires_at__gt=now,
+                )
+                .values("variant_id")
+                .annotate(total=Sum("quantity"))
+            )
+
+            reserved_by_variant = {
+                row["variant_id"]: row["total"] for row in reserved_rows
+            }
+
+            # Validate available stock while holding variant locks.
+            for variant_id, qty in quantities.items():
+                variant = variants_by_id[variant_id]
+                reserved = reserved_by_variant.get(variant_id, 0)
+                available = variant.stock - reserved
+
+                if available < qty:
+                    raise serializers.ValidationError(
+                        {
+                            "items": (
+                                f"موجودی قابل سفارش "
+                                f"{variant.product.name_fa} کافی نیست. "
+                                f"موجودی قابل خرید: {max(available, 0)}"
+                            )
+                        }
+                    )
+
+            # Build order items from server-side data.
             subtotal = Decimal(0)
             items_data = []
 
-            for vid, qty in validated_data["_parsed"]:
-                v = variants[vid]
-                item_subtotal = v.price * qty
+            for variant_id, qty in quantities.items():
+                variant = variants_by_id[variant_id]
+                item_subtotal = variant.price * qty
                 subtotal += item_subtotal
 
-                primary = v.product.images.filter(is_primary=True).first()
-                image_url = primary.image.url if (primary and primary.image) else ""
+                primary = variant.product.images.filter(is_primary=True).first()
 
-                label = " - ".join(filter(None, [v.flavor, v.weight, v.size, v.color]))
+                image_url = primary.image.url if primary and primary.image else ""
+
+                label = " - ".join(
+                    filter(
+                        None,
+                        [
+                            variant.flavor,
+                            variant.weight,
+                            variant.size,
+                            variant.color,
+                        ],
+                    )
+                )
 
                 items_data.append(
                     {
-                        "variant": v,
-                        "product_name": v.product.name_fa,
-                        "product_slug": v.product.slug,
-                        "brand_name": v.product.brand.name,
+                        "variant": variant,
+                        "product_name": variant.product.name_fa,
+                        "product_slug": variant.product.slug,
+                        "brand_name": variant.product.brand.name,
                         "variant_label": label,
                         "image_url": image_url,
-                        "price": v.price,
+                        "price": variant.price,
                         "quantity": qty,
                         "subtotal": item_subtotal,
                     }
                 )
 
-            # Shipping cost
-            free_threshold = getattr(settings, "FREE_SHIPPING_THRESHOLD", 4_000_000)
+            # Shipping cost.
+            free_threshold = getattr(
+                settings,
+                "FREE_SHIPPING_THRESHOLD",
+                4_000_000,
+            )
+
             shipping_cost = Decimal(validated_data["_rate"].cost)
+
             if subtotal >= free_threshold:
                 shipping_cost = Decimal(0)
 
-            # VAT
+            # VAT.
             vat_rate = getattr(settings, "VAT_RATE", 0.10)
+
             vat_amount = (subtotal * Decimal(str(vat_rate))).quantize(Decimal("1"))
 
             total = subtotal + shipping_cost + vat_amount
@@ -209,12 +304,24 @@ class CreateOrderSerializer(serializers.Serializer):
                 vat_amount=vat_amount,
                 total_amount=total,
                 notes=validated_data.get("notes", ""),
+                reservation_expires_at=expires_at,
             )
 
             for item in items_data:
                 variant = item.pop("variant")
-                OrderItem.objects.create(order=order, variant=variant, **item)
-                variant.stock -= item["quantity"]
-                variant.save(update_fields=["stock"])
+                quantity = item["quantity"]
+
+                OrderItem.objects.create(
+                    order=order,
+                    variant=variant,
+                    **item,
+                )
+
+                StockReservation.objects.create(
+                    order=order,
+                    variant=variant,
+                    quantity=quantity,
+                    expires_at=expires_at,
+                )
 
             return order
