@@ -11,6 +11,7 @@ from catalog.models import ProductVariant
 from orders.models import Order, StockReservation
 from .models import Payment
 from .gateways import get_gateway
+from orders.services import cancel_locked_order
 
 
 def _lock_and_validate_reservations(order, now):
@@ -76,24 +77,6 @@ def _lock_and_validate_reservations(order, now):
     return valid, reservations, variants_by_id
 
 
-def _release_reservations(reservations, now):
-    """Release active reservations, preserving expired status where applicable."""
-    for reservation in reservations:
-        if reservation.status != "active":
-            continue
-
-        reservation.status = "expired" if reservation.expires_at <= now else "released"
-        reservation.released_at = now
-        reservation.save(update_fields=["status", "released_at"])
-
-
-def _cancel_order(order, reservations, now):
-    _release_reservations(reservations, now)
-
-    order.status = "cancelled"
-    order.save(update_fields=["status", "updated_at"])
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def initiate_payment(request):
@@ -131,7 +114,7 @@ def initiate_payment(request):
         )
 
         if not valid:
-            _cancel_order(order, reservations, now)
+            cancel_locked_order(order, reservations, now)
             return Response(
                 {"error": "مهلت رزرو موجودی پایان یافته یا رزرو معتبر نیست."},
                 status=400,
@@ -245,7 +228,7 @@ def verify_payment(request):
         )
 
         if not valid:
-            _cancel_order(order, reservations, now)
+            cancel_locked_order(order, reservations, now)
 
             payment.status = "cancelled"
             payment.gateway_response = {

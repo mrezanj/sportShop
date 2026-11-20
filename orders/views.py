@@ -7,7 +7,12 @@ from .serializers import (
     CreateOrderSerializer,
     OrderSerializer,
 )
-from .models import Order
+from django.db import transaction
+from django.utils import timezone
+from catalog.models import ProductVariant
+from .services import cancel_locked_order
+from payments.models import Payment
+from .models import Order, StockReservation
 
 
 @api_view(["GET"])
@@ -64,15 +69,74 @@ def order_detail(request, order_number):
         return Response({"detail": "سفارش یافت نشد."}, status=404)
     return Response(OrderSerializer(order).data)
 
+
 from rest_framework.pagination import PageNumberPagination
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_orders(request):
-    qs = Order.objects.filter(user=request.user).prefetch_related('items')
+    qs = Order.objects.filter(user=request.user).prefetch_related("items")
     paginator = PageNumberPagination()
     paginator.page_size = 20
     page = paginator.paginate_queryset(qs, request)
     serializer = OrderSerializer(page, many=True)
     return paginator.get_paginated_response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def cancel_order(request, order_number):
+    with transaction.atomic():
+        try:
+            order = Order.objects.select_for_update().get(
+                order_number=order_number,
+                user=request.user,
+            )
+        except Order.DoesNotExist:
+            return Response(
+                {"detail": "سفارش یافت نشد."},
+                status=404,
+            )
+
+        if order.status != "pending":
+            return Response(
+                {"detail": "فقط سفارش‌های در انتظار پرداخت قابل لغو هستند."},
+                status=400,
+            )
+
+        variant_ids = list(
+            order.stock_reservations.values_list("variant_id", flat=True)
+            .distinct()
+            .order_by("variant_id")
+        )
+
+        list(
+            ProductVariant.objects.select_for_update()
+            .filter(id__in=variant_ids)
+            .order_by("id")
+        )
+
+        reservations = list(
+            StockReservation.objects.select_for_update()
+            .filter(order=order)
+            .order_by("variant_id")
+        )
+
+        now = timezone.now()
+        cancel_locked_order(order, reservations, now)
+        Payment.objects.filter(
+            order=order,
+            status="pending",
+        ).update(
+            status="cancelled",
+            gateway_response={"reason": "order_cancelled"},
+        )
+        return Response(
+            {
+                "success": True,
+                "message": "سفارش با موفقیت لغو شد.",
+                "order_number": order.order_number,
+                "status": order.status,
+            }
+        )
