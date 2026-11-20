@@ -3,23 +3,28 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.core.exceptions import ImproperlyConfigured
+from django.http import Http404
+from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
-
 from rest_framework.test import APIClient
 
 from catalog.models import Brand, Category, Product, ProductVariant
 from orders.models import (
     Order,
+    OrderItem,
     OrderStatusHistory,
     ShippingMethod,
     ShippingRate,
     StockReservation,
 )
 from orders.serializers import CreateOrderSerializer
+from payments.gateways import get_gateway
 from payments.models import Payment
+from payments.views import mock_payment_page
 
 
+@override_settings(DEBUG=True, ACTIVE_PAYMENT_GATEWAY="mock")
 class PaymentFlowTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -318,3 +323,15 @@ class PaymentFlowTests(TestCase):
         self.assertEqual(payment.status, "pending")
         self.assertEqual(reservation.status, "active")
         self.assertEqual(self.variant.stock, 5)
+
+    @override_settings(DEBUG=False, ACTIVE_PAYMENT_GATEWAY="mock")
+    def test_mock_gateway_is_disabled_in_production(self):
+        with self.assertRaises(ImproperlyConfigured):
+            get_gateway()
+
+    @override_settings(DEBUG=False, ACTIVE_PAYMENT_GATEWAY="mock")
+    def test_mock_payment_page_is_hidden_in_production(self):
+        request = RequestFactory().get("/")
+
+        with self.assertRaises(Http404):
+            mock_payment_page(request, payment_id=1)

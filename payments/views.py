@@ -1,12 +1,11 @@
+from django.http import Http404
 from django.shortcuts import get_object_or_404, render, redirect
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-
 from catalog.models import ProductVariant
 from orders.models import Order, StockReservation
 from .models import Payment
@@ -90,7 +89,6 @@ def initiate_payment(request):
             {"error": "شماره سفارش الزامی است."},
             status=400,
         )
-
     with transaction.atomic():
         try:
             order = Order.objects.select_for_update().get(
@@ -127,6 +125,7 @@ def initiate_payment(request):
                 {"error": "مهلت رزرو موجودی پایان یافته یا رزرو معتبر نیست."},
                 status=400,
             )
+        gateway = get_gateway()
 
         payment = (
             Payment.objects.select_for_update()
@@ -319,6 +318,13 @@ def verify_payment(request):
 
 def mock_payment_page(request, payment_id):
     """Mock bank page. Acts as the payment gateway UI."""
+
+    if (
+        not settings.DEBUG
+        or getattr(settings, "ACTIVE_PAYMENT_GATEWAY", "").strip().lower() != "mock"
+    ):
+        raise Http404
+
     payment = get_object_or_404(Payment, id=payment_id)
     order = payment.order
 

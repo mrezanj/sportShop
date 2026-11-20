@@ -195,9 +195,24 @@ FREE_SHIPPING_THRESHOLD = 4_000_000
 
 
 # Payment gateway settings
-ACTIVE_PAYMENT_GATEWAY = "mock"
-MOCK_PAYMENT_BASE_URL = "http://127.0.0.1:8000"
-FRONTEND_URL = "http://localhost:3000"
+ACTIVE_PAYMENT_GATEWAY = (
+    os.getenv(
+        "ACTIVE_PAYMENT_GATEWAY",
+        "mock" if DEBUG else "",
+    )
+    .strip()
+    .lower()
+)
+
+MOCK_PAYMENT_BASE_URL = os.getenv(
+    "MOCK_PAYMENT_BASE_URL",
+    "http://127.0.0.1:8000",
+)
+
+FRONTEND_URL = os.getenv(
+    "FRONTEND_URL",
+    "http://localhost:3000",
+)
 
 
 # Security settings
