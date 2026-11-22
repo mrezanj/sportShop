@@ -1,11 +1,10 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
-
+from payments.models import Payment
 from catalog.models import ProductVariant
 from orders.models import Order, StockReservation
 from orders.services import cancel_locked_order
-from payments.models import Payment
 
 
 class Command(BaseCommand):
@@ -25,7 +24,6 @@ class Command(BaseCommand):
         )
 
         expired_count = 0
-        cancelled_payment_count = 0
 
         for order_id in expired_order_ids:
             with transaction.atomic():
@@ -43,7 +41,13 @@ class Command(BaseCommand):
                 # The order may have been paid or cancelled meanwhile.
                 if order is None:
                     continue
+                unresolved_payment_exists = Payment.objects.filter(
+                    order=order,
+                    status__in=["initiating", "verifying", "unknown"],
+                ).exists()
 
+                if unresolved_payment_exists:
+                    continue
                 variant_ids = list(
                     StockReservation.objects.filter(order=order)
                     .values_list("variant_id", flat=True)
@@ -71,18 +75,6 @@ class Command(BaseCommand):
                     note="لغو خودکار سفارش به علت پایان مهلت رزرو موجودی.",
                 )
 
-                updated_payments = Payment.objects.filter(
-                    order=order,
-                    status="pending",
-                ).update(
-                    status="cancelled",
-                    gateway_response={"reason": "order_expired"},
-                )
-
-                cancelled_payment_count += updated_payments
                 expired_count += 1
-
         self.stdout.write(self.style.SUCCESS(f"Expired orders: {expired_count}"))
-        self.stdout.write(
-            self.style.SUCCESS(f"Cancelled pending payments: {cancelled_payment_count}")
-        )
+        self.stdout.write(self.style.SUCCESS("Cancelled active payments: 0"))

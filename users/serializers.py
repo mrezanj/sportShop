@@ -3,9 +3,11 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
 from .sms import send_otp_sms, SMSDeliveryError
+from django.core.exceptions import ImproperlyConfigured
 from django.contrib.auth.hashers import check_password
 from django.conf import settings
-from .models import Profile, OTPCode, OTPRequestLimit
+from .models import Profile, OTPCode, OTPRequestLimit, OTPFailedAttempt
+from datetime import timedelta
 
 
 class RequestOTPSerializer(serializers.Serializer):
@@ -13,6 +15,10 @@ class RequestOTPSerializer(serializers.Serializer):
         r"^09[0-9]{9}$",
         error_messages={"invalid": "شماره موبایل معتبر نیست. (مثال: 09121234567)"},
     )
+
+    HOURLY_LIMIT = 5
+    DAILY_LIMIT = 10
+    COOLDOWN_SECONDS = 60
 
     def create(self, validated_data):
         mobile = validated_data["mobile"]
@@ -31,22 +37,48 @@ class RequestOTPSerializer(serializers.Serializer):
             if limit.last_requested_at:
                 elapsed = (now - limit.last_requested_at).total_seconds()
 
-                if elapsed < 60:
-                    wait = max(1, int(60 - elapsed))
+                if elapsed < self.COOLDOWN_SECONDS:
+                    wait = max(1, int(self.COOLDOWN_SECONDS - elapsed))
                     raise serializers.ValidationError(
                         {"detail": f"لطفاً {wait} ثانیه دیگر تلاش کنید."}
                     )
 
-            otp, raw_code = OTPCode.create_for_mobile(mobile)
+            recent_requests = OTPCode.objects.filter(
+                mobile=mobile,
+                purpose=purpose,
+            )
+
+            hourly_count = recent_requests.filter(
+                created_at__gte=now - timedelta(hours=1),
+            ).count()
+
+            if hourly_count >= self.HOURLY_LIMIT:
+                raise serializers.ValidationError(
+                    {"detail": "سقف درخواست کد تأیید در یک ساعت به پایان رسیده است."}
+                )
+
+            daily_count = recent_requests.filter(
+                created_at__gte=now - timedelta(hours=24),
+            ).count()
+
+            if daily_count >= self.DAILY_LIMIT:
+                raise serializers.ValidationError(
+                    {"detail": "سقف درخواست کد تأیید در ۲۴ ساعت به پایان رسیده است."}
+                )
+
+            otp, raw_code = OTPCode.create_for_mobile(mobile, purpose=purpose)
 
             limit.last_requested_at = now
             limit.save(update_fields=["last_requested_at"])
 
         try:
             send_otp_sms(mobile, raw_code)
-        except SMSDeliveryError:
+        except (SMSDeliveryError, ImproperlyConfigured) as exc:
             otp.is_used = True
             otp.save(update_fields=["is_used"])
+
+            if isinstance(exc, ImproperlyConfigured):
+                raise
 
             raise serializers.ValidationError(
                 {"detail": "ارسال کد تأیید با مشکل مواجه شد. لطفاً دوباره تلاش کنید."}
@@ -68,6 +100,8 @@ class VerifyOTPSerializer(serializers.Serializer):
     code = serializers.RegexField(r"^[0-9]{6}$")
 
     MAX_ATTEMPTS = 5
+    MAX_FAILED_ATTEMPTS_PER_HOUR = 10
+    FAILED_ATTEMPT_WINDOW = timedelta(hours=1)
 
     def create(self, validated_data):
         mobile = validated_data["mobile"]
@@ -76,6 +110,29 @@ class VerifyOTPSerializer(serializers.Serializer):
         user = None
 
         with transaction.atomic():
+            limit, _ = OTPRequestLimit.objects.get_or_create(
+                mobile=mobile,
+                purpose="login",
+            )
+
+            OTPRequestLimit.objects.select_for_update().get(pk=limit.pk)
+
+            cutoff = timezone.now() - self.FAILED_ATTEMPT_WINDOW
+
+            failed_attempts = OTPFailedAttempt.objects.filter(
+                mobile=mobile,
+                created_at__gte=cutoff,
+            ).count()
+
+            if failed_attempts >= self.MAX_FAILED_ATTEMPTS_PER_HOUR:
+                raise serializers.ValidationError(
+                    {
+                        "code": (
+                            "تعداد تلاش‌های ناموفق بیش از حد مجاز است. "
+                            "لطفاً بعداً دوباره تلاش کنید."
+                        )
+                    }
+                )
             otp = (
                 OTPCode.objects.select_for_update()
                 .filter(
@@ -107,6 +164,7 @@ class VerifyOTPSerializer(serializers.Serializer):
                     otp.is_used = True
 
                 otp.save(update_fields=["attempt_count", "is_used"])
+                OTPFailedAttempt.objects.create(mobile=mobile)
                 error = "کد وارد شده صحیح نیست."
 
             else:

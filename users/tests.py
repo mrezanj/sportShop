@@ -2,7 +2,6 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from datetime import timedelta
 from unittest.mock import patch
-
 from django.test import (
     override_settings,
     TransactionTestCase,
@@ -13,14 +12,16 @@ from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from django.core.cache import cache
-
+from django.core.management import call_command
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 from rest_framework.exceptions import ValidationError
-
 from .sms import SMSDeliveryError
-from .models import OTPCode, Profile, OTPRequestLimit
+from .models import OTPCode, Profile, OTPRequestLimit, OTPFailedAttempt
 from .serializers import RequestOTPSerializer, VerifyOTPSerializer
+from .throttles import OTPRequestThrottle, ThrottleBackendUnavailable
+from redis.exceptions import ConnectionError
 
 
 class OTPAPITests(APITestCase):
@@ -66,6 +67,22 @@ class OTPAPITests(APITestCase):
 
         self.assertTrue(check_password(sent_code, otp.code))
         self.assertNotEqual(otp.code, sent_code)
+
+    @override_settings(DEBUG=False)
+    def test_improperly_configured_sms_backend_invalidates_otp(self):
+        with patch(
+            "users.serializers.send_otp_sms",
+            side_effect=ImproperlyConfigured("Invalid SMS backend"),
+        ):
+            serializer = RequestOTPSerializer(data={"mobile": self.mobile})
+            serializer.is_valid(raise_exception=True)
+
+            with self.assertRaises(ImproperlyConfigured):
+                serializer.save()
+
+        otp = OTPCode.objects.get(mobile=self.mobile)
+
+        self.assertTrue(otp.is_used)
 
     def test_register_otp_does_not_block_login_otp_request(self):
         register_otp = self.create_otp(
@@ -218,6 +235,70 @@ class OTPAPITests(APITestCase):
         self.assertEqual(otp.attempt_count, 5)
         self.assertTrue(otp.is_used)
 
+    def test_aggregate_failed_attempt_limit_blocks_correct_otp(self):
+        for _ in range(10):
+            OTPFailedAttempt.objects.create(mobile=self.mobile)
+
+        otp = self.create_otp()
+
+        response = self.client.post(
+            "/api/auth/verify-otp/",
+            {"mobile": self.mobile, "code": self.raw_code},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            OTPFailedAttempt.objects.filter(mobile=self.mobile).count(),
+            10,
+        )
+
+        otp.refresh_from_db()
+        self.assertEqual(otp.attempt_count, 0)
+        self.assertFalse(otp.is_used)
+
+    def test_aggregate_failed_attempt_limit_ignores_attempts_older_than_one_hour(self):
+        old_attempt_time = timezone.now() - timedelta(hours=1, seconds=1)
+
+        OTPFailedAttempt.objects.bulk_create(
+            [
+                OTPFailedAttempt(
+                    mobile=self.mobile,
+                    created_at=old_attempt_time,
+                )
+                for _ in range(10)
+            ]
+        )
+
+        otp = self.create_otp()
+
+        response = self.client.post(
+            "/api/auth/verify-otp/",
+            {"mobile": self.mobile, "code": self.raw_code},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["success"])
+
+        otp.refresh_from_db()
+        self.assertTrue(otp.is_used)
+
+    def test_cleanup_otp_failed_attempts_deletes_only_old_records(self):
+        old_attempt = OTPFailedAttempt.objects.create(
+            mobile=self.mobile,
+            created_at=timezone.now() - timedelta(hours=1, seconds=1),
+        )
+        recent_attempt = OTPFailedAttempt.objects.create(
+            mobile=self.mobile,
+            created_at=timezone.now(),
+        )
+
+        call_command("cleanup_otp_failed_attempts")
+
+        self.assertFalse(OTPFailedAttempt.objects.filter(pk=old_attempt.pk).exists())
+        self.assertTrue(OTPFailedAttempt.objects.filter(pk=recent_attempt.pk).exists())
+
     def test_expired_otp_is_rejected(self):
         otp = self.create_otp(expires_at=timezone.now() - timedelta(minutes=1))
 
@@ -291,6 +372,8 @@ class OTPAPITests(APITestCase):
             )
 
         self.assertEqual(response.status_code, 429)
+        self.assertIn("Retry-After", response)
+        self.assertGreater(int(response["Retry-After"]), 0)
 
     def test_verify_otp_ip_throttle(self):
         cache.clear()
@@ -372,6 +455,103 @@ class OTPAPITests(APITestCase):
         self.assertEqual(first.status_code, 400)
         self.assertEqual(second.status_code, 400)
 
+    def test_hourly_otp_limit(self):
+        now = timezone.now()
+
+        OTPRequestLimit.objects.create(
+            mobile=self.mobile,
+            purpose="login",
+            last_requested_at=now - timedelta(seconds=61),
+        )
+
+        for minutes in range(5):
+            otp = self.create_otp()
+            OTPCode.objects.filter(pk=otp.pk).update(
+                created_at=now - timedelta(minutes=minutes + 2)
+            )
+
+        serializer = RequestOTPSerializer(data={"mobile": self.mobile})
+        serializer.is_valid(raise_exception=True)
+
+        with patch("users.serializers.send_otp_sms") as mock_sms:
+            with self.assertRaises(ValidationError) as context:
+                serializer.save()
+
+        self.assertIn("سقف درخواست", str(context.exception))
+        mock_sms.assert_not_called()
+
+        self.assertEqual(
+            OTPCode.objects.filter(
+                mobile=self.mobile,
+                purpose="login",
+            ).count(),
+            5,
+        )
+
+    def test_daily_otp_limit(self):
+        now = timezone.now()
+
+        OTPRequestLimit.objects.create(
+            mobile=self.mobile,
+            purpose="login",
+            last_requested_at=now - timedelta(seconds=61),
+        )
+
+        for hours in range(2, 12):
+            otp = self.create_otp()
+            OTPCode.objects.filter(pk=otp.pk).update(
+                created_at=now - timedelta(hours=hours)
+            )
+
+        serializer = RequestOTPSerializer(data={"mobile": self.mobile})
+        serializer.is_valid(raise_exception=True)
+
+        with patch("users.serializers.send_otp_sms") as mock_sms:
+            with self.assertRaises(ValidationError) as context:
+                serializer.save()
+
+        self.assertIn("سقف درخواست", str(context.exception))
+        mock_sms.assert_not_called()
+
+        self.assertEqual(
+            OTPCode.objects.filter(
+                mobile=self.mobile,
+                purpose="login",
+            ).count(),
+            10,
+        )
+
+    def test_hourly_limit_resets_after_one_hour(self):
+        now = timezone.now()
+
+        OTPRequestLimit.objects.create(
+            mobile=self.mobile,
+            purpose="login",
+            last_requested_at=now - timedelta(seconds=61),
+        )
+
+        for hours in range(2, 7):
+            otp = self.create_otp()
+            OTPCode.objects.filter(pk=otp.pk).update(
+                created_at=now - timedelta(hours=hours)
+            )
+
+        serializer = RequestOTPSerializer(data={"mobile": self.mobile})
+        serializer.is_valid(raise_exception=True)
+
+        with patch("users.serializers.send_otp_sms"):
+            result = serializer.save()
+
+        self.assertEqual(result["mobile"], self.mobile)
+
+        self.assertEqual(
+            OTPCode.objects.filter(
+                mobile=self.mobile,
+                purpose="login",
+            ).count(),
+            6,
+        )
+
 
 @skipUnlessDBFeature("has_select_for_update")
 class OTPConcurrencyTests(TransactionTestCase):
@@ -427,6 +607,46 @@ class OTPConcurrencyTests(TransactionTestCase):
             1,
         )
 
+    def test_concurrent_otp_requests_respect_hourly_limit(self):
+        now = timezone.now()
+
+        OTPRequestLimit.objects.create(
+            mobile=self.mobile,
+            purpose="login",
+            last_requested_at=now - timedelta(seconds=61),
+        )
+
+        for _ in range(4):
+            OTPCode.objects.create(
+                mobile=self.mobile,
+                code=make_password(self.raw_code),
+                purpose="login",
+                expires_at=now + timedelta(minutes=2),
+            )
+
+        def request_otp():
+            try:
+                serializer = RequestOTPSerializer(data={"mobile": self.mobile})
+                serializer.is_valid(raise_exception=True)
+                serializer.save()
+                return "success"
+            except ValidationError:
+                return "rejected"
+
+        with patch("users.serializers.send_otp_sms"):
+            results = self.run_concurrently(request_otp)
+
+        self.assertCountEqual(results, ["success", "rejected"])
+
+        self.assertEqual(
+            OTPCode.objects.filter(
+                mobile=self.mobile,
+                purpose="login",
+                created_at__gte=now - timedelta(hours=1),
+            ).count(),
+            5,
+        )
+
     def test_concurrent_otp_verification_only_succeeds_once(self):
         otp = OTPCode.objects.create(
             mobile=self.mobile,
@@ -465,4 +685,153 @@ class OTPConcurrencyTests(TransactionTestCase):
         self.assertEqual(
             Profile.objects.filter(mobile=self.mobile).count(),
             1,
+        )
+
+    def test_concurrent_failed_verifications_respect_aggregate_limit(self):
+        OTPFailedAttempt.objects.bulk_create(
+            [OTPFailedAttempt(mobile=self.mobile) for _ in range(9)]
+        )
+
+        otp = OTPCode.objects.create(
+            mobile=self.mobile,
+            code=make_password(self.raw_code),
+            purpose="login",
+            expires_at=timezone.now() + timedelta(minutes=2),
+        )
+
+        def verify_wrong_code():
+            try:
+                serializer = VerifyOTPSerializer(
+                    data={
+                        "mobile": self.mobile,
+                        "code": "654321",
+                    }
+                )
+                serializer.is_valid(raise_exception=True)
+                serializer.save()
+                return "success"
+            except ValidationError:
+                return "rejected"
+
+        results = self.run_concurrently(verify_wrong_code)
+
+        self.assertCountEqual(results, ["rejected", "rejected"])
+
+        self.assertEqual(
+            OTPFailedAttempt.objects.filter(mobile=self.mobile).count(),
+            10,
+        )
+
+        otp.refresh_from_db()
+        self.assertEqual(otp.attempt_count, 1)
+        self.assertFalse(otp.is_used)
+
+
+class OTPThrottleConcurrencyTests(TransactionTestCase):
+    ip = "198.51.100.77"
+    request_count = 40
+    expected_allowed = 10
+
+    def test_wait_returns_none_when_redis_key_does_not_exist(self):
+        throttle = OTPRequestThrottle()
+        throttle.key = "throttle_test_key"
+
+        with patch.object(
+            throttle.cache._cache,
+            "get_client",
+        ) as mock_get_client:
+            mock_get_client.return_value.ttl.return_value = -2
+
+            self.assertIsNone(throttle.wait())
+
+    def test_wait_rejects_redis_key_without_expiration(self):
+        throttle = OTPRequestThrottle()
+        throttle.key = "throttle_test_key"
+
+        with patch.object(
+            throttle.cache._cache,
+            "get_client",
+        ) as mock_get_client:
+            mock_get_client.return_value.ttl.return_value = -1
+
+            with self.assertRaises(ThrottleBackendUnavailable):
+                throttle.wait()
+
+    def test_redis_failure_in_wait_raises_service_unavailable(self):
+        throttle = OTPRequestThrottle()
+        throttle.key = "throttle_test_key"
+
+        with patch.object(
+            throttle.cache._cache,
+            "get_client",
+            side_effect=ConnectionError("Redis unavailable"),
+        ):
+            with self.assertRaises(ThrottleBackendUnavailable) as context:
+                throttle.wait()
+
+        self.assertEqual(context.exception.status_code, 503)
+
+    def test_redis_failure_raises_service_unavailable(self):
+        throttle = OTPRequestThrottle()
+        request = type(
+            "Request",
+            (),
+            {
+                "META": {"REMOTE_ADDR": self.ip},
+                "headers": {},
+            },
+        )()
+
+        with patch.object(
+            throttle.cache._cache,
+            "get_client",
+            side_effect=ConnectionError("Redis unavailable"),
+        ):
+            with self.assertRaises(ThrottleBackendUnavailable) as context:
+                throttle.allow_request(request, view=None)
+
+        self.assertEqual(context.exception.status_code, 503)
+
+    def test_concurrent_requests_respect_atomic_ip_limit(self):
+        throttle = OTPRequestThrottle()
+        cache_key = throttle.cache_format % {
+            "scope": throttle.scope,
+            "ident": self.ip,
+        }
+
+        cache.delete(cache_key)
+        self.addCleanup(cache.delete, cache_key)
+
+        barrier = Barrier(self.request_count)
+
+        def attempt():
+            close_old_connections()
+            try:
+                request = type(
+                    "Request",
+                    (),
+                    {
+                        "META": {"REMOTE_ADDR": self.ip},
+                        "headers": {},
+                    },
+                )()
+
+                local_throttle = OTPRequestThrottle()
+                barrier.wait(timeout=30)
+
+                return local_throttle.allow_request(request, view=None)
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=self.request_count) as executor:
+            results = list(
+                executor.map(
+                    lambda _: attempt(),
+                    range(self.request_count),
+                )
+            )
+
+        self.assertEqual(
+            sum(results),
+            self.expected_allowed,
         )

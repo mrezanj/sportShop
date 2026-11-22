@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 from io import StringIO
 from types import SimpleNamespace
+from unittest.mock import patch
 from orders.admin import OrderAdmin
 from django.contrib.auth.models import User, Permission
 from django.core.management import call_command
@@ -25,6 +26,7 @@ from payments.models import Payment
 from orders.services import (
     ALLOWED_ORDER_TRANSITIONS,
     InvalidOrderStatusTransition,
+    cancel_locked_order,
     transition_order_status,
 )
 
@@ -318,6 +320,8 @@ class CancelOrderTests(APITestCase):
         self.client.force_authenticate(user=self.user)
 
     def test_owner_can_cancel_pending_order(self):
+        self.payment.status = "failed"
+        self.payment.save(update_fields=["status"])
         response = self.client.post(self.cancel_url)
 
         self.assertEqual(response.status_code, 200)
@@ -326,11 +330,7 @@ class CancelOrderTests(APITestCase):
         self.reservation.refresh_from_db()
         self.payment.refresh_from_db()
 
-        self.assertEqual(self.payment.status, "cancelled")
-        self.assertEqual(
-            self.payment.gateway_response,
-            {"reason": "order_cancelled"},
-        )
+        self.assertEqual(self.payment.status, "failed")
         self.assertEqual(self.reservation.status, "released")
         self.assertIsNotNone(self.reservation.released_at)
 
@@ -346,6 +346,54 @@ class CancelOrderTests(APITestCase):
             history.note,
             "لغو سفارش به درخواست مشتری.",
         )
+
+    def test_owner_can_cancel_order_with_initiating_payment(self):
+        self.payment.status = "initiating"
+        self.payment.save(update_fields=["status"])
+
+        response = self.client.post(self.cancel_url)
+
+        self.assertEqual(response.status_code, 409)
+
+        self.order.refresh_from_db()
+        self.payment.refresh_from_db()
+        self.reservation.refresh_from_db()
+
+        self.assertEqual(self.order.status, "pending")
+        self.assertEqual(self.payment.status, "initiating")
+        self.assertEqual(self.reservation.status, "active")
+
+    def test_owner_can_cancel_order_with_unknown_payment(self):
+        self.payment.status = "unknown"
+        self.payment.save(update_fields=["status"])
+
+        response = self.client.post(self.cancel_url)
+
+        self.assertEqual(response.status_code, 409)
+
+        self.order.refresh_from_db()
+        self.payment.refresh_from_db()
+        self.reservation.refresh_from_db()
+
+        self.assertEqual(self.order.status, "pending")
+        self.assertEqual(self.payment.status, "unknown")
+        self.assertEqual(self.reservation.status, "active")
+
+    def test_owner_can_cancel_order_with_verifying_payment(self):
+        self.payment.status = "verifying"
+        self.payment.save(update_fields=["status"])
+
+        response = self.client.post(self.cancel_url)
+
+        self.assertEqual(response.status_code, 409)
+
+        self.order.refresh_from_db()
+        self.payment.refresh_from_db()
+        self.reservation.refresh_from_db()
+
+        self.assertEqual(self.order.status, "pending")
+        self.assertEqual(self.payment.status, "verifying")
+        self.assertEqual(self.reservation.status, "active")
 
     def test_another_user_cannot_cancel_order(self):
         self.client.force_authenticate(user=self.other_user)
@@ -380,6 +428,8 @@ class CancelOrderTests(APITestCase):
         self.assertIsNone(self.reservation.released_at)
 
     def test_repeated_cancellation_does_not_release_reservation_twice(self):
+        self.payment.status = "failed"
+        self.payment.save(update_fields=["status"])
         first_response = self.client.post(self.cancel_url)
 
         self.assertEqual(first_response.status_code, 200)
@@ -395,11 +445,7 @@ class CancelOrderTests(APITestCase):
         self.reservation.refresh_from_db()
         self.payment.refresh_from_db()
 
-        self.assertEqual(self.payment.status, "cancelled")
-        self.assertEqual(
-            self.payment.gateway_response,
-            {"reason": "order_cancelled"},
-        )
+        self.assertEqual(self.payment.status, "failed")
         self.assertEqual(self.order.status, "cancelled")
         self.assertEqual(self.reservation.status, "released")
         self.assertEqual(
@@ -480,7 +526,7 @@ class ExpireOrdersCommandTests(TestCase):
         call_command("expire_orders", stdout=output)
         return output.getvalue()
 
-    def test_expired_order_releases_reservation_and_cancels_pending_payment(self):
+    def test_expired_order_releases_reservation_without_changing_pending_payment(self):
         order, reservation = self.create_order_with_reservation(
             timedelta(minutes=-5),
         )
@@ -496,18 +542,15 @@ class ExpireOrdersCommandTests(TestCase):
         self.assertEqual(reservation.status, "expired")
         self.assertIsNotNone(reservation.released_at)
 
-        self.assertEqual(payment.status, "cancelled")
-        self.assertEqual(
-            payment.gateway_response,
-            {"reason": "order_expired"},
-        )
+        self.assertEqual(payment.status, "pending")
 
         self.assertIn("Expired orders: 1", output)
-        self.assertIn("Cancelled pending payments: 1", output)
+        self.assertIn("Cancelled active payments: 0", output)
 
         # Expiring an order must not change physical stock.
         self.variant.refresh_from_db()
         self.assertEqual(self.variant.stock, 5)
+
         history = OrderStatusHistory.objects.get(order=order)
 
         self.assertEqual(history.old_status, "pending")
@@ -517,6 +560,27 @@ class ExpireOrdersCommandTests(TestCase):
             history.note,
             "لغو خودکار سفارش به علت پایان مهلت رزرو موجودی.",
         )
+
+    def test_expiration_does_not_cancel_unresolved_payments(self):
+        for status in ("initiating", "verifying", "unknown"):
+            with self.subTest(payment_status=status):
+                order, reservation = self.create_order_with_reservation(
+                    timedelta(minutes=-5),
+                )
+                payment = self.create_payment(order, status=status)
+
+                output = self.run_expire_command()
+
+                order.refresh_from_db()
+                reservation.refresh_from_db()
+                payment.refresh_from_db()
+
+                self.assertEqual(order.status, "pending")
+                self.assertEqual(reservation.status, "active")
+                self.assertIsNone(reservation.released_at)
+                self.assertEqual(payment.status, status)
+
+                self.assertIn("Expired orders: 0", output)
 
     def test_expiration_command_is_idempotent(self):
         order, reservation = self.create_order_with_reservation(
@@ -541,11 +605,11 @@ class ExpireOrdersCommandTests(TestCase):
         self.assertEqual(order.status, "cancelled")
         self.assertEqual(reservation.status, "expired")
         self.assertEqual(reservation.released_at, first_released_at)
-        self.assertEqual(payment.status, "cancelled")
+        self.assertEqual(payment.status, "pending")
         self.assertEqual(payment.gateway_response, first_gateway_response)
 
         self.assertIn("Expired orders: 0", output)
-        self.assertIn("Cancelled pending payments: 0", output)
+        self.assertIn("Cancelled active payments: 0", output)
 
     def test_non_expired_order_is_not_changed(self):
         order, reservation = self.create_order_with_reservation(
@@ -679,6 +743,160 @@ class OrderStatusTransitionTests(TestCase):
             OrderStatusHistory.objects.filter(order=self.order).count(),
             0,
         )
+
+    @patch(
+        "orders.services.transition_order_status",
+        side_effect=RuntimeError("forced failure"),
+    )
+    def test_cancel_locked_order_rolls_back_reservation_release(
+        self,
+        mocked_transition,
+    ):
+        now = timezone.now()
+
+        reservation = StockReservation.objects.create(
+            order=self.order,
+            variant=ProductVariant.objects.create(
+                product=Product.objects.create(
+                    name_fa="محصول آزمایشی بازگشت",
+                    slug="rollback-product",
+                    brand=Brand.objects.create(
+                        name="Rollback Brand",
+                        slug="rollback-brand",
+                    ),
+                    category=Category.objects.create(
+                        name="Rollback Category",
+                        slug="rollback-category",
+                    ),
+                    description="Rollback test product",
+                ),
+                price=Decimal("100000"),
+                stock=5,
+            ),
+            quantity=2,
+            status="active",
+            expires_at=now + timedelta(minutes=30),
+        )
+
+        with self.assertRaises(RuntimeError):
+            cancel_locked_order(
+                order=self.order,
+                reservations=[reservation],
+                now=now,
+                note="Rollback test",
+            )
+
+        reservation.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(reservation.status, "active")
+        self.assertIsNone(reservation.released_at)
+        self.assertEqual(self.order.status, "pending")
+        self.assertEqual(
+            OrderStatusHistory.objects.filter(order=self.order).count(),
+            0,
+        )
+
+    def test_cancel_locked_order_releases_active_reservation(self):
+        now = timezone.now()
+
+        brand = Brand.objects.create(
+            name="Success Brand",
+            slug="success-brand",
+        )
+        category = Category.objects.create(
+            name="Success Category",
+            slug="success-category",
+        )
+        product = Product.objects.create(
+            name_fa="محصول لغو موفق",
+            slug="success-product",
+            brand=brand,
+            category=category,
+            description="Cancellation test product",
+        )
+        variant = ProductVariant.objects.create(
+            product=product,
+            price=Decimal("100000"),
+            stock=5,
+        )
+        reservation = StockReservation.objects.create(
+            order=self.order,
+            variant=variant,
+            quantity=2,
+            status="active",
+            expires_at=now + timedelta(minutes=30),
+        )
+
+        changed = cancel_locked_order(
+            order=self.order,
+            reservations=[reservation],
+            now=now,
+            changed_by=self.user,
+            note="Successful cancellation test",
+        )
+
+        self.assertTrue(changed)
+
+        self.order.refresh_from_db()
+        reservation.refresh_from_db()
+
+        self.assertEqual(self.order.status, "cancelled")
+        self.assertEqual(reservation.status, "released")
+        self.assertEqual(reservation.released_at, now)
+
+        history = OrderStatusHistory.objects.get(order=self.order)
+        self.assertEqual(history.old_status, "pending")
+        self.assertEqual(history.new_status, "cancelled")
+        self.assertEqual(history.changed_by, self.user)
+
+    def test_cancel_locked_order_expires_already_expired_reservation(self):
+        now = timezone.now()
+
+        brand = Brand.objects.create(
+            name="Expired Brand",
+            slug="expired-brand",
+        )
+        category = Category.objects.create(
+            name="Expired Category",
+            slug="expired-category",
+        )
+        product = Product.objects.create(
+            name_fa="محصول رزرو منقضی",
+            slug="expired-product",
+            brand=brand,
+            category=category,
+            description="Expired reservation test product",
+        )
+        variant = ProductVariant.objects.create(
+            product=product,
+            price=Decimal("100000"),
+            stock=5,
+        )
+        reservation = StockReservation.objects.create(
+            order=self.order,
+            variant=variant,
+            quantity=2,
+            status="active",
+            expires_at=now - timedelta(minutes=5),
+        )
+
+        changed = cancel_locked_order(
+            order=self.order,
+            reservations=[reservation],
+            now=now,
+            changed_by=self.user,
+            note="Expired reservation test",
+        )
+
+        self.assertTrue(changed)
+
+        self.order.refresh_from_db()
+        reservation.refresh_from_db()
+
+        self.assertEqual(self.order.status, "cancelled")
+        self.assertEqual(reservation.status, "expired")
+        self.assertEqual(reservation.released_at, now)
 
 
 class OrderAdminStatusActionTests(TestCase):

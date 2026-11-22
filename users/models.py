@@ -42,6 +42,23 @@ class OTPRequestLimit(models.Model):
         return f"{self.mobile} - {self.purpose}"
 
 
+class OTPFailedAttempt(models.Model):
+    mobile = models.CharField(max_length=11)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["mobile", "created_at"],
+                name="otp_fail_mobile_time_idx",
+            ),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.mobile} - {self.created_at}"
+
+
 class OTPCode(models.Model):
     PURPOSE_CHOICES = [
         ("login", "ورود"),

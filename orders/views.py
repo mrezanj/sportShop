@@ -105,6 +105,21 @@ def cancel_order(request, order_number):
                 status=400,
             )
 
+        unresolved_payment_exists = Payment.objects.filter(
+            order=order,
+            status__in=["initiating", "verifying", "unknown", "pending"],
+        ).exists()
+
+        if unresolved_payment_exists:
+            return Response(
+                {
+                    "detail": (
+                        "این سفارش دارای پرداخت تعیین‌تکلیف‌نشده است. "
+                        "تا مشخص‌شدن وضعیت پرداخت، امکان لغو سفارش وجود ندارد."
+                    )
+                },
+                status=409,
+            )
         variant_ids = list(
             order.stock_reservations.values_list("variant_id", flat=True)
             .distinct()
@@ -131,13 +146,7 @@ def cancel_order(request, order_number):
             changed_by=request.user,
             note="لغو سفارش به درخواست مشتری.",
         )
-        Payment.objects.filter(
-            order=order,
-            status="pending",
-        ).update(
-            status="cancelled",
-            gateway_response={"reason": "order_cancelled"},
-        )
+
         return Response(
             {
                 "success": True,

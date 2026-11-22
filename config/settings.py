@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -47,6 +48,25 @@ ALLOWED_HOSTS = env_list(
     "ALLOWED_HOSTS",
     default="localhost,127.0.0.1",
 )
+
+
+# Redis cache
+REDIS_URL = os.getenv(
+    "REDIS_URL",
+    "redis://127.0.0.1:6379/1" if DEBUG else "",
+).strip()
+
+if not REDIS_URL:
+    raise ImproperlyConfigured("REDIS_URL must be configured when DEBUG is False.")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+        "KEY_PREFIX": "sportshop",
+        "TIMEOUT": 300,
+    }
+}
 
 CSRF_TRUSTED_ORIGINS = env_list(
     "CSRF_TRUSTED_ORIGINS",
@@ -177,6 +197,7 @@ CORS_ALLOWED_ORIGINS = env_list(
 REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
+    "NUM_PROXIES": 0,
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.TokenAuthentication",
     ],
