@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     "cart.apps.CartConfig",
     "payments",
     "core",
+    "inventory",
 ]
 
 MIDDLEWARE = [
