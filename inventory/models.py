@@ -465,10 +465,59 @@ class InventoryMovement(models.Model):
             ),
         ]
 
+    def clean(self):
+        super().clean()
+
+        errors = {}
+
+        if self.document_id and self.document_item_id:
+            if self.document_item.document_id != self.document_id:
+                errors["document_item"] = (
+                    "The document item must belong to the selected document."
+                )
+
+            document_type = self.document.document_type
+            item_direction = self.document_item.direction
+
+            expected_movement_types = {
+                "inbound": "inbound",
+                "purchase": "inbound",
+                "outbound": "outbound",
+                "return": "return",
+                "waste": "waste",
+                "adjustment": "adjustment",
+            }
+
+            expected_type = expected_movement_types.get(document_type)
+
+            if self.movement_type != expected_type:
+                errors["movement_type"] = (
+                    "Movement type does not match the document type."
+                )
+
+            if item_direction == "inbound" and self.quantity_delta <= 0:
+                errors["quantity_delta"] = (
+                    "Inbound movements must have a positive quantity."
+                )
+            elif item_direction == "outbound" and self.quantity_delta >= 0:
+                errors["quantity_delta"] = (
+                    "Outbound movements must have a negative quantity."
+                )
+
+        if self.batch_id and self.document_item_id:
+            if self.batch.variant_id != self.document_item.variant_id:
+                errors["batch"] = (
+                    "The batch must belong to the document item's variant."
+                )
+
+        if errors:
+            raise ValidationError(errors)
+
     def save(self, *args, **kwargs):
         if self.pk and type(self).objects.filter(pk=self.pk).exists():
             raise ValidationError("Inventory movements are immutable.")
 
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):

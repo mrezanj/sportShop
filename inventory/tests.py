@@ -63,7 +63,7 @@ class InventoryServiceTests(TestCase):
         )
 
     def create_movement(self, batch, quantity_delta):
-        document = self.create_document()
+        document = self.create_document(quantity_delta)
         item = self.create_document_item(document, batch, quantity_delta)
 
         return InventoryMovement.objects.create(
@@ -75,12 +75,12 @@ class InventoryServiceTests(TestCase):
             created_by=self.user,
         )
 
-    def create_document(self):
+    def create_document(self, quantity_delta):
         from .models import InventoryDocument
 
         return InventoryDocument.objects.create(
             document_number=f"DOC-{InventoryDocument.objects.count() + 1:04d}",
-            document_type="inbound",
+            document_type=("inbound" if quantity_delta > 0 else "outbound"),
             created_by=self.user,
         )
 
@@ -92,6 +92,7 @@ class InventoryServiceTests(TestCase):
             variant=batch.variant,
             batch=batch,
             quantity=abs(quantity_delta),
+            direction=("inbound" if quantity_delta > 0 else "outbound"),
         )
 
     def create_reservation(self, quantity, batch=None, expires_at=None):
@@ -962,6 +963,154 @@ class InventoryDocumentWorkflowTests(TestCase):
 
         self.assertEqual(negative_movement.movement_type, "adjustment")
         self.assertEqual(negative_movement.quantity_delta, -3)
+
+    def test_movement_rejects_item_from_another_document(self):
+        from django.core.exceptions import ValidationError
+
+        document = create_inventory_document(
+            user=self.creator,
+            document_number="MOVEMENT-DOC-001",
+            document_type="inbound",
+        )
+        another_document = create_inventory_document(
+            user=self.creator,
+            document_number="MOVEMENT-DOC-002",
+            document_type="inbound",
+        )
+
+        item = add_inventory_document_item(
+            user=self.creator,
+            document_id=document.id,
+            variant=self.variant,
+            quantity=5,
+            direction="inbound",
+            new_batch_number="MOVEMENT-BATCH-001",
+        )
+
+        batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="MOVEMENT-BATCH-002",
+            created_by=self.creator,
+        )
+
+        with self.assertRaises(ValidationError):
+            InventoryMovement.objects.create(
+                batch=batch,
+                document=another_document,
+                document_item=item,
+                movement_type="inbound",
+                quantity_delta=5,
+                created_by=self.creator,
+            )
+
+    def test_movement_rejects_batch_from_another_variant(self):
+        from django.core.exceptions import ValidationError
+
+        other_variant = ProductVariant.objects.create(
+            product=self.variant.product,
+            flavor="Different flavor",
+            price=200000,
+            stock=0,
+        )
+
+        document = create_inventory_document(
+            user=self.creator,
+            document_number="MOVEMENT-VARIANT-001",
+            document_type="inbound",
+        )
+
+        item = add_inventory_document_item(
+            user=self.creator,
+            document_id=document.id,
+            variant=self.variant,
+            quantity=5,
+            direction="inbound",
+            new_batch_number="MOVEMENT-VARIANT-BATCH-001",
+        )
+
+        batch = InventoryBatch.objects.create(
+            variant=other_variant,
+            batch_number="MOVEMENT-VARIANT-BATCH-002",
+            created_by=self.creator,
+        )
+
+        with self.assertRaises(ValidationError):
+            InventoryMovement.objects.create(
+                batch=batch,
+                document=document,
+                document_item=item,
+                movement_type="inbound",
+                quantity_delta=5,
+                created_by=self.creator,
+            )
+
+    def test_movement_rejects_inconsistent_quantity_sign(self):
+        from django.core.exceptions import ValidationError
+
+        document = create_inventory_document(
+            user=self.creator,
+            document_number="MOVEMENT-SIGN-001",
+            document_type="inbound",
+        )
+
+        item = add_inventory_document_item(
+            user=self.creator,
+            document_id=document.id,
+            variant=self.variant,
+            quantity=5,
+            direction="inbound",
+            new_batch_number="MOVEMENT-SIGN-BATCH-001",
+        )
+
+        batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="MOVEMENT-SIGN-BATCH-002",
+            created_by=self.creator,
+        )
+
+        with self.assertRaises(ValidationError):
+            InventoryMovement.objects.create(
+                batch=batch,
+                document=document,
+                document_item=item,
+                movement_type="inbound",
+                quantity_delta=-5,
+                created_by=self.creator,
+            )
+
+    def test_movement_rejects_inconsistent_movement_type(self):
+        from django.core.exceptions import ValidationError
+
+        document = create_inventory_document(
+            user=self.creator,
+            document_number="MOVEMENT-TYPE-001",
+            document_type="inbound",
+        )
+
+        item = add_inventory_document_item(
+            user=self.creator,
+            document_id=document.id,
+            variant=self.variant,
+            quantity=5,
+            direction="inbound",
+            new_batch_number="MOVEMENT-TYPE-BATCH-001",
+        )
+
+        batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="MOVEMENT-TYPE-BATCH-002",
+            created_by=self.creator,
+        )
+
+        with self.assertRaises(ValidationError):
+            InventoryMovement.objects.create(
+                batch=batch,
+                document=document,
+                document_item=item,
+                movement_type="outbound",
+                quantity_delta=5,
+                created_by=self.creator,
+            )
 
     def test_inventory_movement_cannot_be_updated(self):
         from django.core.exceptions import ValidationError
