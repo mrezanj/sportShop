@@ -8,6 +8,7 @@ from catalog.models import Brand, Category, Product, ProductVariant
 from orders.models import Order, StockReservation
 from .models import (
     InventoryBatch,
+    InventoryDocument,
     InventoryMovement,
     ReservationAllocation,
     InventoryDocumentItem,
@@ -1456,3 +1457,402 @@ class InventoryReportAPITests(TestCase):
 
         self.assertEqual(report["minimum_quantity"], 5)
         self.assertTrue(report["low_stock"])
+
+
+class InventoryDocumentAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+        self.creator = User.objects.create_user(
+            username="api_doc_creator",
+            password="test-password",
+        )
+        self.reviewer = User.objects.create_user(
+            username="api_doc_reviewer",
+            password="test-password",
+        )
+        self.approver = User.objects.create_user(
+            username="api_doc_approver",
+            password="test-password",
+        )
+
+        permissions = {
+            permission.codename: permission
+            for permission in Permission.objects.filter(
+                content_type__app_label="inventory",
+                codename__in=[
+                    "can_create_inventory_document",
+                    "can_review_inventory_document",
+                    "can_approve_inventory_document",
+                ],
+            )
+        }
+
+        self.creator.user_permissions.add(
+            permissions["can_create_inventory_document"],
+        )
+        self.reviewer.user_permissions.add(
+            permissions["can_review_inventory_document"],
+        )
+        self.approver.user_permissions.add(
+            permissions["can_approve_inventory_document"],
+        )
+
+        brand = Brand.objects.create(
+            name="API Brand",
+            slug="api-brand",
+        )
+        category = Category.objects.create(
+            name="API Category",
+            slug="api-category",
+        )
+        product = Product.objects.create(
+            name_fa="API Product",
+            slug="api-product",
+            brand=brand,
+            category=category,
+            description="API test product",
+        )
+        self.variant = ProductVariant.objects.create(
+            product=product,
+            price=100000,
+            stock=0,
+        )
+
+    def test_user_without_permission_cannot_create_document(self):
+        user = User.objects.create_user(
+            username="api_doc_unauthorized",
+            password="test-password",
+        )
+        self.client.force_authenticate(user=user)
+
+        response = self.client.post(
+            "/api/inventory/documents/",
+            {
+                "document_number": "API-UNAUTHORIZED-001",
+                "document_type": "inbound",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_complete_inbound_document_workflow(self):
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.post(
+            "/api/inventory/documents/",
+            {
+                "document_number": "API-WORKFLOW-001",
+                "document_type": "inbound",
+                "reason": "API workflow test",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        document_id = response.data["id"]
+        self.assertEqual(response.data["status"], "draft")
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 5,
+                "direction": "inbound",
+                "new_batch_number": "API-BATCH-001",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "pending_review")
+
+        self.client.force_authenticate(user=self.reviewer)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/review/",
+            {"note": "Reviewed through API"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "pending_approval")
+
+        self.client.force_authenticate(user=self.approver)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/approve/",
+            {"note": "Approved through API"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "approved")
+
+        document = InventoryDocument.objects.get(pk=document_id)
+
+        self.assertEqual(document.created_by, self.creator)
+        self.assertEqual(document.reviewed_by, self.reviewer)
+        self.assertEqual(document.approved_by, self.approver)
+
+        batch = InventoryBatch.objects.get(
+            variant=self.variant,
+            batch_number="API-BATCH-001",
+        )
+
+        movement = InventoryMovement.objects.get(document=document)
+
+        self.assertEqual(movement.batch, batch)
+        self.assertEqual(movement.quantity_delta, 5)
+        self.assertEqual(movement.movement_type, "inbound")
+
+    def test_reviewer_can_reject_document_through_api(self):
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.post(
+            "/api/inventory/documents/",
+            {
+                "document_number": "API-REJECT-001",
+                "document_type": "inbound",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        document_id = response.data["id"]
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 3,
+                "direction": "inbound",
+                "new_batch_number": "API-REJECT-BATCH-001",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.client.force_authenticate(user=self.reviewer)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/reject/",
+            {"note": "Invalid document"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "rejected")
+
+        document = InventoryDocument.objects.get(pk=document_id)
+        self.assertEqual(document.status, "rejected")
+
+    def test_reviewer_cannot_approve_document(self):
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.post(
+            "/api/inventory/documents/",
+            {
+                "document_number": "API-REVIEWER-APPROVE-001",
+                "document_type": "inbound",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        document_id = response.data["id"]
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 3,
+                "direction": "inbound",
+                "new_batch_number": "API-REVIEWER-APPROVE-BATCH-001",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.client.force_authenticate(user=self.reviewer)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/approve/",
+            {"note": "Direct approval attempt"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+        document = InventoryDocument.objects.get(pk=document_id)
+        self.assertEqual(document.status, "pending_review")
+
+    def test_creator_cannot_review_own_document(self):
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.post(
+            "/api/inventory/documents/",
+            {
+                "document_number": "API-CREATOR-REVIEW-001",
+                "document_type": "inbound",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        document_id = response.data["id"]
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 3,
+                "direction": "inbound",
+                "new_batch_number": "API-CREATOR-REVIEW-BATCH-001",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/review/",
+            {"note": "Self review attempt"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+        document = InventoryDocument.objects.get(pk=document_id)
+        self.assertEqual(document.status, "pending_review")
+
+    def test_creator_cannot_approve_own_document(self):
+        approve_permission = Permission.objects.get(
+            content_type__app_label="inventory",
+            codename="can_approve_inventory_document",
+        )
+        self.creator.user_permissions.add(approve_permission)
+
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.post(
+            "/api/inventory/documents/",
+            {
+                "document_number": "API-CREATOR-APPROVE-001",
+                "document_type": "inbound",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        document_id = response.data["id"]
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 3,
+                "direction": "inbound",
+                "new_batch_number": "API-CREATOR-APPROVE-BATCH-001",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.client.force_authenticate(user=self.reviewer)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/review/",
+            {"note": "Reviewed"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/approve/",
+            {"note": "Self approval attempt"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+        document = InventoryDocument.objects.get(pk=document_id)
+        self.assertEqual(document.status, "pending_approval")
+
+    def test_creator_cannot_reject_own_document(self):
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.post(
+            "/api/inventory/documents/",
+            {
+                "document_number": "API-CREATOR-REJECT-001",
+                "document_type": "inbound",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        document_id = response.data["id"]
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 3,
+                "direction": "inbound",
+                "new_batch_number": "API-CREATOR-REJECT-BATCH-001",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/reject/",
+            {"note": "Self rejection attempt"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+        document = InventoryDocument.objects.get(pk=document_id)
+        self.assertEqual(document.status, "pending_review")
