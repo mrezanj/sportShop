@@ -1,4 +1,5 @@
 from datetime import timedelta
+from django.db.models import Sum
 from django.contrib.auth.models import Permission
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -15,6 +16,7 @@ from .models import (
     InventoryStockThreshold,
 )
 from .services import (
+    allocate_stock_reservation,
     get_batch_physical_quantity,
     get_batch_reserved_quantity,
     get_batch_available_quantity,
@@ -251,7 +253,245 @@ class InventoryServiceTests(TestCase):
         self.assertEqual(result["reserved"], 5)
         self.assertEqual(result["available"], 25)
 
+    def test_allocate_reservation_uses_fefo_order(self):
+        second_batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="BATCH-002",
+            expiration_date=self.today + timedelta(days=60),
+            created_by=self.user,
+        )
 
+        self.create_movement(self.batch, 3)
+        self.create_movement(second_batch, 5)
+
+        reservation = self.create_reservation(quantity=6)
+
+        allocate_stock_reservation(reservation, now=self.now)
+
+        allocations = list(
+            ReservationAllocation.objects.filter(
+                reservation=reservation,
+            )
+            .order_by(
+                "batch__expiration_date",
+            )
+            .values_list(
+                "batch__batch_number",
+                "quantity",
+            )
+        )
+
+        self.assertEqual(
+            allocations,
+            [
+                ("BATCH-001", 3),
+                ("BATCH-002", 3),
+            ],
+        )
+
+    def test_allocate_reservation_protects_unallocated_reservations(self):
+        self.create_movement(self.batch, 10)
+
+        existing_reservation = self.create_reservation(
+            quantity=7,
+        )
+
+        new_reservation = self.create_reservation(
+            quantity=3,
+        )
+
+        allocate_stock_reservation(
+            new_reservation,
+            now=self.now,
+        )
+
+        allocations = ReservationAllocation.objects.filter(
+            reservation=new_reservation,
+        )
+
+        self.assertEqual(
+            allocations.aggregate(total=Sum("quantity"))["total"],
+            3,
+        )
+
+        self.assertFalse(
+            ReservationAllocation.objects.filter(
+                reservation=existing_reservation,
+            ).exists()
+        )
+
+    def test_allocate_reservation_rolls_back_when_stock_is_insufficient(self):
+        from django.core.exceptions import ValidationError
+
+        self.create_movement(self.batch, 5)
+
+        reservation = self.create_reservation(quantity=6)
+
+        with self.assertRaises(ValidationError):
+            allocate_stock_reservation(
+                reservation,
+                now=self.now,
+            )
+
+        self.assertFalse(
+            ReservationAllocation.objects.filter(
+                reservation=reservation,
+            ).exists()
+        )
+
+    def test_allocate_reservation_ignores_unavailable_batches(self):
+        quarantined_batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="BATCH-QUARANTINED",
+            status="quarantined",
+            created_by=self.user,
+        )
+
+        blocked_batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="BATCH-BLOCKED",
+            status="blocked",
+            created_by=self.user,
+        )
+
+        expired_batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="BATCH-EXPIRED",
+            expiration_date=self.today - timedelta(days=1),
+            created_by=self.user,
+        )
+
+        for batch in (
+            quarantined_batch,
+            blocked_batch,
+            expired_batch,
+        ):
+            self.create_movement(batch, 5)
+
+        reservation = self.create_reservation(quantity=1)
+
+        from django.core.exceptions import ValidationError
+
+        with self.assertRaises(ValidationError):
+            allocate_stock_reservation(
+                reservation,
+                now=self.now,
+            )
+
+        self.assertFalse(
+            ReservationAllocation.objects.filter(
+                reservation=reservation,
+            ).exists()
+        )
+
+    def test_allocate_reservation_rejects_duplicate_allocation(self):
+        self.create_movement(self.batch, 5)
+
+        reservation = self.create_reservation(
+            quantity=2,
+            batch=self.batch,
+        )
+
+        from django.core.exceptions import ValidationError
+
+        with self.assertRaises(ValidationError):
+            allocate_stock_reservation(
+                reservation,
+                now=self.now,
+            )
+
+        self.assertEqual(
+            ReservationAllocation.objects.filter(
+                reservation=reservation,
+            ).count(),
+            1,
+        )
+
+    def test_allocate_reservation_rejects_inactive_reservation(self):
+        from django.core.exceptions import ValidationError
+
+        self.create_movement(self.batch, 5)
+
+        reservation = self.create_reservation(quantity=2)
+        reservation.status = "expired"
+        reservation.save(update_fields=["status"])
+
+        with self.assertRaises(ValidationError):
+            allocate_stock_reservation(
+                reservation,
+                now=self.now,
+            )
+
+        self.assertFalse(
+            ReservationAllocation.objects.filter(
+                reservation=reservation,
+            ).exists()
+        )
+
+    def test_allocate_reservation_rejects_expired_reservation(self):
+        from django.core.exceptions import ValidationError
+
+        self.create_movement(self.batch, 5)
+
+        reservation = self.create_reservation(
+            quantity=2,
+            expires_at=self.now - timedelta(seconds=1),
+        )
+
+        with self.assertRaises(ValidationError):
+            allocate_stock_reservation(
+                reservation,
+                now=self.now,
+            )
+
+        self.assertFalse(
+            ReservationAllocation.objects.filter(
+                reservation=reservation,
+            ).exists()
+        )
+
+    def test_allocate_reservation_rejects_expired_order(self):
+        from django.core.exceptions import ValidationError
+
+        self.create_movement(self.batch, 5)
+
+        reservation = self.create_reservation(quantity=2)
+
+        reservation.order.reservation_expires_at = self.now - timedelta(seconds=1)
+        reservation.order.save(update_fields=["reservation_expires_at"])
+
+        with self.assertRaises(ValidationError):
+            allocate_stock_reservation(
+                reservation,
+                now=self.now,
+            )
+
+        self.assertFalse(
+            ReservationAllocation.objects.filter(
+                reservation=reservation,
+            ).exists()
+        )
+
+    def test_allocate_reservation_rejects_non_pending_order(self):
+        from django.core.exceptions import ValidationError
+
+        self.create_movement(self.batch, 5)
+
+        reservation = self.create_reservation(quantity=2)
+        reservation.order.status = "cancelled"
+        reservation.order.save(update_fields=["status"])
+
+        with self.assertRaises(ValidationError):
+            allocate_stock_reservation(
+                reservation,
+                now=self.now,
+            )
+
+        self.assertFalse(
+            ReservationAllocation.objects.filter(
+                reservation=reservation,
+            ).exists()
+        )
 from .document_services import (
     create_inventory_document,
     add_inventory_document_item,

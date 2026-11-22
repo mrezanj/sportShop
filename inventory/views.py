@@ -1,10 +1,10 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
+from rest_framework.exceptions import NotFound
 from .services import get_variants_inventory
-
 from catalog.models import ProductVariant
-
+from .models import InventoryDocument
 from .models import InventoryStockThreshold
 from .permissions import CanViewInventoryReports
 from .serializers import InventoryReportSerializer
@@ -106,7 +106,8 @@ class InventoryDocumentItemCreateAPIView(APIView):
             raise PermissionDenied(str(exc))
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages)
-
+        except InventoryDocument.DoesNotExist as exc:
+            raise NotFound("Inventory document not found.") from exc
         return Response(
             {
                 "id": item.id,
@@ -133,7 +134,8 @@ class InventoryDocumentSubmitAPIView(APIView):
             raise PermissionDenied(str(exc))
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages)
-
+        except InventoryDocument.DoesNotExist as exc:
+            raise NotFound("Inventory document not found.") from exc
         return Response(
             {
                 "id": document.id,
@@ -163,7 +165,8 @@ class InventoryDocumentReviewAPIView(APIView):
             raise PermissionDenied(str(exc))
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages)
-
+        except InventoryDocument.DoesNotExist as exc:
+            raise NotFound("Inventory document not found.") from exc
         return Response(
             {
                 "id": document.id,
@@ -195,7 +198,8 @@ class InventoryDocumentRejectAPIView(APIView):
             raise PermissionDenied(str(exc))
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages)
-
+        except InventoryDocument.DoesNotExist as exc:
+            raise NotFound("Inventory document not found.") from exc
         return Response(
             {
                 "id": document.id,
@@ -225,6 +229,8 @@ class InventoryDocumentApproveAPIView(APIView):
             raise PermissionDenied(str(exc))
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages)
+        except InventoryDocument.DoesNotExist as exc:
+            raise NotFound("Inventory document not found.") from exc
 
         return Response(
             {

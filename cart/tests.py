@@ -1,14 +1,16 @@
-
 from datetime import timedelta
 from decimal import Decimal
-
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-
 from rest_framework.test import APITestCase
-
+from inventory.models import (
+    InventoryBatch,
+    InventoryDocument,
+    InventoryDocumentItem,
+    InventoryMovement,
+)
 from catalog.models import Brand, Category, Product, ProductVariant
 from orders.models import (
     Order,
@@ -55,7 +57,34 @@ class CartAPITests(APITestCase):
             price=Decimal("100000"),
             stock=5,
         )
+        batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="CART-TEST-BATCH-001",
+            created_by=self.user,
+        )
 
+        document = InventoryDocument.objects.create(
+            document_number="CART-TEST-DOC-001",
+            document_type="inbound",
+            created_by=self.user,
+        )
+
+        item = InventoryDocumentItem.objects.create(
+            document=document,
+            variant=self.variant,
+            batch=batch,
+            quantity=5,
+            direction="inbound",
+        )
+
+        InventoryMovement.objects.create(
+            batch=batch,
+            document=document,
+            document_item=item,
+            movement_type="inbound",
+            quantity_delta=5,
+            created_by=self.user,
+        )
         self.shipping_method = ShippingMethod.objects.create(
             name="ارسال آزمایشی",
             slug="test-shipping",
@@ -130,9 +159,7 @@ class CartAPITests(APITestCase):
         self.assertEqual(response.data["total_quantity"], 0)
         self.assertEqual(Decimal(response.data["subtotal"]), Decimal("0"))
 
-        self.assertTrue(
-            Cart.objects.filter(user=self.user).exists()
-        )
+        self.assertTrue(Cart.objects.filter(user=self.user).exists())
 
     def test_user_can_add_item_to_cart(self):
         response = self.add_item(quantity=2)
@@ -166,9 +193,7 @@ class CartAPITests(APITestCase):
         response = self.add_item(quantity=6)
 
         self.assertEqual(response.status_code, 400)
-        self.assertFalse(
-            CartItem.objects.filter(cart__user=self.user).exists()
-        )
+        self.assertFalse(CartItem.objects.filter(cart__user=self.user).exists())
 
     def test_active_reservations_reduce_available_cart_stock(self):
         self.create_reservation(quantity=3)
@@ -176,9 +201,7 @@ class CartAPITests(APITestCase):
         response = self.add_item(quantity=3)
 
         self.assertEqual(response.status_code, 400)
-        self.assertFalse(
-            CartItem.objects.filter(cart__user=self.user).exists()
-        )
+        self.assertFalse(CartItem.objects.filter(cart__user=self.user).exists())
 
     def test_expired_reservations_do_not_reduce_available_cart_stock(self):
         reservation = self.create_reservation(quantity=3)
@@ -201,9 +224,7 @@ class CartAPITests(APITestCase):
         response = self.add_item(quantity=1)
 
         self.assertEqual(response.status_code, 400)
-        self.assertFalse(
-            CartItem.objects.filter(cart__user=self.user).exists()
-        )
+        self.assertFalse(CartItem.objects.filter(cart__user=self.user).exists())
 
     def test_user_can_update_cart_item_quantity(self):
         self.add_item(quantity=2)
@@ -262,14 +283,10 @@ class CartAPITests(APITestCase):
 
         item = CartItem.objects.get(cart__user=self.user)
 
-        response = self.client.delete(
-            reverse("cart-remove-item", args=[item.id])
-        )
+        response = self.client.delete(reverse("cart-remove-item", args=[item.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(
-            CartItem.objects.filter(pk=item.id).exists()
-        )
+        self.assertFalse(CartItem.objects.filter(pk=item.id).exists())
 
     def test_user_cannot_remove_another_users_cart_item(self):
         other_cart = Cart.objects.create(user=self.other_user)
@@ -280,26 +297,18 @@ class CartAPITests(APITestCase):
             quantity=1,
         )
 
-        response = self.client.delete(
-            reverse("cart-remove-item", args=[other_item.id])
-        )
+        response = self.client.delete(reverse("cart-remove-item", args=[other_item.id]))
 
         self.assertEqual(response.status_code, 404)
-        self.assertTrue(
-            CartItem.objects.filter(pk=other_item.id).exists()
-        )
+        self.assertTrue(CartItem.objects.filter(pk=other_item.id).exists())
 
     def test_user_can_clear_cart(self):
         self.add_item(quantity=1)
 
-        response = self.client.delete(
-            reverse("cart-clear")
-        )
+        response = self.client.delete(reverse("cart-clear"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(
-            CartItem.objects.filter(cart__user=self.user).exists()
-        )
+        self.assertFalse(CartItem.objects.filter(cart__user=self.user).exists())
 
     def test_cart_is_isolated_between_users(self):
         self.add_item(quantity=2)
@@ -366,9 +375,7 @@ class CartAPITests(APITestCase):
         self.assertEqual(reservation.quantity, 2)
         self.assertEqual(reservation.status, "active")
 
-        self.assertFalse(
-            CartItem.objects.filter(cart__user=self.user).exists()
-        )
+        self.assertFalse(CartItem.objects.filter(cart__user=self.user).exists())
 
     def test_checkout_ignores_client_supplied_items(self):
         self.add_item(quantity=1)

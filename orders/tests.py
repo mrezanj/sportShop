@@ -11,7 +11,12 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
-
+from inventory.models import (
+    InventoryBatch,
+    InventoryDocument,
+    InventoryDocumentItem,
+    InventoryMovement,
+)
 from catalog.models import Brand, Category, Product, ProductVariant
 from orders.models import (
     Order,
@@ -28,6 +33,12 @@ from orders.services import (
     InvalidOrderStatusTransition,
     cancel_locked_order,
     transition_order_status,
+)
+from inventory.models import (
+    InventoryBatch,
+    InventoryDocument,
+    InventoryDocumentItem,
+    InventoryMovement,
 )
 
 
@@ -66,7 +77,34 @@ class CreateOrderReservationTests(TestCase):
             name="ارسال آزمایشی",
             slug="test-shipping",
         )
+        batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="ORDER-TEST-BATCH-001",
+            created_by=self.user,
+        )
 
+        document = InventoryDocument.objects.create(
+            document_number="ORDER-TEST-DOC-001",
+            document_type="inbound",
+            created_by=self.user,
+        )
+
+        item = InventoryDocumentItem.objects.create(
+            document=document,
+            variant=self.variant,
+            batch=batch,
+            quantity=5,
+            direction="inbound",
+        )
+
+        InventoryMovement.objects.create(
+            batch=batch,
+            document=document,
+            document_item=item,
+            movement_type="inbound",
+            quantity_delta=5,
+            created_by=self.user,
+        )
         self.shipping_rate = ShippingRate.objects.create(
             method=self.shipping_method,
             province="tehran",
@@ -121,6 +159,25 @@ class CreateOrderReservationTests(TestCase):
             reservation.expires_at,
             order.reservation_expires_at,
         )
+
+    def test_order_uses_inventory_ledger_instead_of_legacy_stock(self):
+
+        self.variant.stock = 0
+        self.variant.save(update_fields=["stock"])
+
+        order = self.create_order(
+            [
+                {
+                    "variant_id": self.variant.id,
+                    "quantity": 2,
+                }
+            ]
+        )
+
+        reservation = StockReservation.objects.get(order=order)
+
+        self.assertEqual(reservation.quantity, 2)
+        self.assertEqual(reservation.status, "active")
 
     def test_duplicate_variant_items_are_aggregated(self):
         order = self.create_order(

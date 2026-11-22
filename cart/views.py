@@ -1,25 +1,19 @@
-
 from django.db import transaction
-from django.db.models import Sum
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
-
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
-
 from catalog.models import ProductVariant
-from orders.models import StockReservation
 from orders.serializers import CreateOrderSerializer
-
 from .models import Cart, CartItem
 from .serializers import (
     CartSerializer,
     AddCartItemSerializer,
     UpdateCartItemSerializer,
 )
+from inventory.services import get_variant_inventory
 
 
 def get_user_cart(user):
@@ -28,16 +22,8 @@ def get_user_cart(user):
 
 
 def get_available_stock(variant):
-    reserved_quantity = (
-        StockReservation.objects.filter(
-            variant=variant,
-            status="active",
-            expires_at__gt=timezone.now(),
-        ).aggregate(total=Sum("quantity"))["total"]
-        or 0
-    )
-
-    return max(variant.stock - reserved_quantity, 0)
+    inventory = get_variant_inventory(variant)
+    return inventory["available"]
 
 
 @api_view(["GET"])
@@ -83,10 +69,14 @@ def add_cart_item(request):
 
         available_stock = get_available_stock(variant)
 
-        item = CartItem.objects.select_for_update().filter(
-            cart=cart,
-            variant=variant,
-        ).first()
+        item = (
+            CartItem.objects.select_for_update()
+            .filter(
+                cart=cart,
+                variant=variant,
+            )
+            .first()
+        )
 
         current_quantity = item.quantity if item else 0
         new_quantity = current_quantity + quantity
@@ -169,9 +159,7 @@ def update_cart_item(request, item_id):
         available_stock = get_available_stock(variant)
 
         if quantity > available_stock:
-            raise ValidationError(
-                {"quantity": f"موجودی قابل خرید: {available_stock}"}
-            )
+            raise ValidationError({"quantity": f"موجودی قابل خرید: {available_stock}"})
 
         item.quantity = quantity
         item.save(update_fields=["quantity", "updated_at"])
@@ -200,10 +188,14 @@ def remove_cart_item(request, item_id):
 
         cart = Cart.objects.select_for_update().get(pk=cart.pk)
 
-        item = CartItem.objects.select_for_update().filter(
-            cart=cart,
-            pk=item_id,
-        ).first()
+        item = (
+            CartItem.objects.select_for_update()
+            .filter(
+                cart=cart,
+                pk=item_id,
+            )
+            .first()
+        )
 
         if item is None:
             return Response(

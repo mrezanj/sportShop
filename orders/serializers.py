@@ -14,6 +14,8 @@ from .models import (
     StockReservation,
     OrderStatusHistory,
 )
+from django.core.exceptions import ValidationError as DjangoValidationError
+from inventory.services import allocate_stock_reservation, get_variant_inventory
 
 
 class ShippingMethodSerializer(serializers.ModelSerializer):
@@ -199,26 +201,11 @@ class CreateOrderSerializer(serializers.Serializer):
                 released_at=now,
             )
 
-            # Calculate currently reserved quantities.
-            reserved_rows = (
-                StockReservation.objects.filter(
-                    variant_id__in=variant_ids,
-                    status="active",
-                    expires_at__gt=now,
-                )
-                .values("variant_id")
-                .annotate(total=Sum("quantity"))
-            )
-
-            reserved_by_variant = {
-                row["variant_id"]: row["total"] for row in reserved_rows
-            }
-
-            # Validate available stock while holding variant locks.
+            # Validate availability using the inventory ledger.
             for variant_id, qty in quantities.items():
                 variant = variants_by_id[variant_id]
-                reserved = reserved_by_variant.get(variant_id, 0)
-                available = variant.stock - reserved
+                inventory = get_variant_inventory(variant, now=now)
+                available = inventory["available"]
 
                 if available < qty:
                     raise serializers.ValidationError(
@@ -226,7 +213,7 @@ class CreateOrderSerializer(serializers.Serializer):
                             "items": (
                                 f"موجودی قابل سفارش "
                                 f"{variant.product.name_fa} کافی نیست. "
-                                f"موجودی قابل خرید: {max(available, 0)}"
+                                f"موجودی قابل خرید: {available}"
                             )
                         }
                     )
@@ -324,11 +311,16 @@ class CreateOrderSerializer(serializers.Serializer):
                     **item,
                 )
 
-                StockReservation.objects.create(
+                reservation = StockReservation.objects.create(
                     order=order,
                     variant=variant,
                     quantity=quantity,
                     expires_at=expires_at,
                 )
+
+                try:
+                    allocate_stock_reservation(reservation, now=now)
+                except DjangoValidationError as exc:
+                    raise serializers.ValidationError({"items": str(exc)}) from exc
 
             return order
