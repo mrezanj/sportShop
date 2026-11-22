@@ -43,7 +43,7 @@ class Command(BaseCommand):
                     continue
                 unresolved_payment_exists = Payment.objects.filter(
                     order=order,
-                    status__in=["initiating", "verifying", "unknown"],
+                    status__in=["pending", "initiating", "verifying", "unknown"],
                 ).exists()
 
                 if unresolved_payment_exists:

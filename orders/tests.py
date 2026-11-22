@@ -583,40 +583,29 @@ class ExpireOrdersCommandTests(TestCase):
         call_command("expire_orders", stdout=output)
         return output.getvalue()
 
-    def test_expired_order_releases_reservation_without_changing_pending_payment(self):
+    def test_expired_order_with_pending_payment_keeps_reservation(self):
         order, reservation = self.create_order_with_reservation(
             timedelta(minutes=-5),
         )
-        payment = self.create_payment(order)
-
+        payment = self.create_payment(order, status="pending")
         output = self.run_expire_command()
 
         order.refresh_from_db()
         reservation.refresh_from_db()
         payment.refresh_from_db()
 
-        self.assertEqual(order.status, "cancelled")
-        self.assertEqual(reservation.status, "expired")
-        self.assertIsNotNone(reservation.released_at)
-
+        self.assertEqual(order.status, "pending")
+        self.assertEqual(reservation.status, "active")
+        self.assertIsNone(reservation.released_at)
         self.assertEqual(payment.status, "pending")
 
-        self.assertIn("Expired orders: 1", output)
+        self.assertIn("Expired orders: 0", output)
         self.assertIn("Cancelled active payments: 0", output)
 
-        # Expiring an order must not change physical stock.
         self.variant.refresh_from_db()
         self.assertEqual(self.variant.stock, 5)
 
-        history = OrderStatusHistory.objects.get(order=order)
-
-        self.assertEqual(history.old_status, "pending")
-        self.assertEqual(history.new_status, "cancelled")
-        self.assertIsNone(history.changed_by)
-        self.assertEqual(
-            history.note,
-            "لغو خودکار سفارش به علت پایان مهلت رزرو موجودی.",
-        )
+        self.assertFalse(OrderStatusHistory.objects.filter(order=order).exists())
 
     def test_expiration_does_not_cancel_unresolved_payments(self):
         for status in ("initiating", "verifying", "unknown"):
@@ -643,7 +632,7 @@ class ExpireOrdersCommandTests(TestCase):
         order, reservation = self.create_order_with_reservation(
             timedelta(minutes=-5),
         )
-        payment = self.create_payment(order)
+        payment = self.create_payment(order, status="failed")
 
         self.run_expire_command()
 
@@ -662,7 +651,7 @@ class ExpireOrdersCommandTests(TestCase):
         self.assertEqual(order.status, "cancelled")
         self.assertEqual(reservation.status, "expired")
         self.assertEqual(reservation.released_at, first_released_at)
-        self.assertEqual(payment.status, "pending")
+        self.assertEqual(payment.status, "failed")
         self.assertEqual(payment.gateway_response, first_gateway_response)
 
         self.assertIn("Expired orders: 0", output)

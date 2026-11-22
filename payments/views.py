@@ -466,9 +466,6 @@ def verify_payment(request):
 
         now = timezone.now()
 
-        valid, reservations, variants_by_id = _lock_and_validate_reservations(
-            order, now
-        )
         payment = (
             Payment.objects.select_for_update()
             .filter(
@@ -515,28 +512,6 @@ def verify_payment(request):
                 status=400,
             )
 
-        if not valid:
-            cancel_locked_order(
-                order,
-                reservations,
-                now,
-                note="لغو خودکار به علت پایان مهلت یا نامعتبر بودن رزرو موجودی.",
-            )
-
-            payment.status = "cancelled"
-            payment.gateway_response = {
-                "reason": "reservation_expired_or_invalid",
-            }
-            payment.save(update_fields=["status", "gateway_response"])
-
-            return Response(
-                {
-                    "success": False,
-                    "message": "مهلت رزرو موجودی پایان یافته است.",
-                },
-                status=400,
-            )
-
         payment.status = "verifying"
         payment.verification_started_at = now
         payment.save(
@@ -574,6 +549,17 @@ def verify_payment(request):
     # Phase 3: Re-lock records and persist the verification result.
     with transaction.atomic():
         order = Order.objects.select_for_update().get(pk=order_id)
+        now = timezone.now()
+
+        valid = False
+        reservations = []
+        variants_by_id = {}
+
+        if order.status == "pending":
+            valid, reservations, variants_by_id = _lock_and_validate_reservations(
+                order, now
+            )
+
         payment = Payment.objects.select_for_update().get(pk=payment_id)
 
         if (
@@ -589,16 +575,6 @@ def verify_payment(request):
                     "message": "وضعیت تأیید پرداخت تغییر کرده است.",
                 },
                 status=409,
-            )
-        now = timezone.now()
-
-        valid = False
-        reservations = []
-        variants_by_id = {}
-
-        if order.status == "pending":
-            valid, reservations, variants_by_id = _lock_and_validate_reservations(
-                order, now
             )
 
         if result.outcome_unknown:
@@ -879,10 +855,10 @@ def recover_payment(request):
         reservations = []
         variants_by_id = {}
 
-        # Only validate reservations when the gateway confirms
-        # that the original verification succeeded.
+        # Validate reservations before restoring a payment session or
+        # completing a payment after a successful gateway inquiry.
         if (
-            recovery_operation == "verify"
+            recovery_operation in ["request", "verify"]
             and result.success
             and order.status == "pending"
         ):
@@ -894,7 +870,7 @@ def recover_payment(request):
         # A successful inquiry restores the payment session only.
 
         if recovery_operation == "request":
-            if result.success and result.authority and result.redirect_url:
+            if result.success and valid and result.authority and result.redirect_url:
                 payment.status = "pending"
                 payment.authority = result.authority
                 payment.gateway_response = {
@@ -1135,6 +1111,11 @@ def mock_payment_page(request, payment_id):
             except Order.DoesNotExist:
                 raise Http404
 
+            now = timezone.now()
+            valid, reservations, variants_by_id = _lock_and_validate_reservations(
+                order, now
+            )
+
             try:
                 payment = Payment.objects.select_for_update().get(
                     pk=payment_id,
@@ -1161,6 +1142,46 @@ def mock_payment_page(request, payment_id):
                 raise Http404
 
             if mock_transaction.status != "pending":
+                return render(
+                    request,
+                    "payments/mock_already_processed.html",
+                    {"payment": payment, "order": order},
+                )
+
+            if not valid:
+                mock_transaction.status = "failed"
+                mock_transaction.raw_response = {
+                    "step": "mock_payment",
+                    "reason": "reservation_expired_or_invalid",
+                    "status": "failed",
+                }
+                mock_transaction.save(
+                    update_fields=[
+                        "status",
+                        "raw_response",
+                        "updated_at",
+                    ]
+                )
+
+                payment.status = "failed"
+                payment.gateway_response = {
+                    "step": "mock_payment",
+                    "reason": "reservation_expired_or_invalid",
+                }
+                payment.save(
+                    update_fields=[
+                        "status",
+                        "gateway_response",
+                    ]
+                )
+
+                cancel_locked_order(
+                    order,
+                    reservations,
+                    now,
+                    note="لغو خودکار به علت پایان مهلت یا نامعتبر بودن رزرو موجودی در صفحه پرداخت آزمایشی.",
+                )
+
                 return render(
                     request,
                     "payments/mock_already_processed.html",
@@ -1201,25 +1222,46 @@ def mock_payment_page(request, payment_id):
             f"&authority={payment.authority}"
         )
 
-    payment = get_object_or_404(Payment, id=payment_id)
-    order = payment.order
-
-    mock_transaction = get_object_or_404(
-        MockGatewayTransaction,
-        payment=payment,
-        authority=payment.authority,
+    payment_order_id = (
+        Payment.objects.filter(pk=payment_id).values_list("order_id", flat=True).first()
     )
+    if payment_order_id is None:
+        raise Http404
 
-    if (
-        payment.status != "pending"
-        or order.status != "pending"
-        or mock_transaction.status != "pending"
-    ):
-        return render(
-            request,
-            "payments/mock_already_processed.html",
-            {"payment": payment, "order": order},
+    with transaction.atomic():
+        order = get_object_or_404(
+            Order.objects.select_for_update(),
+            pk=payment_order_id,
         )
+
+        now = timezone.now()
+        valid, reservations, variants_by_id = _lock_and_validate_reservations(
+            order, now
+        )
+
+        payment = get_object_or_404(
+            Payment.objects.select_for_update(),
+            pk=payment_id,
+            order_id=order.id,
+        )
+
+        mock_transaction = get_object_or_404(
+            MockGatewayTransaction.objects.select_for_update(),
+            payment=payment,
+            authority=payment.authority,
+        )
+
+        if (
+            payment.status != "pending"
+            or order.status != "pending"
+            or mock_transaction.status != "pending"
+            or not valid
+        ):
+            return render(
+                request,
+                "payments/mock_already_processed.html",
+                {"payment": payment, "order": order},
+            )
 
     return render(
         request,

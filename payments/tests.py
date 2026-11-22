@@ -22,6 +22,7 @@ from orders.models import (
     StockReservation,
 )
 from orders.serializers import CreateOrderSerializer
+from orders.services import cancel_locked_order
 from payments.gateways import get_gateway
 from payments.models import Payment, MockGatewayTransaction
 from payments.views import mock_payment_page
@@ -309,6 +310,121 @@ class PaymentFlowTests(TestCase):
             Payment.objects.filter(order=order).count(),
             1,
         )
+        recovered_gateway.inquire.assert_called_once()
+
+    def test_recover_request_does_not_restore_session_for_cancelled_order(self):
+        order = self.create_order(quantity=2)
+
+        gateway = SimpleNamespace(
+            request=Mock(
+                return_value=PaymentResult(
+                    success=False,
+                    outcome_unknown=True,
+                    raw_response={"step": "request"},
+                )
+            )
+        )
+
+        with patch("payments.views.get_gateway", return_value=gateway):
+            response = self.initiate(order)
+
+        self.assertEqual(response.status_code, 409)
+
+        payment = Payment.objects.get(order=order)
+        payment.request_started_at = timezone.now() - timedelta(minutes=3)
+        payment.save(update_fields=["request_started_at"])
+
+        cancel_locked_order(
+            order,
+            list(StockReservation.objects.filter(order=order)),
+            now=timezone.now(),
+            changed_by=self.user,
+            note="Test cancellation",
+        )
+
+        recovered_gateway = SimpleNamespace(
+            inquire=Mock(
+                return_value=PaymentResult(
+                    success=True,
+                    authority="MOCK-CANCELLED-123",
+                    redirect_url="http://testserver/mock-payment/123/",
+                )
+            )
+        )
+
+        with patch(
+            "payments.views.get_gateway",
+            return_value=recovered_gateway,
+        ):
+            recovery_response = self.recover(order)
+
+        self.assertEqual(recovery_response.status_code, 409)
+        self.assertNotIn("redirect_url", recovery_response.data)
+
+        payment.refresh_from_db()
+        order.refresh_from_db()
+        reservation = StockReservation.objects.get(order=order)
+
+        self.assertEqual(order.status, "cancelled")
+        self.assertEqual(payment.status, "unknown")
+        self.assertNotEqual(payment.authority, "MOCK-CANCELLED-123")
+        self.assertEqual(reservation.status, "released")
+        recovered_gateway.inquire.assert_called_once()
+
+    def test_recover_request_does_not_restore_session_for_expired_reservation(self):
+        order = self.create_order(quantity=2)
+
+        gateway = SimpleNamespace(
+            request=Mock(
+                return_value=PaymentResult(
+                    success=False,
+                    outcome_unknown=True,
+                    raw_response={"step": "request"},
+                )
+            )
+        )
+
+        with patch("payments.views.get_gateway", return_value=gateway):
+            response = self.initiate(order)
+
+        self.assertEqual(response.status_code, 409)
+
+        payment = Payment.objects.get(order=order)
+        payment.request_started_at = timezone.now() - timedelta(minutes=3)
+        payment.save(update_fields=["request_started_at"])
+
+        expired_at = timezone.now() - timedelta(minutes=1)
+
+        Order.objects.filter(pk=order.pk).update(reservation_expires_at=expired_at)
+        StockReservation.objects.filter(order=order).update(expires_at=expired_at)
+
+        recovered_gateway = SimpleNamespace(
+            inquire=Mock(
+                return_value=PaymentResult(
+                    success=True,
+                    authority="MOCK-EXPIRED-123",
+                    redirect_url="http://testserver/mock-payment/123/",
+                )
+            )
+        )
+
+        with patch(
+            "payments.views.get_gateway",
+            return_value=recovered_gateway,
+        ):
+            recovery_response = self.recover(order)
+
+        self.assertEqual(recovery_response.status_code, 409)
+        self.assertNotIn("redirect_url", recovery_response.data)
+
+        payment.refresh_from_db()
+        order.refresh_from_db()
+        reservation = StockReservation.objects.get(order=order)
+
+        self.assertEqual(order.status, "pending")
+        self.assertEqual(payment.status, "unknown")
+        self.assertNotEqual(payment.authority, "MOCK-EXPIRED-123")
+        self.assertEqual(reservation.status, "active")
         recovered_gateway.inquire.assert_called_once()
 
     def test_unknown_gateway_result_blocks_new_payment_request(self):
@@ -626,6 +742,51 @@ class PaymentFlowTests(TestCase):
         self.assertEqual(reservation.status, "consumed")
         self.assertIsNotNone(reservation.consumed_at)
         self.assertEqual(self.get_batch_physical_quantity(), 3)
+
+    def test_gateway_success_after_reservation_expiry_keeps_payment_unknown(self):
+        order = self.create_order(quantity=2)
+        reservation = StockReservation.objects.get(order=order)
+        payment = self.start_payment(order)
+
+        # The mock gateway records a successful transaction while the
+        # reservation is still valid.
+        mock_request = RequestFactory().post(
+            "/",
+            {"status": "success"},
+        )
+        mock_response = mock_payment_page(
+            mock_request,
+            payment.id,
+        )
+        self.assertEqual(mock_response.status_code, 302)
+
+        # The reservation expires before the verification callback arrives.
+        expired_at = timezone.now() - timedelta(minutes=1)
+        Order.objects.filter(pk=order.pk).update(reservation_expires_at=expired_at)
+        StockReservation.objects.filter(order=order).update(expires_at=expired_at)
+
+        response = self.verify(order, payment.authority)
+
+        self.assertEqual(response.status_code, 409)
+
+        order.refresh_from_db()
+        payment.refresh_from_db()
+        reservation.refresh_from_db()
+
+        self.assertEqual(order.status, "cancelled")
+        self.assertEqual(payment.status, "unknown")
+        self.assertEqual(
+            payment.gateway_response["reason"],
+            "order_or_reservation_no_longer_valid",
+        )
+        self.assertEqual(reservation.status, "expired")
+        self.assertIsNotNone(reservation.released_at)
+
+        mock_transaction = MockGatewayTransaction.objects.get(payment=payment)
+        self.assertEqual(mock_transaction.status, "success")
+
+        self.assertEqual(self.get_batch_physical_quantity(), 5)
+        self.assertFalse(InventoryDocument.objects.filter(source_order=order).exists())
 
     def test_successful_gateway_payment_with_insufficient_inventory_marks_payment_unknown(
         self,
@@ -998,6 +1159,11 @@ class PaymentFlowTests(TestCase):
         order = self.create_order(quantity=2)
         payment = self.start_payment(order)
 
+        expired_at = timezone.now() - timedelta(minutes=1)
+
+        Order.objects.filter(pk=order.pk).update(reservation_expires_at=expired_at)
+
+        StockReservation.objects.filter(order=order).update(expires_at=expired_at)
         mock_request = RequestFactory().post(
             "/",
             {"status": "success"},
@@ -1006,18 +1172,14 @@ class PaymentFlowTests(TestCase):
             mock_request,
             payment.id,
         )
-        self.assertEqual(mock_response.status_code, 302)
+        self.assertEqual(mock_response.status_code, 200)
 
-        expired_at = timezone.now() - timedelta(minutes=1)
-
-        Order.objects.filter(pk=order.pk).update(reservation_expires_at=expired_at)
-
-        StockReservation.objects.filter(order=order).update(expires_at=expired_at)
-
+        mock_transaction = MockGatewayTransaction.objects.get(payment=payment)
+        self.assertEqual(mock_transaction.status, "failed")
         response = self.verify(order, payment.authority)
 
         self.assertEqual(response.status_code, 400)
-        self.assertFalse(response.data["success"])
+        self.assertEqual(response.data["error"], "این سفارش قابل تأیید نیست.")
 
         order.refresh_from_db()
         payment.refresh_from_db()
@@ -1025,7 +1187,7 @@ class PaymentFlowTests(TestCase):
         reservation = StockReservation.objects.get(order=order)
 
         self.assertEqual(order.status, "cancelled")
-        self.assertEqual(payment.status, "cancelled")
+        self.assertEqual(payment.status, "failed")
         self.assertEqual(reservation.status, "expired")
         self.assertIsNotNone(reservation.released_at)
 
@@ -1141,6 +1303,38 @@ class PaymentFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "payments/mock_payment.html")
+
+    def test_mock_payment_page_hides_expired_reservation_without_mutation(self):
+        order = self.create_order(quantity=2)
+        payment = self.start_payment(order)
+
+        expired_at = timezone.now() - timedelta(minutes=1)
+
+        Order.objects.filter(pk=order.pk).update(
+            reservation_expires_at=expired_at,
+        )
+        StockReservation.objects.filter(order=order).update(
+            expires_at=expired_at,
+        )
+
+        response = self.client.get(f"/api/payments/mock/{payment.id}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(
+            response,
+            "payments/mock_already_processed.html",
+        )
+
+        order.refresh_from_db()
+        payment.refresh_from_db()
+        mock_transaction = MockGatewayTransaction.objects.get(payment=payment)
+        reservation = StockReservation.objects.get(order=order)
+
+        self.assertEqual(order.status, "pending")
+        self.assertEqual(payment.status, "pending")
+        self.assertEqual(mock_transaction.status, "pending")
+        self.assertEqual(reservation.status, "active")
+        self.assertIsNone(reservation.released_at)
 
     def test_mock_payment_page_returns_404_without_mock_transaction(self):
         order = self.create_order(quantity=2)
