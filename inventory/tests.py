@@ -317,6 +317,93 @@ class InventoryDocumentWorkflowTests(TestCase):
             stock=0,
         )
 
+    def test_submit_rejects_invalid_document_type(self):
+        from django.core.exceptions import ValidationError
+        from .models import InventoryDocument
+
+        document = InventoryDocument.objects.create(
+            document_number="INVALID-TYPE-001",
+            document_type="invalid",
+            created_by=self.creator,
+        )
+
+        InventoryDocumentItem.objects.create(
+            document=document,
+            variant=self.variant,
+            quantity=5,
+            direction="inbound",
+            new_batch_number="INVALID-TYPE-BATCH-001",
+        )
+
+        with self.assertRaises(ValidationError):
+            submit_inventory_document(
+                user=self.creator,
+                document_id=document.id,
+            )
+
+        document.refresh_from_db()
+        self.assertEqual(document.status, "draft")
+
+    def test_approve_rejects_invalid_document_type(self):
+        from django.core.exceptions import ValidationError
+        from .models import InventoryDocument
+
+        document = InventoryDocument.objects.create(
+            document_number="INVALID-APPROVAL-001",
+            document_type="invalid",
+            created_by=self.creator,
+        )
+
+        InventoryDocumentItem.objects.create(
+            document=document,
+            variant=self.variant,
+            quantity=5,
+            direction="inbound",
+            new_batch_number="INVALID-APPROVAL-BATCH-001",
+        )
+
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE inventory_inventorydocument SET status = %s WHERE id = %s",
+                ["pending_approval", document.pk],
+            )
+
+        with self.assertRaises(ValidationError):
+            approve_inventory_document(
+                user=self.approver,
+                document_id=document.id,
+            )
+
+        document.refresh_from_db()
+        self.assertEqual(document.status, "pending_approval")
+        self.assertFalse(InventoryMovement.objects.filter(document=document).exists())
+
+    def test_add_item_rejects_invalid_document_type(self):
+        from django.core.exceptions import ValidationError
+        from .models import InventoryDocument
+
+        document = InventoryDocument.objects.create(
+            document_number="INVALID-ITEM-001",
+            document_type="invalid",
+            created_by=self.creator,
+        )
+
+        with self.assertRaises(ValidationError):
+            add_inventory_document_item(
+                user=self.creator,
+                document_id=document.id,
+                variant=self.variant,
+                quantity=5,
+                direction="inbound",
+                new_batch_number="INVALID-ITEM-BATCH-001",
+            )
+
+        self.assertFalse(
+            InventoryDocumentItem.objects.filter(document=document).exists()
+        )
+
     def test_existing_batch_rejects_new_batch_expiration_date(self):
         from django.core.exceptions import ValidationError
 

@@ -120,6 +120,10 @@ def add_inventory_document_item(
 
     if document.created_by_id != user.id:
         raise PermissionDenied("Only the document creator can edit it.")
+    valid_types = {value for value, label in InventoryDocument.DOCUMENT_TYPES}
+
+    if document.document_type not in valid_types:
+        raise ValidationError("Invalid inventory document type.")
 
     if quantity <= 0:
         raise ValidationError("Quantity must be greater than zero.")
@@ -208,7 +212,10 @@ def submit_inventory_document(*, user, document_id):
 
     if document.status != "draft":
         raise ValidationError("Only draft documents can be submitted.")
+    valid_types = {value for value, label in InventoryDocument.DOCUMENT_TYPES}
 
+    if document.document_type not in valid_types:
+        raise ValidationError("Invalid inventory document type.")
     if document.created_by_id != user.id:
         raise PermissionDenied("Only the document creator can submit it.")
 
@@ -607,7 +614,10 @@ def approve_inventory_document(*, user, document_id, note=""):
 
     if document.status != "pending_approval":
         raise ValidationError("Only documents pending approval can be approved.")
+    valid_types = {value for value, label in InventoryDocument.DOCUMENT_TYPES}
 
+    if document.document_type not in valid_types:
+        raise ValidationError("Invalid inventory document type.")
     if document.reviewed_by_id == user.id:
         raise PermissionDenied("The reviewer cannot approve the same document.")
 
