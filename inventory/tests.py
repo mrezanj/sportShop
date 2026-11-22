@@ -1883,3 +1883,51 @@ class InventoryDocumentAPITests(TestCase):
 
         document.refresh_from_db()
         self.assertEqual(document.status, "pending_approval")
+
+    def test_document_actions_return_404_for_missing_document(self):
+        self.client.raise_request_exception = False
+
+        cases = [
+            (
+                self.creator,
+                "/api/inventory/documents/999999/items/",
+                {
+                    "variant": self.variant.id,
+                    "quantity": 1,
+                    "direction": "inbound",
+                    "new_batch_number": "MISSING-DOC-BATCH",
+                },
+            ),
+            (
+                self.creator,
+                "/api/inventory/documents/999999/submit/",
+                {},
+            ),
+            (
+                self.reviewer,
+                "/api/inventory/documents/999999/review/",
+                {"note": "Review"},
+            ),
+            (
+                self.reviewer,
+                "/api/inventory/documents/999999/reject/",
+                {"note": "Rejection reason"},
+            ),
+            (
+                self.approver,
+                "/api/inventory/documents/999999/approve/",
+                {"note": "Approval"},
+            ),
+        ]
+
+        for user, url, data in cases:
+            with self.subTest(url=url):
+                self.client.force_authenticate(user=user)
+
+                response = self.client.post(
+                    url,
+                    data,
+                    format="json",
+                )
+
+                self.assertEqual(response.status_code, 404)
