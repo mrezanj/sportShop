@@ -319,6 +319,26 @@ class InventoryDocumentWorkflowTests(TestCase):
             stock=0,
         )
 
+    def test_database_rejects_negative_unit_cost(self):
+        from django.db import IntegrityError, transaction
+
+        document = InventoryDocument.objects.create(
+            document_number="NEGATIVE-COST-DB-001",
+            document_type="inbound",
+            created_by=self.creator,
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InventoryDocumentItem.objects.create(
+                    document=document,
+                    variant=self.variant,
+                    quantity=1,
+                    direction="inbound",
+                    new_batch_number="NEGATIVE-COST-DB-BATCH",
+                    unit_cost=-100,
+                )
+
     def test_submit_rejects_invalid_document_type(self):
         from django.core.exceptions import ValidationError
         from .models import InventoryDocument
