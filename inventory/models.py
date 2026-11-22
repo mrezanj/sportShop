@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from catalog.models import ProductVariant
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 
 
 class InventoryBatch(models.Model):
@@ -323,6 +324,7 @@ class InventoryDocumentItem(models.Model):
         decimal_places=0,
         null=True,
         blank=True,
+        validators=[MinValueValidator(0)],
         verbose_name="بهای واحد (تومان)",
     )
     reason = models.CharField(
@@ -338,6 +340,10 @@ class InventoryDocumentItem(models.Model):
             models.CheckConstraint(
                 condition=models.Q(quantity__gt=0),
                 name="inv_doc_item_quantity_positive",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(unit_cost__isnull=True) | models.Q(unit_cost__gte=0),
+                name="inv_doc_item_unit_cost_nonnegative",
             ),
         ]
         indexes = [

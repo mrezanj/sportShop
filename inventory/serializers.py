@@ -76,6 +76,7 @@ class InventoryDocumentItemCreateSerializer(serializers.Serializer):
     unit_cost = serializers.DecimalField(
         max_digits=12,
         decimal_places=0,
+        min_value=0,
         required=False,
         allow_null=True,
     )

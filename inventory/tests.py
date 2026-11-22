@@ -1615,6 +1615,35 @@ class InventoryDocumentAPITests(TestCase):
         self.assertEqual(movement.quantity_delta, 5)
         self.assertEqual(movement.movement_type, "inbound")
 
+    def test_document_item_rejects_negative_unit_cost(self):
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.post(
+            "/api/inventory/documents/",
+            {
+                "document_number": "API-NEGATIVE-COST-001",
+                "document_type": "inbound",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        document_id = response.data["id"]
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 1,
+                "direction": "inbound",
+                "new_batch_number": "API-NEGATIVE-COST-BATCH",
+                "unit_cost": -100,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
     def test_reviewer_can_reject_document_through_api(self):
         self.client.force_authenticate(user=self.creator)
 
