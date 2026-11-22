@@ -26,6 +26,49 @@ from payments.models import Payment, MockGatewayTransaction
 from payments.views import mock_payment_page
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
+from inventory.models import (
+    InventoryBatch,
+    InventoryDocument,
+    InventoryDocumentItem,
+    InventoryMovement,
+)
+from inventory.models import (
+    InventoryBatch,
+    InventoryDocument,
+    InventoryDocumentItem,
+    InventoryMovement,
+)
+
+
+def create_inventory_ledger_for_variant(variant, user, quantity=5):
+    batch = InventoryBatch.objects.create(
+        variant=variant,
+        batch_number=f"PAYMENT-TEST-BATCH-{variant.pk}",
+        created_by=user,
+    )
+
+    document = InventoryDocument.objects.create(
+        document_number=f"PAYMENT-TEST-IN-{variant.pk}",
+        document_type="inbound",
+        created_by=user,
+    )
+
+    item = InventoryDocumentItem.objects.create(
+        document=document,
+        variant=variant,
+        batch=batch,
+        quantity=quantity,
+        direction="inbound",
+    )
+
+    InventoryMovement.objects.create(
+        batch=batch,
+        document=document,
+        document_item=item,
+        movement_type="inbound",
+        quantity_delta=quantity,
+        created_by=user,
+    )
 
 
 @override_settings(DEBUG=True, ACTIVE_PAYMENT_GATEWAY="mock")
@@ -61,6 +104,34 @@ class PaymentFlowTests(TestCase):
             product=product,
             price=Decimal("100000"),
             stock=5,
+        )
+        batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="PAYMENT-TEST-BATCH",
+            created_by=self.user,
+        )
+
+        document = InventoryDocument.objects.create(
+            document_number="PAYMENT-TEST-IN-001",
+            document_type="inbound",
+            created_by=self.user,
+        )
+
+        item = InventoryDocumentItem.objects.create(
+            document=document,
+            variant=self.variant,
+            batch=batch,
+            quantity=5,
+            direction="inbound",
+        )
+
+        InventoryMovement.objects.create(
+            batch=batch,
+            document=document,
+            document_item=item,
+            movement_type="inbound",
+            quantity_delta=5,
+            created_by=self.user,
         )
 
         shipping_method = ShippingMethod.objects.create(
@@ -1262,7 +1333,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             price=Decimal("100000"),
             stock=5,
         )
-
+        create_inventory_ledger_for_variant(variant, user)
         shipping_method = ShippingMethod.objects.create(
             name="ارسال تست تراکنش",
             slug="transaction-test-shipping",
@@ -1362,6 +1433,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             price=Decimal("100000"),
             stock=5,
         )
+        create_inventory_ledger_for_variant(variant, user)
 
         shipping_method = ShippingMethod.objects.create(
             name="ارسال تست تأیید تراکنش",
@@ -1485,7 +1557,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             price=Decimal("100000"),
             stock=5,
         )
-
+        create_inventory_ledger_for_variant(variant, user)
         shipping_method = ShippingMethod.objects.create(
             name="ارسال تست هم‌زمانی تأیید",
             slug="verify-concurrency-shipping",
@@ -1623,6 +1695,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             price=Decimal("100000"),
             stock=5,
         )
+        create_inventory_ledger_for_variant(variant, user)
 
         shipping_method = ShippingMethod.objects.create(
             name="ارسال تست هم‌زمانی بازیابی",
@@ -1767,6 +1840,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             price=Decimal("100000"),
             stock=5,
         )
+        create_inventory_ledger_for_variant(variant, user)
 
         shipping_method = ShippingMethod.objects.create(
             name="ارسال تست خطای تأیید",
@@ -1871,6 +1945,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             price=Decimal("100000"),
             stock=5,
         )
+        create_inventory_ledger_for_variant(variant, user)
 
         shipping_method = ShippingMethod.objects.create(
             name="Concurrent Shipping",
@@ -1987,6 +2062,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             price=Decimal("100000"),
             stock=5,
         )
+        create_inventory_ledger_for_variant(variant, user)
 
         shipping_method = ShippingMethod.objects.create(
             name="Concurrent Initiate Shipping",

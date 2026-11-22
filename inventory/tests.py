@@ -492,6 +492,8 @@ class InventoryServiceTests(TestCase):
                 reservation=reservation,
             ).exists()
         )
+
+
 from .document_services import (
     create_inventory_document,
     add_inventory_document_item,
