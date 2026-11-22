@@ -125,6 +125,14 @@ class InventoryDocument(models.Model):
         blank=True,
         verbose_name="شماره مرجع",
     )
+    source_order = models.OneToOneField(
+        "orders.Order",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="inventory_sale_document",
+        verbose_name="سفارش مبدأ",
+    )
     reason = models.TextField(
         blank=True,
         verbose_name="دلیل عملیات",
@@ -134,10 +142,24 @@ class InventoryDocument(models.Model):
         verbose_name="توضیحات",
     )
 
+    CREATED_BY_TYPE_CHOICES = [
+        ("user", "کاربر"),
+        ("system", "سیستم"),
+    ]
+
+    created_by_type = models.CharField(
+        max_length=10,
+        choices=CREATED_BY_TYPE_CHOICES,
+        default="user",
+        verbose_name="منشأ ثبت",
+    )
+
     created_by = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
         related_name="created_inventory_documents",
+        null=True,
+        blank=True,
         verbose_name="ثبت‌کننده",
     )
     reviewed_by = models.ForeignKey(
@@ -198,6 +220,29 @@ class InventoryDocument(models.Model):
                 "Can view inventory reports",
             ),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(source_order__isnull=True)
+                    | models.Q(document_type="outbound")
+                ),
+                name="inv_order_doc_must_be_outbound",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        created_by_type="user",
+                        created_by__isnull=False,
+                    )
+                    | models.Q(
+                        created_by_type="system",
+                        created_by__isnull=True,
+                    )
+                ),
+                name="inv_doc_creator_type_consistent",
+            ),
+        ]
+
         indexes = [
             models.Index(
                 fields=["status", "created_at"],
@@ -214,38 +259,69 @@ class InventoryDocument(models.Model):
 
     def save(self, *args, **kwargs):
         allow_transition = kwargs.pop("_allow_transition", False)
+        allow_system_approval = kwargs.pop("_allow_system_approval", False)
 
         if self.pk:
-            if not allow_transition:
-                raise ValidationError(
-                    "Inventory documents must be changed through document services."
-                )
+            if allow_system_approval:
+                update_fields = kwargs.get("update_fields")
 
-            allowed_fields = {
-                "status",
-                "reviewed_by",
-                "reviewed_at",
-                "approved_by",
-                "approved_at",
-                "updated_at",
-            }
+                if (
+                    not update_fields
+                    or "status" not in update_fields
+                    or not set(update_fields).issubset(
+                        {"status", "approved_at", "updated_at"}
+                    )
+                ):
+                    raise ValidationError(
+                        "System approval can only change approval fields."
+                    )
 
-            update_fields = kwargs.get("update_fields")
+                original = type(self).objects.get(pk=self.pk)
 
-            if not update_fields or not set(update_fields).issubset(allowed_fields):
-                raise ValidationError("Only document workflow fields can be changed.")
+                if (
+                    original.status != "draft"
+                    or self.status != "approved"
+                    or not self.source_order_id
+                    or self.document_type != "outbound"
+                    or self.created_by_type != "system"
+                    or self.created_by_id is not None
+                ):
+                    raise ValidationError("Invalid system approval for inventory sale.")
 
-            original = type(self).objects.get(pk=self.pk)
+            else:
+                if not allow_transition:
+                    raise ValidationError(
+                        "Inventory documents must be changed through document services."
+                    )
 
-            valid_transitions = {
-                "draft": {"pending_review"},
-                "pending_review": {"pending_approval", "rejected"},
-                "pending_approval": {"approved", "rejected"},
-            }
+                allowed_fields = {
+                    "status",
+                    "reviewed_by",
+                    "reviewed_at",
+                    "approved_by",
+                    "approved_at",
+                    "updated_at",
+                }
 
-            if self.status not in valid_transitions.get(original.status, set()):
-                raise ValidationError("Invalid inventory document status transition.")
+                update_fields = kwargs.get("update_fields")
 
+                if not update_fields or not set(update_fields).issubset(allowed_fields):
+                    raise ValidationError(
+                        "Only document workflow fields can be changed."
+                    )
+
+                original = type(self).objects.get(pk=self.pk)
+
+                valid_transitions = {
+                    "draft": {"pending_review"},
+                    "pending_review": {"pending_approval", "rejected"},
+                    "pending_approval": {"approved", "rejected"},
+                }
+
+                if self.status not in valid_transitions.get(original.status, set()):
+                    raise ValidationError(
+                        "Invalid inventory document status transition."
+                    )
         elif self.status != "draft":
             raise ValidationError("New inventory documents must start as draft.")
 
@@ -435,10 +511,24 @@ class InventoryMovement(models.Model):
         verbose_name="تغییر موجودی",
         help_text="ورود مثبت و خروج منفی ثبت می‌شود.",
     )
+    CREATED_BY_TYPE_CHOICES = [
+        ("user", "کاربر"),
+        ("system", "سیستم"),
+    ]
+
+    created_by_type = models.CharField(
+        max_length=10,
+        choices=CREATED_BY_TYPE_CHOICES,
+        default="user",
+        verbose_name="منشأ ثبت",
+    )
+
     created_by = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
         related_name="created_inventory_movements",
+        null=True,
+        blank=True,
         verbose_name="ثبت‌کننده",
     )
     created_at = models.DateTimeField(
@@ -458,6 +548,19 @@ class InventoryMovement(models.Model):
             models.CheckConstraint(
                 condition=~models.Q(quantity_delta=0),
                 name="inv_movement_quantity_nonzero",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        created_by_type="user",
+                        created_by__isnull=False,
+                    )
+                    | models.Q(
+                        created_by_type="system",
+                        created_by__isnull=True,
+                    )
+                ),
+                name="inv_move_creator_type_consistent",
             ),
         ]
         indexes = [
@@ -662,10 +765,24 @@ class InventoryDocumentLog(models.Model):
         blank=True,
         verbose_name="وضعیت جدید",
     )
+    ACTOR_TYPE_CHOICES = [
+        ("user", "کاربر"),
+        ("system", "سیستم"),
+    ]
+
+    actor_type = models.CharField(
+        max_length=10,
+        choices=ACTOR_TYPE_CHOICES,
+        default="user",
+        verbose_name="منشأ اقدام",
+    )
+
     actor = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
         related_name="inventory_document_logs",
+        null=True,
+        blank=True,
         verbose_name="انجام‌دهنده",
     )
     note = models.TextField(
@@ -681,6 +798,21 @@ class InventoryDocumentLog(models.Model):
         verbose_name = "تاریخچه سند انبار"
         verbose_name_plural = "تاریخچه اسناد انبار"
         ordering = ["created_at", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        actor_type="user",
+                        actor__isnull=False,
+                    )
+                    | models.Q(
+                        actor_type="system",
+                        actor__isnull=True,
+                    )
+                ),
+                name="inv_log_actor_type_consistent",
+            ),
+        ]
         indexes = [
             models.Index(
                 fields=["document", "created_at"],

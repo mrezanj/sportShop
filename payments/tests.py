@@ -3,6 +3,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from django.db import connection, close_old_connections
+from django.db.models import Sum
 from django.test import TransactionTestCase
 from payments.gateways.base import PaymentResult
 from django.contrib.auth.models import User
@@ -26,12 +27,6 @@ from payments.models import Payment, MockGatewayTransaction
 from payments.views import mock_payment_page
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
-from inventory.models import (
-    InventoryBatch,
-    InventoryDocument,
-    InventoryDocumentItem,
-    InventoryMovement,
-)
 from inventory.models import (
     InventoryBatch,
     InventoryDocument,
@@ -105,7 +100,7 @@ class PaymentFlowTests(TestCase):
             price=Decimal("100000"),
             stock=5,
         )
-        batch = InventoryBatch.objects.create(
+        self.batch = InventoryBatch.objects.create(
             variant=self.variant,
             batch_number="PAYMENT-TEST-BATCH",
             created_by=self.user,
@@ -120,13 +115,13 @@ class PaymentFlowTests(TestCase):
         item = InventoryDocumentItem.objects.create(
             document=document,
             variant=self.variant,
-            batch=batch,
+            batch=self.batch,
             quantity=5,
             direction="inbound",
         )
 
         InventoryMovement.objects.create(
-            batch=batch,
+            batch=self.batch,
             document=document,
             document_item=item,
             movement_type="inbound",
@@ -143,6 +138,14 @@ class PaymentFlowTests(TestCase):
             method=shipping_method,
             province="tehran",
             cost=Decimal("50000"),
+        )
+
+    def get_batch_physical_quantity(self):
+        return (
+            InventoryMovement.objects.filter(batch=self.batch).aggregate(
+                total=Sum("quantity_delta")
+            )["total"]
+            or 0
         )
 
     def create_order(self, quantity=2):
@@ -622,7 +625,68 @@ class PaymentFlowTests(TestCase):
         self.assertEqual(payment.status, "success")
         self.assertEqual(reservation.status, "consumed")
         self.assertIsNotNone(reservation.consumed_at)
-        self.assertEqual(self.variant.stock, 3)
+        self.assertEqual(self.get_batch_physical_quantity(), 3)
+
+    def test_successful_gateway_payment_with_insufficient_inventory_marks_payment_unknown(
+        self,
+    ):
+        order = self.create_order(quantity=2)
+        reservation = StockReservation.objects.get(order=order)
+        payment = self.start_payment(order)
+
+        document = InventoryDocument.objects.create(
+            document_number="PAYMENT-TEST-OUT-001",
+            document_type="outbound",
+            created_by=self.user,
+        )
+
+        item = InventoryDocumentItem.objects.create(
+            document=document,
+            variant=self.variant,
+            batch=self.batch,
+            quantity=5,
+            direction="outbound",
+        )
+
+        InventoryMovement.objects.create(
+            batch=self.batch,
+            document=document,
+            document_item=item,
+            movement_type="outbound",
+            quantity_delta=-5,
+            created_by=self.user,
+        )
+
+        self.assertEqual(self.get_batch_physical_quantity(), 0)
+
+        mock_request = RequestFactory().post(
+            "/",
+            {"status": "success"},
+        )
+        mock_response = mock_payment_page(
+            mock_request,
+            payment.id,
+        )
+        self.assertEqual(mock_response.status_code, 302)
+
+        response = self.verify(order, payment.authority)
+
+        self.assertEqual(response.status_code, 409)
+
+        order.refresh_from_db()
+        payment.refresh_from_db()
+        reservation.refresh_from_db()
+
+        self.assertEqual(payment.status, "unknown")
+        self.assertEqual(
+            payment.gateway_response["reason"],
+            "inventory_sale_failed",
+        )
+        self.assertEqual(order.status, "pending")
+        self.assertEqual(reservation.status, "active")
+        self.assertIsNone(reservation.consumed_at)
+        self.assertEqual(self.get_batch_physical_quantity(), 0)
+        self.assertFalse(InventoryDocument.objects.filter(source_order=order).exists())
 
     def test_recover_unknown_verification_completes_successful_payment(self):
         order = self.create_order(quantity=2)
@@ -669,7 +733,7 @@ class PaymentFlowTests(TestCase):
         self.assertTrue(payment.ref_id)
         self.assertEqual(order.status, "paid")
         self.assertEqual(reservation.status, "consumed")
-        self.assertEqual(self.variant.stock, 3)
+        self.assertEqual(self.get_batch_physical_quantity(), 3)
         self.assertEqual(
             Payment.objects.filter(order=order).count(),
             1,
@@ -738,7 +802,7 @@ class PaymentFlowTests(TestCase):
         self.assertTrue(payment.gateway_response["outcome_unknown"])
         self.assertEqual(order.status, "pending")
         self.assertEqual(reservation.status, "active")
-        self.assertEqual(self.variant.stock, 5)
+        self.assertEqual(self.get_batch_physical_quantity(), 5)
 
     def test_recover_definitive_verification_failure_returns_400(self):
         order = self.create_order(quantity=2)
@@ -831,7 +895,7 @@ class PaymentFlowTests(TestCase):
             "payment_amount_mismatch",
         )
         self.assertEqual(order.status, "pending")
-        self.assertEqual(self.variant.stock, 5)
+        self.assertEqual(self.get_batch_physical_quantity(), 5)
 
     def test_repeated_callback_does_not_decrease_stock_twice(self):
         order = self.create_order(quantity=2)
@@ -859,7 +923,7 @@ class PaymentFlowTests(TestCase):
 
         self.variant.refresh_from_db()
 
-        self.assertEqual(self.variant.stock, 3)
+        self.assertEqual(self.get_batch_physical_quantity(), 3)
         self.assertEqual(
             StockReservation.objects.filter(
                 order=order,
@@ -900,7 +964,7 @@ class PaymentFlowTests(TestCase):
         self.assertEqual(reservation.status, "active")
 
         self.variant.refresh_from_db()
-        self.assertEqual(self.variant.stock, 5)
+        self.assertEqual(self.get_batch_physical_quantity(), 5)
 
         second_payment = self.start_payment(order)
 
@@ -928,7 +992,7 @@ class PaymentFlowTests(TestCase):
         self.variant.refresh_from_db()
 
         self.assertEqual(order.status, "paid")
-        self.assertEqual(self.variant.stock, 3)
+        self.assertEqual(self.get_batch_physical_quantity(), 3)
 
     def test_expired_reservation_cannot_be_paid(self):
         order = self.create_order(quantity=2)
@@ -966,7 +1030,7 @@ class PaymentFlowTests(TestCase):
         self.assertIsNotNone(reservation.released_at)
 
         self.variant.refresh_from_db()
-        self.assertEqual(self.variant.stock, 5)
+        self.assertEqual(self.get_batch_physical_quantity(), 5)
 
     def test_initiating_payment_for_expired_order_cancels_it(self):
         order = self.create_order(quantity=2)
@@ -1007,7 +1071,7 @@ class PaymentFlowTests(TestCase):
         self.assertEqual(order.status, "pending")
         self.assertEqual(payment.status, "failed")
         self.assertEqual(reservation.status, "active")
-        self.assertEqual(self.variant.stock, 5)
+        self.assertEqual(self.get_batch_physical_quantity(), 5)
 
     def test_invalid_authority_does_not_process_payment(self):
         order = self.create_order(quantity=2)
@@ -1029,7 +1093,7 @@ class PaymentFlowTests(TestCase):
         self.assertEqual(order.status, "pending")
         self.assertEqual(payment.status, "pending")
         self.assertEqual(reservation.status, "active")
-        self.assertEqual(self.variant.stock, 5)
+        self.assertEqual(self.get_batch_physical_quantity(), 5)
 
     def test_other_user_cannot_initiate_payment(self):
         order = self.create_order(quantity=2)
@@ -1068,7 +1132,7 @@ class PaymentFlowTests(TestCase):
         self.assertEqual(order.status, "pending")
         self.assertEqual(payment.status, "pending")
         self.assertEqual(reservation.status, "active")
-        self.assertEqual(self.variant.stock, 5)
+        self.assertEqual(self.get_batch_physical_quantity(), 5)
 
     def test_mock_payment_page_displays_pending_transaction(self):
         order = self.create_order(quantity=2)
@@ -1268,7 +1332,7 @@ class PaymentFlowTests(TestCase):
 
         self.assertEqual(payment.status, "unknown")
         self.assertEqual(order.status, "pending")
-        self.assertEqual(self.variant.stock, 5)
+        self.assertEqual(self.get_batch_physical_quantity(), 5)
         self.assertEqual(reservation.status, "active")
         self.assertEqual(
             payment.gateway_response["error"],

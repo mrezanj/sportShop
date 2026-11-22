@@ -1,4 +1,5 @@
 from datetime import timedelta
+from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.contrib.auth.models import Permission
 from django.contrib.auth.models import User
@@ -14,6 +15,7 @@ from .models import (
     ReservationAllocation,
     InventoryDocumentItem,
     InventoryStockThreshold,
+    InventoryDocumentLog,
 )
 from .services import (
     allocate_stock_reservation,
@@ -22,6 +24,7 @@ from .services import (
     get_batch_available_quantity,
     get_variant_inventory,
 )
+from .sale_services import record_order_sale
 
 
 class InventoryServiceTests(TestCase):
@@ -130,6 +133,242 @@ class InventoryServiceTests(TestCase):
             )
 
         return reservation
+
+    def create_order_item(self, reservation):
+        from orders.models import OrderItem
+
+        return OrderItem.objects.create(
+            order=reservation.order,
+            variant=reservation.variant,
+            product_name=self.product.name_fa,
+            product_slug=self.product.slug,
+            brand_name=self.brand.name,
+            variant_label="Test Variant",
+            price=100000,
+            quantity=reservation.quantity,
+            subtotal=100000 * reservation.quantity,
+        )
+
+    def test_record_order_sale_creates_outbound_document_and_consumes_reservation(self):
+        self.create_movement(self.batch, 10)
+
+        reservation = self.create_reservation(
+            quantity=3,
+            batch=self.batch,
+        )
+        self.create_order_item(reservation)
+
+        document = record_order_sale(
+            reservation.order,
+            now=self.now,
+        )
+
+        reservation.refresh_from_db()
+        self.batch.refresh_from_db()
+
+        movement = InventoryMovement.objects.get(
+            document=document,
+        )
+
+        self.assertEqual(document.document_type, "outbound")
+        self.assertEqual(document.status, "approved")
+        self.assertEqual(document.source_order_id, reservation.order_id)
+        self.assertEqual(movement.quantity_delta, -3)
+        self.assertEqual(movement.batch_id, self.batch.id)
+        self.assertEqual(get_batch_physical_quantity(self.batch), 7)
+        self.assertEqual(reservation.status, "consumed")
+        self.assertEqual(reservation.consumed_at, self.now)
+
+    def test_record_order_sale_is_idempotent(self):
+        self.create_movement(self.batch, 10)
+
+        reservation = self.create_reservation(
+            quantity=3,
+            batch=self.batch,
+        )
+        self.create_order_item(reservation)
+
+        first_document = record_order_sale(
+            reservation.order,
+            now=self.now,
+        )
+        second_document = record_order_sale(
+            reservation.order,
+            now=self.now,
+        )
+
+        self.assertEqual(first_document.pk, second_document.pk)
+        self.assertEqual(
+            InventoryDocument.objects.filter(
+                source_order=reservation.order,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            InventoryMovement.objects.filter(
+                document=first_document,
+            ).count(),
+            1,
+        )
+        self.assertEqual(get_batch_physical_quantity(self.batch), 7)
+
+    def test_record_order_sale_rejects_incomplete_allocation(self):
+        from django.core.exceptions import ValidationError
+
+        self.create_movement(self.batch, 10)
+
+        reservation = self.create_reservation(quantity=3)
+        self.create_order_item(reservation)
+
+        with self.assertRaises(ValidationError):
+            record_order_sale(
+                reservation.order,
+                now=self.now,
+            )
+
+        reservation.refresh_from_db()
+
+        self.assertEqual(reservation.status, "active")
+        self.assertEqual(get_batch_physical_quantity(self.batch), 10)
+        self.assertFalse(
+            InventoryDocument.objects.filter(
+                source_order=reservation.order,
+            ).exists()
+        )
+
+    def test_record_order_sale_rejects_insufficient_physical_stock(self):
+        from django.core.exceptions import ValidationError
+
+        self.create_movement(self.batch, 2)
+
+        reservation = self.create_reservation(
+            quantity=3,
+            batch=self.batch,
+        )
+        self.create_order_item(reservation)
+
+        with self.assertRaises(ValidationError):
+            record_order_sale(
+                reservation.order,
+                now=self.now,
+            )
+
+        reservation.refresh_from_db()
+
+        self.assertEqual(reservation.status, "active")
+        self.assertEqual(get_batch_physical_quantity(self.batch), 2)
+        self.assertFalse(
+            InventoryDocument.objects.filter(
+                source_order=reservation.order,
+            ).exists()
+        )
+
+    def test_record_order_sale_rejects_unavailable_batch(self):
+        from django.core.exceptions import ValidationError
+
+        self.create_movement(self.batch, 10)
+
+        reservation = self.create_reservation(
+            quantity=3,
+            batch=self.batch,
+        )
+        self.create_order_item(reservation)
+
+        self.batch.status = "quarantined"
+        self.batch.save(update_fields=["status"])
+
+        with self.assertRaises(ValidationError):
+            record_order_sale(
+                reservation.order,
+                now=self.now,
+            )
+
+        reservation.refresh_from_db()
+
+        self.assertEqual(reservation.status, "active")
+        self.assertEqual(get_batch_physical_quantity(self.batch), 10)
+        self.assertFalse(
+            InventoryDocument.objects.filter(
+                source_order=reservation.order,
+            ).exists()
+        )
+
+    def test_record_order_sale_rejects_expired_batch(self):
+        from django.core.exceptions import ValidationError
+
+        self.create_movement(self.batch, 10)
+
+        reservation = self.create_reservation(
+            quantity=3,
+            batch=self.batch,
+        )
+        self.create_order_item(reservation)
+
+        self.batch.expiration_date = self.today - timedelta(days=1)
+        self.batch.save(update_fields=["expiration_date"])
+
+        with self.assertRaises(ValidationError):
+            record_order_sale(
+                reservation.order,
+                now=self.now,
+            )
+
+        reservation.refresh_from_db()
+
+        self.assertEqual(reservation.status, "active")
+        self.assertEqual(get_batch_physical_quantity(self.batch), 10)
+        self.assertFalse(
+            InventoryDocument.objects.filter(
+                source_order=reservation.order,
+            ).exists()
+        )
+
+    def test_record_order_sale_uses_exact_multi_batch_allocations(self):
+        self.create_movement(self.batch, 10)
+
+        second_batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="BATCH-002",
+            expiration_date=self.today + timedelta(days=60),
+            created_by=self.user,
+        )
+        self.create_movement(second_batch, 10)
+
+        reservation = self.create_reservation(quantity=5)
+        ReservationAllocation.objects.create(
+            reservation=reservation,
+            batch=self.batch,
+            quantity=2,
+        )
+        ReservationAllocation.objects.create(
+            reservation=reservation,
+            batch=second_batch,
+            quantity=3,
+        )
+        self.create_order_item(reservation)
+
+        document = record_order_sale(
+            reservation.order,
+            now=self.now,
+        )
+
+        movements = InventoryMovement.objects.filter(
+            document=document,
+        ).order_by("batch_id")
+
+        self.assertEqual(movements.count(), 2)
+        self.assertEqual(
+            list(movements.values_list("batch_id", "quantity_delta")),
+            [
+                (self.batch.id, -2),
+                (second_batch.id, -3),
+            ],
+        )
+        self.assertEqual(get_batch_physical_quantity(self.batch), 8)
+        self.assertEqual(get_batch_physical_quantity(second_batch), 7)
+
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.status, "consumed")
 
     def test_physical_quantity_is_sum_of_movements(self):
         self.create_movement(self.batch, 20)
@@ -1375,6 +1614,79 @@ class InventoryDocumentWorkflowTests(TestCase):
                 created_by=self.creator,
             )
 
+    def test_inventory_movement_system_creator_can_be_null(self):
+        batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="SYSTEM-MOVEMENT-BATCH-001",
+            created_by=self.creator,
+        )
+
+        document = create_inventory_document(
+            user=self.creator,
+            document_number="SYSTEM-MOVEMENT-DOC-001",
+            document_type="inbound",
+        )
+
+        item = add_inventory_document_item(
+            user=self.creator,
+            document_id=document.id,
+            variant=self.variant,
+            quantity=5,
+            direction="inbound",
+            batch=batch,
+        )
+
+        movement = InventoryMovement.objects.create(
+            batch=batch,
+            document=document,
+            document_item=item,
+            movement_type="inbound",
+            quantity_delta=5,
+            created_by_type="system",
+            created_by=None,
+        )
+
+        self.assertEqual(movement.created_by_type, "system")
+        self.assertIsNone(movement.created_by_id)
+
+    def test_inventory_movement_rejects_system_creator_with_user(self):
+        batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="SYSTEM-MOVEMENT-BATCH-INVALID-001",
+            created_by=self.creator,
+        )
+
+        document = create_inventory_document(
+            user=self.creator,
+            document_number="SYSTEM-MOVEMENT-DOC-INVALID-001",
+            document_type="inbound",
+        )
+
+        item = add_inventory_document_item(
+            user=self.creator,
+            document_id=document.id,
+            variant=self.variant,
+            quantity=5,
+            direction="inbound",
+            batch=batch,
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InventoryMovement.objects.bulk_create(
+                    [
+                        InventoryMovement(
+                            batch=batch,
+                            document=document,
+                            document_item=item,
+                            movement_type="inbound",
+                            quantity_delta=5,
+                            created_by_type="system",
+                            created_by=self.creator,
+                        )
+                    ]
+                )
+
     def test_inventory_movement_cannot_be_updated(self):
         from django.core.exceptions import ValidationError
 
@@ -1634,6 +1946,165 @@ class InventoryDocumentWorkflowTests(TestCase):
         document.refresh_from_db()
         self.assertEqual(document.status, "draft")
         self.assertEqual(document.notes, "")
+
+    def test_inventory_document_system_creator_can_be_null(self):
+        document = InventoryDocument.objects.create(
+            document_number="SYSTEM-DOC-001",
+            document_type="outbound",
+            created_by_type="system",
+            created_by=None,
+            source_order_id=None,
+        )
+
+        self.assertEqual(document.created_by_type, "system")
+        self.assertIsNone(document.created_by_id)
+
+    def test_inventory_document_rejects_system_creator_with_user(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InventoryDocument.objects.create(
+                    document_number="SYSTEM-DOC-INVALID-001",
+                    document_type="outbound",
+                    created_by_type="system",
+                    created_by=self.creator,
+                )
+
+    def test_inventory_document_log_system_actor_can_be_null(self):
+        document = InventoryDocument.objects.create(
+            document_number="SYSTEM-LOG-DOC-001",
+            document_type="outbound",
+            created_by=self.creator,
+        )
+
+        log = InventoryDocumentLog.objects.create(
+            document=document,
+            action="created",
+            actor_type="system",
+            actor=None,
+        )
+
+        self.assertEqual(log.actor_type, "system")
+        self.assertIsNone(log.actor_id)
+
+    def test_inventory_document_log_rejects_system_actor_with_user(self):
+        document = InventoryDocument.objects.create(
+            document_number="SYSTEM-LOG-INVALID-001",
+            document_type="outbound",
+            created_by=self.creator,
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InventoryDocumentLog.objects.create(
+                    document=document,
+                    action="created",
+                    actor_type="system",
+                    actor=self.creator,
+                )
+
+    def test_system_approval_allows_valid_inventory_sale_document(self):
+        order = Order.objects.create(
+            user=self.creator,
+            first_name="Test",
+            last_name="User",
+            mobile="09120000000",
+            province="tehran",
+            city="Tehran",
+            address="Test address",
+            subtotal=100000,
+            vat_amount=0,
+            total_amount=100000,
+            status="pending",
+        )
+
+        document = InventoryDocument.objects.create(
+            document_number="SYSTEM-APPROVAL-001",
+            document_type="outbound",
+            source_order=order,
+            created_by_type="system",
+            created_by=None,
+        )
+
+        from django.utils import timezone
+
+        document.status = "approved"
+        document.approved_at = timezone.now()
+        document.save(
+            update_fields=["status", "approved_at", "updated_at"],
+            _allow_system_approval=True,
+        )
+
+        document.refresh_from_db()
+        self.assertEqual(document.status, "approved")
+        self.assertIsNotNone(document.approved_at)
+
+    def test_system_approval_rejects_user_created_document(self):
+        from django.utils import timezone
+        from django.core.exceptions import ValidationError
+
+        now = timezone.now()
+
+        order = Order.objects.create(
+            user=self.creator,
+            first_name="Test",
+            last_name="User",
+            mobile="09120000000",
+            province="tehran",
+            city="Tehran",
+            address="Test address",
+            subtotal=100000,
+            vat_amount=0,
+            total_amount=100000,
+            status="pending",
+        )
+
+        document = InventoryDocument.objects.create(
+            document_number="USER-SALE-001",
+            document_type="outbound",
+            source_order=order,
+            created_by_type="user",
+            created_by=self.creator,
+        )
+
+        document.status = "approved"
+        document.approved_at = now
+
+        with self.assertRaises(ValidationError):
+            document.save(
+                update_fields=["status", "approved_at", "updated_at"],
+                _allow_system_approval=True,
+            )
+
+    def test_system_approval_rejects_update_without_status(self):
+        from django.core.exceptions import ValidationError
+
+        order = Order.objects.create(
+            user=self.creator,
+            first_name="Test",
+            last_name="User",
+            mobile="09120000000",
+            province="tehran",
+            city="Tehran",
+            address="Test address",
+            subtotal=100000,
+            vat_amount=0,
+            total_amount=100000,
+            status="pending",
+        )
+
+        document = InventoryDocument.objects.create(
+            document_number="SYSTEM-APPROVAL-002",
+            document_type="outbound",
+            source_order=order,
+            created_by_type="system",
+            created_by=None,
+        )
+
+        with self.assertRaises(ValidationError):
+            document.save(
+                update_fields=["updated_at"],
+                _allow_system_approval=True,
+            )
 
 
 class InventoryReportAPITests(TestCase):

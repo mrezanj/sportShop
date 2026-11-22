@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404, render, redirect
+from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponseBadRequest
 from django.conf import settings
 from django.db import transaction
@@ -12,6 +13,7 @@ from orders.models import Order, StockReservation
 from .models import Payment, MockGatewayTransaction
 from .gateways import get_gateway
 from .gateways.base import PaymentResult
+from inventory.sale_services import record_order_sale
 from orders.services import (
     cancel_locked_order,
     transition_order_status,
@@ -77,7 +79,6 @@ def _lock_and_validate_reservations(order, now):
                 reservation.status != "active"
                 or reservation.expires_at <= now
                 or variant is None
-                or variant.stock < reservation.quantity
             ):
                 valid = False
                 break
@@ -89,26 +90,32 @@ def _complete_successful_payment(
     order,
     payment,
     reservations,
-    variants_by_id,
     now,
     result,
 ):
     """Complete a verified payment while holding the required database locks."""
-
-    for reservation in reservations:
-        variant = variants_by_id[reservation.variant_id]
-
-        variant.stock -= reservation.quantity
-        variant.save(update_fields=["stock"])
-
-        reservation.status = "consumed"
-        reservation.consumed_at = now
-        reservation.save(
+    try:
+        with transaction.atomic():
+            record_order_sale(
+                order,
+                reservations=reservations,
+                now=now,
+            )
+    except ValidationError:
+        payment.status = "unknown"
+        payment.gateway_response = {
+            **(result.raw_response or {}),
+            "step": "verify",
+            "reason": "inventory_sale_failed",
+            "outcome_unknown": True,
+        }
+        payment.save(
             update_fields=[
                 "status",
-                "consumed_at",
+                "gateway_response",
             ]
         )
+        return False
 
     payment.status = "success"
     payment.ref_id = result.ref_id or ""
@@ -129,6 +136,7 @@ def _complete_successful_payment(
         changed_by=None,
         note="پرداخت سفارش با موفقیت تأیید شد.",
     )
+    return True
 
 
 def _get_recovery_operation(payment):
@@ -699,14 +707,25 @@ def verify_payment(request):
                 status=409,
             )
 
-        _complete_successful_payment(
+        completed = _complete_successful_payment(
             order=order,
             payment=payment,
             reservations=reservations,
-            variants_by_id=variants_by_id,
             now=now,
             result=result,
         )
+
+        if not completed:
+            return Response(
+                {
+                    "success": False,
+                    "message": (
+                        "پرداخت توسط درگاه موفق اعلام شده، اما ثبت فروش "
+                        "در انبار انجام نشد. وضعیت پرداخت نیازمند بررسی است."
+                    ),
+                },
+                status=409,
+            )
 
         return Response(
             {
@@ -1055,14 +1074,23 @@ def recover_payment(request):
                 status=409,
             )
 
-        _complete_successful_payment(
+        completed = _complete_successful_payment(
             order=order,
             payment=payment,
             reservations=reservations,
-            variants_by_id=variants_by_id,
             now=now,
             result=result,
         )
+
+        if not completed:
+            return Response(
+                {
+                    "success": False,
+                    "error": "inventory_sale_failed",
+                    "payment_id": payment.id,
+                },
+                status=409,
+            )
 
         return Response(
             {
