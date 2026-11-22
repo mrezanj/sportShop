@@ -1856,3 +1856,30 @@ class InventoryDocumentAPITests(TestCase):
 
         document = InventoryDocument.objects.get(pk=document_id)
         self.assertEqual(document.status, "pending_review")
+        approve_permission = Permission.objects.get(
+            content_type__app_label="inventory",
+            codename="can_approve_inventory_document",
+        )
+        self.creator.user_permissions.add(approve_permission)
+
+        self.client.force_authenticate(user=self.reviewer)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/review/",
+            {"note": "Reviewed"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.client.force_authenticate(user=self.creator)
+
+        response = self.client.post(
+            f"/api/inventory/documents/{document_id}/reject/",
+            {"note": "Self rejection at approval stage"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+        document.refresh_from_db()
+        self.assertEqual(document.status, "pending_approval")

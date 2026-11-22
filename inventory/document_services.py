@@ -383,7 +383,10 @@ def reject_inventory_document(
             user,
             "inventory.can_approve_inventory_document",
         )
-
+        if document.created_by_id == user.id:
+            raise PermissionDenied(
+                "The document creator cannot reject the same document."
+            )
         if document.reviewed_by_id == user.id:
             raise PermissionDenied(
                 "The reviewer cannot reject the same document at approval stage."
