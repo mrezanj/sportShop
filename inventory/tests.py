@@ -2,15 +2,16 @@ from datetime import timedelta
 from django.contrib.auth.models import Permission
 from django.contrib.auth.models import User
 from django.test import TestCase
+from rest_framework.test import APIClient
 from django.utils import timezone
 from catalog.models import Brand, Category, Product, ProductVariant
 from orders.models import Order, StockReservation
-
 from .models import (
     InventoryBatch,
     InventoryMovement,
     ReservationAllocation,
     InventoryDocumentItem,
+    InventoryStockThreshold,
 )
 from .services import (
     get_batch_physical_quantity,
@@ -1134,3 +1135,88 @@ class InventoryDocumentWorkflowTests(TestCase):
         document.refresh_from_db()
         self.assertEqual(document.status, "draft")
         self.assertEqual(document.notes, "")
+
+
+class InventoryReportAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+        self.user = User.objects.create_user(
+            username="inventory_report_user",
+            password="test-password",
+        )
+
+        self.brand = Brand.objects.create(
+            name="Report Brand",
+            slug="report-brand",
+        )
+
+        self.category = Category.objects.create(
+            name="Report Category",
+            slug="report-category",
+        )
+
+        self.product = Product.objects.create(
+            name_fa="Report Product",
+            slug="report-product",
+            brand=self.brand,
+            category=self.category,
+            description="Report test product",
+        )
+
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            price=100000,
+            stock=0,
+        )
+
+        self.permission = Permission.objects.get(
+            content_type__app_label="inventory",
+            codename="can_view_inventory_reports",
+        )
+
+    def test_user_without_permission_cannot_view_report(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get("/api/inventory/reports/")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_user_with_permission_can_view_report(self):
+        self.user.user_permissions.add(self.permission)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get("/api/inventory/reports/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+
+        report = response.data[0]
+
+        self.assertEqual(report["sku"], self.variant.sku)
+        self.assertEqual(report["physical"], 0)
+        self.assertEqual(report["reserved"], 0)
+        self.assertEqual(report["available"], 0)
+        self.assertEqual(report["minimum_quantity"], 0)
+        self.assertFalse(report["low_stock"])
+        self.assertNotIn("batch", report)
+        self.assertNotIn("expiration_date", report)
+
+    def test_report_marks_low_stock_variant(self):
+        self.user.user_permissions.add(self.permission)
+        self.client.force_authenticate(user=self.user)
+
+        InventoryStockThreshold.objects.create(
+            variant=self.variant,
+            minimum_quantity=5,
+            updated_by=self.user,
+        )
+
+        response = self.client.get("/api/inventory/reports/")
+
+        self.assertEqual(response.status_code, 200)
+
+        report = response.data[0]
+
+        self.assertEqual(report["minimum_quantity"], 5)
+        self.assertTrue(report["low_stock"])

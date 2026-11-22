@@ -1,4 +1,5 @@
-from django.db.models import Sum
+from django.db import models
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from .models import (
@@ -64,8 +65,7 @@ def get_variant_inventory(variant, today=None, now=None):
         physical += batch_physical
 
         if batch.status == "available" and (
-            batch.expiration_date is None
-            or batch.expiration_date >= today
+            batch.expiration_date is None or batch.expiration_date >= today
         ):
             sellable_physical += batch_physical
 
@@ -78,9 +78,7 @@ def get_variant_inventory(variant, today=None, now=None):
             expires_at__gt=now,
             order__status="pending",
             order__reservation_expires_at__gt=now,
-        ).aggregate(
-            total=Sum("quantity"),
-        )["total"]
+        ).aggregate(total=Sum("quantity"),)["total"]
         or 0
     )
 
@@ -90,4 +88,67 @@ def get_variant_inventory(variant, today=None, now=None):
         "physical": physical,
         "reserved": reserved,
         "available": available,
+    }
+
+
+def get_variants_inventory(variants, today=None, now=None):
+    today = today or timezone.localdate()
+    now = now or timezone.now()
+
+    variant_ids = [variant.id for variant in variants]
+
+    if not variant_ids:
+        return {}
+
+    physical_rows = (
+        InventoryMovement.objects.filter(
+            batch__variant_id__in=variant_ids,
+        )
+        .values("batch__variant_id")
+        .annotate(total=Sum("quantity_delta"))
+    )
+
+    sellable_rows = (
+        InventoryMovement.objects.filter(
+            batch__variant_id__in=variant_ids,
+            batch__status="available",
+        )
+        .filter(
+            models.Q(batch__expiration_date__isnull=True)
+            | models.Q(batch__expiration_date__gte=today)
+        )
+        .values("batch__variant_id")
+        .annotate(total=Sum("quantity_delta"))
+    )
+
+    from orders.models import StockReservation
+
+    reserved_rows = (
+        StockReservation.objects.filter(
+            variant_id__in=variant_ids,
+            status="active",
+            expires_at__gt=now,
+            order__status="pending",
+            order__reservation_expires_at__gt=now,
+        )
+        .values("variant_id")
+        .annotate(total=Sum("quantity"))
+    )
+
+    physical = {row["batch__variant_id"]: row["total"] or 0 for row in physical_rows}
+    sellable_physical = {
+        row["batch__variant_id"]: row["total"] or 0 for row in sellable_rows
+    }
+    reserved = {row["variant_id"]: row["total"] or 0 for row in reserved_rows}
+
+    return {
+        variant_id: {
+            "physical": physical.get(variant_id, 0),
+            "reserved": reserved.get(variant_id, 0),
+            "available": max(
+                sellable_physical.get(variant_id, 0) - reserved.get(variant_id, 0),
+                0,
+            ),
+        }
+        for variant_id in variant_ids
     }

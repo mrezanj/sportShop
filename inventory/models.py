@@ -192,6 +192,10 @@ class InventoryDocument(models.Model):
                 "can_approve_inventory_document",
                 "Can approve inventory documents",
             ),
+            (
+                "can_view_inventory_reports",
+                "Can view inventory reports",
+            ),
         ]
         indexes = [
             models.Index(
