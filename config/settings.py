@@ -96,6 +96,7 @@ INSTALLED_APPS = [
     "payments",
     "core",
     "inventory",
+    "locations",
 ]
 
 MIDDLEWARE = [
