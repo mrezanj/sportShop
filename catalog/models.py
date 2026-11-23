@@ -75,6 +75,12 @@ class Product(models.Model):
     requires_cold_shipping = models.BooleanField(
         default=False, verbose_name="نیاز به ارسال سرد"
     )
+    minimum_age = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="حداقل سن خریدار",
+        help_text="در صورت خالی بودن، خرید محصول محدودیت سنی ندارد.",
+    )
     is_active = models.BooleanField(default=True, verbose_name="فعال")
     created_at = JalaliDateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
     updated_at = models.DateTimeField(auto_now=True)

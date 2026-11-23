@@ -128,7 +128,40 @@ class CreateOrderSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {"items": f"{variant.product.name_fa} دیگر موجود نیست."}
                 )
+        restricted_variants = [
+            variant for variant in variants if variant.product.minimum_age is not None
+        ]
 
+        if restricted_variants:
+            user_profile = getattr(self.context["request"].user, "profile", None)
+            birth_date = getattr(user_profile, "birth_date", None)
+
+            if not birth_date:
+                raise serializers.ValidationError(
+                    {
+                        "items": "برای خرید این محصول، ابتدا تاریخ تولد خود را در پروفایل ثبت کنید."
+                    }
+                )
+
+            today = timezone.localdate()
+            age = (
+                today.year
+                - birth_date.year
+                - ((today.month, today.day) < (birth_date.month, birth_date.day))
+            )
+
+            for variant in restricted_variants:
+                minimum_age = variant.product.minimum_age
+
+                if age < minimum_age:
+                    raise serializers.ValidationError(
+                        {
+                            "items": (
+                                f"سن شما برای خرید {variant.product.name_fa} کافی نیست. "
+                                f"حداقل سن مجاز: {minimum_age} سال."
+                            )
+                        }
+                    )
         try:
             method = ShippingMethod.objects.get(
                 slug=data["shipping_method_slug"],

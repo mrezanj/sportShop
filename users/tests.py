@@ -552,6 +552,87 @@ class OTPAPITests(APITestCase):
             6,
         )
 
+    def test_profile_rejects_future_birth_date(self):
+        user = User.objects.create_user(
+            username="profile-test-user",
+            password="test-password",
+        )
+        Profile.objects.create(
+            user=user,
+            mobile="09129999999",
+        )
+        self.client.force_authenticate(user=user)
+
+        future_date = timezone.localdate() + timedelta(days=1)
+
+        response = self.client.patch(
+            "/api/auth/profile/",
+            {"birth_date": future_date.isoformat()},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("birth_date", response.data)
+
+        profile = Profile.objects.get(user=user)
+        self.assertIsNone(profile.birth_date)
+
+    def test_profile_updates_and_returns_birth_date(self):
+        user = User.objects.create_user(
+            username="profile-update-user",
+            password="test-password",
+        )
+        profile = Profile.objects.create(
+            user=user,
+            mobile="09128888888",
+        )
+        self.client.force_authenticate(user=user)
+
+        birth_date = timezone.localdate().replace(year=timezone.localdate().year - 25)
+
+        response = self.client.patch(
+            "/api/auth/profile/",
+            {
+                "birth_date": birth_date.isoformat(),
+                "mobile": "09127777777",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["birth_date"], birth_date.isoformat())
+        self.assertEqual(response.data["mobile"], "09128888888")
+
+        profile.refresh_from_db()
+        self.assertEqual(profile.birth_date, birth_date)
+        self.assertEqual(profile.mobile, "09128888888")
+
+        response = self.client.get("/api/auth/profile/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["birth_date"], birth_date.isoformat())
+
+    def test_profile_requires_authentication(self):
+        response = self.client.get("/api/auth/profile/")
+        self.assertEqual(response.status_code, 401)
+
+        response = self.client.patch(
+            "/api/auth/profile/",
+            {"birth_date": "2000-01-01"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_profile_returns_404_when_profile_does_not_exist(self):
+        user = User.objects.create_user(
+            username="user-without-profile",
+            password="test-password",
+        )
+        self.client.force_authenticate(user=user)
+
+        response = self.client.get("/api/auth/profile/")
+
+        self.assertEqual(response.status_code, 404)
 
 @skipUnlessDBFeature("has_select_for_update")
 class OTPConcurrencyTests(TransactionTestCase):

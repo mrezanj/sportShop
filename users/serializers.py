@@ -10,6 +10,18 @@ from .models import Profile, OTPCode, OTPRequestLimit, OTPFailedAttempt
 from datetime import timedelta
 
 
+class ProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ["mobile", "birth_date"]
+        read_only_fields = ["mobile"]
+
+    def validate_birth_date(self, value):
+        if value and value > timezone.localdate():
+            raise serializers.ValidationError("تاریخ تولد نمی‌تواند در آینده باشد.")
+        return value
+
+
 class RequestOTPSerializer(serializers.Serializer):
     mobile = serializers.RegexField(
         r"^09[0-9]{9}$",

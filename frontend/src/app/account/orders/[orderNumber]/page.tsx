@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -16,6 +17,20 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function OrderDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-gray-500">
+          در حال بارگذاری...
+        </div>
+      }
+    >
+      <OrderDetailContent />
+    </Suspense>
+  );
+}
+
+function OrderDetailContent() {
   const params = useParams();
   const router = useRouter();
   const orderNumber = params.orderNumber as string;
@@ -33,7 +48,7 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     if (!token || !orderNumber) return;
-    setLoading(true);
+
     fetchOrderDetail(orderNumber, token)
       .then(setOrder)
       .catch(() => setError('سفارش یافت نشد.'))
@@ -52,7 +67,9 @@ export default function OrderDetailPage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4" dir="rtl">
         <div className="text-center">
-          <p className="text-gray-700 mb-4">{error || 'سفارش یافت نشد.'}</p>
+          <p className="text-gray-700 mb-4">
+            {error || 'سفارش یافت نشد.'}
+          </p>
           <Link
             href="/account"
             className="text-pink-800 hover:text-pink-900 font-medium"
@@ -87,9 +104,10 @@ export default function OrderDetailPage() {
               </p>
             </div>
             <span
-              className={`text-sm px-4 py-1.5 rounded-full border ${STATUS_COLORS[order.status] ??
+              className={`text-sm px-4 py-1.5 rounded-full border ${
+                STATUS_COLORS[order.status] ??
                 'bg-gray-100 text-gray-800 border-gray-200'
-                }`}
+              }`}
             >
               {order.status_display}
             </span>
@@ -107,7 +125,7 @@ export default function OrderDetailPage() {
 
           {order.tracking_code && (
             <div className="mt-3 bg-white border border-indigo-200 rounded-lg p-3 text-sm text-indigo-800">
-              📦 کد رهگیری:{' '}
+              کد رهگیری:{' '}
               <span className="font-bold" dir="ltr">
                 {order.tracking_code}
               </span>
@@ -167,7 +185,7 @@ export default function OrderDetailPage() {
                   <p className="text-xs text-pink-600 mt-1">
                     {item.brand_name}
                   </p>
-                  {item.variant_label && item.variant_label !== 'پیش فرض' && (
+                  {item.variant_label && item.variant_label !== 'پیش‌فرض' && (
                     <p className="text-xs text-gray-600 mt-1">
                       {item.variant_label}
                     </p>
@@ -240,10 +258,11 @@ export default function OrderDetailPage() {
               <div className="flex justify-between">
                 <span className="text-gray-600">هزینه ارسال</span>
                 <span
-                  className={`font-medium ${order.shipping_cost === 0
-                    ? 'text-green-700'
-                    : 'text-gray-900'
-                    }`}
+                  className={`font-medium ${
+                    order.shipping_cost === 0
+                      ? 'text-green-700'
+                      : 'text-gray-900'
+                  }`}
                 >
                   {order.shipping_cost === 0
                     ? 'رایگان'

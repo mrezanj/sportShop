@@ -8,6 +8,11 @@ from rest_framework.decorators import (
     permission_classes,
     throttle_classes,
 )
+from .serializers import (
+    RequestOTPSerializer,
+    VerifyOTPSerializer,
+    ProfileSerializer,
+)
 
 
 @api_view(["POST"])
@@ -61,6 +66,29 @@ def me(request):
         }
     )
 
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+def profile(request):
+    user_profile = getattr(request.user, "profile", None)
+
+    if user_profile is None:
+        return Response(
+            {"detail": "پروفایل کاربر یافت نشد."},
+            status=404,
+        )
+
+    if request.method == "GET":
+        serializer = ProfileSerializer(user_profile)
+        return Response(serializer.data)
+
+    serializer = ProfileSerializer(
+        user_profile,
+        data=request.data,
+        partial=True,
+    )
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    return Response(serializer.data)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])

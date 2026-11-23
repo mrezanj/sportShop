@@ -1,10 +1,11 @@
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import patch
 from orders.admin import OrderAdmin
 from django.contrib.auth.models import User, Permission
+from users.models import Profile
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
@@ -48,7 +49,10 @@ class CreateOrderReservationTests(TestCase):
             username="testuser",
             password="test-password",
         )
-
+        self.profile = Profile.objects.create(
+            user=self.user,
+            mobile="09120000000",
+        )
         self.brand = Brand.objects.create(
             name="Test Brand",
             slug="test-brand",
@@ -130,6 +134,13 @@ class CreateOrderReservationTests(TestCase):
         return CreateOrderSerializer(
             data=data,
             context={"request": request},
+        )
+
+    def create_profile(self, birth_date=None):
+        return Profile.objects.create(
+            user=self.user,
+            mobile="09120000000",
+            birth_date=birth_date,
         )
 
     def create_order(self, items):
@@ -290,6 +301,215 @@ class CreateOrderReservationTests(TestCase):
         self.assertEqual(history.changed_by, self.user)
         self.assertEqual(history.note, "ایجاد سفارش توسط مشتری.")
 
+    def test_restricted_product_rejects_order_without_birth_date(self):
+        self.product.minimum_age = 18
+        self.product.save(update_fields=["minimum_age"])
+
+        self.profile.birth_date = None
+        self.profile.save(update_fields=["birth_date"])
+
+        serializer = self.make_serializer(
+            [
+                {
+                    "variant_id": self.variant.id,
+                    "quantity": 1,
+                }
+            ]
+        )
+
+        is_valid = serializer.is_valid()
+
+        self.assertFalse(is_valid)
+        self.assertIn("items", serializer.errors)
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(StockReservation.objects.count(), 0)
+
+    def test_restricted_product_rejects_underage_user(self):
+        self.product.minimum_age = 18
+        self.product.save(update_fields=["minimum_age"])
+
+        today = timezone.localdate()
+
+        try:
+            eighteenth_birthday = today.replace(year=today.year - 18)
+        except ValueError:
+            eighteenth_birthday = today.replace(
+                year=today.year - 18,
+                day=28,
+            )
+
+        self.profile.birth_date = eighteenth_birthday + timedelta(days=1)
+        self.profile.save(update_fields=["birth_date"])
+
+        serializer = self.make_serializer(
+            [
+                {
+                    "variant_id": self.variant.id,
+                    "quantity": 1,
+                }
+            ]
+        )
+
+        is_valid = serializer.is_valid()
+
+        self.assertFalse(is_valid)
+        self.assertIn("items", serializer.errors)
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(StockReservation.objects.count(), 0)
+
+    def test_restricted_product_accepts_user_on_minimum_age_birthday(self):
+        self.product.minimum_age = 18
+        self.product.save(update_fields=["minimum_age"])
+
+        today = timezone.localdate()
+
+        try:
+            eighteenth_birthday = today.replace(year=today.year - 18)
+        except ValueError:
+            eighteenth_birthday = today.replace(
+                year=today.year - 18,
+                day=28,
+            )
+
+        self.profile.birth_date = eighteenth_birthday
+        self.profile.save(update_fields=["birth_date"])
+
+        order = self.create_order(
+            [
+                {
+                    "variant_id": self.variant.id,
+                    "quantity": 1,
+                }
+            ]
+        )
+
+        self.assertIsNotNone(order.pk)
+        self.assertEqual(Order.objects.count(), 1)
+        self.assertEqual(StockReservation.objects.filter(order=order).count(), 1)
+
+    def test_unrestricted_product_accepts_user_without_birth_date(self):
+        self.product.minimum_age = None
+        self.product.save(update_fields=["minimum_age"])
+
+        self.profile.birth_date = None
+        self.profile.save(update_fields=["birth_date"])
+
+        order = self.create_order(
+            [
+                {
+                    "variant_id": self.variant.id,
+                    "quantity": 1,
+                }
+            ]
+        )
+
+        self.assertIsNotNone(order.pk)
+        self.assertEqual(Order.objects.count(), 1)
+        self.assertEqual(StockReservation.objects.filter(order=order).count(), 1)
+
+    def test_restricted_product_accepts_user_above_minimum_age(self):
+        self.product.minimum_age = 18
+        self.product.save(update_fields=["minimum_age"])
+
+        today = timezone.localdate()
+
+        try:
+            eighteenth_birthday = today.replace(year=today.year - 18)
+        except ValueError:
+            eighteenth_birthday = today.replace(
+                year=today.year - 18,
+                day=28,
+            )
+
+        self.profile.birth_date = eighteenth_birthday - timedelta(days=1)
+        self.profile.save(update_fields=["birth_date"])
+
+        order = self.create_order(
+            [
+                {
+                    "variant_id": self.variant.id,
+                    "quantity": 1,
+                }
+            ]
+        )
+
+        self.assertIsNotNone(order.pk)
+        self.assertEqual(Order.objects.count(), 1)
+        self.assertEqual(StockReservation.objects.filter(order=order).count(), 1)
+
+    def test_mixed_order_is_rejected_if_one_product_is_age_restricted(self):
+        self.product.minimum_age = None
+        self.product.save(update_fields=["minimum_age"])
+
+        restricted_product = Product.objects.create(
+            name_fa="محصول محدودیت سنی",
+            slug="age-restricted-product",
+            brand=self.brand,
+            category=self.category,
+            description="محصول آزمایشی با محدودیت سنی",
+            minimum_age=18,
+        )
+
+        restricted_variant = ProductVariant.objects.create(
+            product=restricted_product,
+            price=Decimal("150000"),
+            stock=5,
+        )
+
+        batch = InventoryBatch.objects.create(
+            variant=restricted_variant,
+            batch_number="AGE-TEST-BATCH-001",
+            created_by=self.user,
+        )
+
+        document = InventoryDocument.objects.create(
+            document_number="AGE-TEST-DOC-001",
+            document_type="inbound",
+            created_by=self.user,
+        )
+
+        item = InventoryDocumentItem.objects.create(
+            document=document,
+            variant=restricted_variant,
+            batch=batch,
+            quantity=5,
+            direction="inbound",
+        )
+
+        InventoryMovement.objects.create(
+            batch=batch,
+            document=document,
+            document_item=item,
+            movement_type="inbound",
+            quantity_delta=5,
+            created_by=self.user,
+        )
+
+        today = timezone.localdate()
+        try:
+            eighteenth_birthday = today.replace(year=today.year - 18)
+        except ValueError:
+            eighteenth_birthday = today.replace(
+                year=today.year - 18,
+                day=28,
+            )
+
+        self.profile.birth_date = eighteenth_birthday + timedelta(days=1)
+        self.profile.save(update_fields=["birth_date"])
+
+        serializer = self.make_serializer(
+            [
+                {"variant_id": self.variant.id, "quantity": 1},
+                {"variant_id": restricted_variant.id, "quantity": 1},
+            ]
+        )
+
+        is_valid = serializer.is_valid()
+
+        self.assertFalse(is_valid)
+        self.assertIn("items", serializer.errors)
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(StockReservation.objects.count(), 0)
 
 class CancelOrderTests(APITestCase):
     def setUp(self):

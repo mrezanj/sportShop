@@ -25,6 +25,7 @@ export interface Product {
   primary_image: string | null;
   min_price: number | null;
   requires_cold_shipping: boolean;
+  minimum_age: number | null;
 }
 
 export interface PaginatedResponse<T> {
@@ -84,6 +85,7 @@ export interface ProductDetail {
   usage: string;
   warnings: string;
   requires_cold_shipping: boolean;
+  minimum_age: number | null;
   images: ProductImage[];
   variants: ProductVariant[];
   created_at: string;
@@ -170,6 +172,54 @@ export async function fetchMe(token: string): Promise<AuthUser> {
   if (!res.ok) throw new Error('Invalid token');
   return res.json();
 }
+
+
+export interface UserProfile {
+  mobile: string;
+  birth_date: string | null;
+}
+
+export async function fetchProfile(token: string): Promise<UserProfile> {
+  const res = await fetch(`${API_URL}/auth/profile/`, {
+    headers: { Authorization: `Token ${token}` },
+    cache: 'no-store',
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data?.detail || 'خطا در دریافت اطلاعات پروفایل.');
+  }
+
+  return data;
+}
+
+export async function updateProfile(
+  birthDate: string,
+  token: string
+): Promise<UserProfile> {
+  const res = await fetch(`${API_URL}/auth/profile/`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Token ${token}`,
+    },
+    body: JSON.stringify({ birth_date: birthDate || null }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    const message =
+      data?.birth_date?.[0] ||
+      data?.detail ||
+      'خطا در به‌روزرسانی پروفایل.';
+    throw new Error(message);
+  }
+
+  return data;
+}
+
 
 export interface Province {
   slug: string;

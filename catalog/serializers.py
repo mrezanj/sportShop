@@ -80,6 +80,7 @@ class ProductListSerializer(serializers.ModelSerializer):
             "primary_image",
             "min_price",
             "requires_cold_shipping",
+            "minimum_age",
             "created_at",
         ]
 
@@ -98,9 +99,7 @@ class ProductListSerializer(serializers.ModelSerializer):
         inventory = self.context.get("variant_inventory", {})
 
         active_variants = [
-            variant
-            for variant in obj.variants.all()
-            if variant.is_active
+            variant for variant in obj.variants.all() if variant.is_active
         ]
 
         available_variants = [
@@ -137,6 +136,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "usage",
             "warnings",
             "requires_cold_shipping",
+            "minimum_age",
             "images",
             "variants",
             "created_at",

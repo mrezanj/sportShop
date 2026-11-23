@@ -45,5 +45,8 @@ class ProductAdmin(JalaliDateModelAdmin):
             {"fields": ("name_fa", "name_en", "slug", "brand", "category")},
         ),
         ("محتوا", {"fields": ("description", "ingredients", "usage", "warnings")}),
-        ("تنظیمات", {"fields": ("requires_cold_shipping", "is_active")}),
+        (
+            "تنظیمات",
+            {"fields": ("requires_cold_shipping", "minimum_age", "is_active")},
+        ),
     )
