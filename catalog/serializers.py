@@ -37,6 +37,8 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
+    stock = serializers.SerializerMethodField()
+
     class Meta:
         model = ProductVariant
         fields = [
@@ -51,6 +53,11 @@ class ProductVariantSerializer(serializers.ModelSerializer):
             "stock",
             "is_active",
         ]
+
+    def get_stock(self, obj):
+        inventory = self.context.get("variant_inventory", {})
+        variant_data = inventory.get(obj.pk, {})
+        return variant_data.get("available", 0)
 
 
 class ProductListSerializer(serializers.ModelSerializer):
@@ -77,7 +84,10 @@ class ProductListSerializer(serializers.ModelSerializer):
         ]
 
     def get_primary_image(self, obj):
-        primary = obj.images.filter(is_primary=True).first()
+        primary = next(
+            (image for image in obj.images.all() if image.is_primary),
+            None,
+        )
         if primary and primary.image:
             request = self.context.get("request")
             if request:
@@ -85,10 +95,23 @@ class ProductListSerializer(serializers.ModelSerializer):
         return None
 
     def get_min_price(self, obj):
-        variants = obj.variants.filter(is_active=True, stock__gt=0)
-        if not variants.exists():
-            variants = obj.variants.filter(is_active=True)
-        prices = [v.price for v in variants]
+        inventory = self.context.get("variant_inventory", {})
+
+        active_variants = [
+            variant
+            for variant in obj.variants.all()
+            if variant.is_active
+        ]
+
+        available_variants = [
+            variant
+            for variant in active_variants
+            if inventory.get(variant.pk, {}).get("available", 0) > 0
+        ]
+
+        variants = available_variants or active_variants
+        prices = [variant.price for variant in variants]
+
         return min(prices) if prices else None
 
 

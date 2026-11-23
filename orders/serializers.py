@@ -15,7 +15,7 @@ from .models import (
     OrderStatusHistory,
 )
 from django.core.exceptions import ValidationError as DjangoValidationError
-from inventory.services import allocate_stock_reservation, get_variant_inventory
+from inventory.services import allocate_stock_reservation, get_variants_inventory
 
 
 class ShippingMethodSerializer(serializers.ModelSerializer):
@@ -201,11 +201,15 @@ class CreateOrderSerializer(serializers.Serializer):
                 released_at=now,
             )
 
-            # Validate availability using the inventory ledger.
+            # Validate availability using one grouped inventory snapshot.
+            inventory_by_variant = get_variants_inventory(
+                variants,
+                now=now,
+            )
+
             for variant_id, qty in quantities.items():
                 variant = variants_by_id[variant_id]
-                inventory = get_variant_inventory(variant, now=now)
-                available = inventory["available"]
+                available = inventory_by_variant[variant_id]["available"]
 
                 if available < qty:
                     raise serializers.ValidationError(

@@ -4,6 +4,8 @@ from django.db.models import Sum
 from django.contrib.auth.models import Permission
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 from django.utils import timezone
 from catalog.models import Brand, Category, Product, ProductVariant
@@ -23,6 +25,7 @@ from .services import (
     get_batch_reserved_quantity,
     get_batch_available_quantity,
     get_variant_inventory,
+    get_variants_inventory,
 )
 from .sale_services import record_order_sale
 
@@ -148,6 +151,158 @@ class InventoryServiceTests(TestCase):
             quantity=reservation.quantity,
             subtotal=100000 * reservation.quantity,
         )
+
+    def test_get_variants_inventory_returns_grouped_ledger_inventory(self):
+        self.create_movement(self.batch, 10)
+
+        reservation = self.create_reservation(
+            quantity=3,
+            batch=self.batch,
+        )
+
+        second_variant = ProductVariant.objects.create(
+            product=self.product,
+            flavor="Second Variant",
+            price=120000,
+            stock=999,
+        )
+
+        second_batch = InventoryBatch.objects.create(
+            variant=second_variant,
+            batch_number="GROUP-TEST-002",
+            created_by=self.user,
+        )
+        self.create_movement(second_batch, 4)
+
+        inventory = get_variants_inventory(
+            [self.variant, second_variant],
+            today=self.today,
+            now=self.now,
+        )
+
+        self.assertEqual(
+            inventory[self.variant.id],
+            {
+                "physical": 10,
+                "reserved": 3,
+                "available": 7,
+            },
+        )
+        self.assertEqual(
+            inventory[second_variant.id],
+            {
+                "physical": 4,
+                "reserved": 0,
+                "available": 4,
+            },
+        )
+
+    def test_get_variants_inventory_excludes_unavailable_batches(self):
+        self.create_movement(self.batch, 10)
+
+        quarantined_batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="GROUP-QUARANTINED",
+            created_by=self.user,
+            status="quarantined",
+        )
+        self.create_movement(quarantined_batch, 5)
+
+        blocked_batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="GROUP-BLOCKED",
+            created_by=self.user,
+            status="blocked",
+        )
+        self.create_movement(blocked_batch, 7)
+
+        expired_batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="GROUP-EXPIRED",
+            created_by=self.user,
+            expiration_date=self.today - timedelta(days=1),
+        )
+        self.create_movement(expired_batch, 8)
+
+        inventory = get_variants_inventory(
+            [self.variant],
+            today=self.today,
+            now=self.now,
+        )
+
+        self.assertEqual(
+            inventory[self.variant.id],
+            {
+                "physical": 30,
+                "reserved": 0,
+                "available": 10,
+            },
+        )
+
+    def test_get_variants_inventory_ignores_expired_reservations(self):
+        self.create_movement(self.batch, 20)
+
+        self.create_reservation(
+            quantity=5,
+            batch=self.batch,
+            expires_at=self.now - timedelta(minutes=1),
+        )
+
+        inventory = get_variants_inventory(
+            [self.variant],
+            today=self.today,
+            now=self.now,
+        )
+
+        self.assertEqual(
+            inventory[self.variant.id],
+            {
+                "physical": 20,
+                "reserved": 0,
+                "available": 20,
+            },
+        )
+
+    def test_get_variants_inventory_returns_empty_dict_for_empty_input(self):
+        self.assertEqual(
+            get_variants_inventory(
+                [],
+                today=self.today,
+                now=self.now,
+            ),
+            {},
+        )
+
+    def test_get_variants_inventory_query_count_is_constant(self):
+        additional_variants = [
+            ProductVariant.objects.create(
+                product=self.product,
+                flavor=f"Variant {index}",
+                price=100000 + index,
+                stock=0,
+            )
+            for index in range(5)
+        ]
+
+        one_variant = [self.variant]
+        six_variants = [self.variant, *additional_variants]
+
+        with CaptureQueriesContext(connection) as single_queries:
+            get_variants_inventory(
+                one_variant,
+                today=self.today,
+                now=self.now,
+            )
+
+        with CaptureQueriesContext(connection) as multiple_queries:
+            get_variants_inventory(
+                six_variants,
+                today=self.today,
+                now=self.now,
+            )
+
+        self.assertEqual(len(single_queries), 3)
+        self.assertEqual(len(multiple_queries), 3)
 
     def test_record_order_sale_creates_outbound_document_and_consumes_reservation(self):
         self.create_movement(self.batch, 10)

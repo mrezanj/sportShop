@@ -15,12 +15,12 @@ class ProductVariantForm(forms.ModelForm):
 
     class Meta:
         model = ProductVariant
-        fields = '__all__'
+        exclude = ("stock",)
 
     def clean_sku(self):
-        sku = (self.cleaned_data.get('sku') or '').strip()
+        sku = (self.cleaned_data.get("sku") or "").strip()
         if not sku:
             # Unique placeholder - passed to formset validation.
             # Will be replaced with a real SKU in save().
-            return f'__TMP__{uuid.uuid4().hex[:12].upper()}'
+            return f"__TMP__{uuid.uuid4().hex[:12].upper()}"
         return sku

@@ -2,7 +2,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.db.models import Sum
-
+from catalog.services import build_product_inventory_context
 from catalog.models import Product, Category, Brand
 from catalog.serializers import (
     ProductListSerializer,
@@ -70,7 +70,14 @@ def homepage_data(request):
         "order", "-created_at"
     )[:8]
 
+    new_products = list(new_products)
+
+    inventory_products = {
+        product.pk: product for product in bestsellers + new_products
+    }.values()
+
     ctx = {"request": request}
+    ctx.update(build_product_inventory_context(inventory_products))
 
     return Response(
         {
