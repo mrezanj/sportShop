@@ -1,10 +1,13 @@
+
 from datetime import timedelta
 from decimal import Decimal
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
+
 from inventory.models import (
     InventoryBatch,
     InventoryDocument,
@@ -12,6 +15,7 @@ from inventory.models import (
     InventoryMovement,
 )
 from catalog.models import Brand, Category, Product, ProductVariant
+from locations.testing import get_test_tehran_city
 from orders.models import (
     Order,
     OrderItem,
@@ -33,6 +37,8 @@ class CartAPITests(APITestCase):
             username="other-cart-user",
             password="test-password",
         )
+
+        self.city = get_test_tehran_city()
 
         self.brand = Brand.objects.create(
             name="Cart Brand",
@@ -56,7 +62,9 @@ class CartAPITests(APITestCase):
             product=self.product,
             price=Decimal("100000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
+
         batch = InventoryBatch.objects.create(
             variant=self.variant,
             batch_number="CART-TEST-BATCH-001",
@@ -85,6 +93,7 @@ class CartAPITests(APITestCase):
             quantity_delta=5,
             created_by=self.user,
         )
+
         self.shipping_method = ShippingMethod.objects.create(
             name="ارسال آزمایشی",
             slug="test-shipping",
@@ -142,7 +151,7 @@ class CartAPITests(APITestCase):
         return {
             "shipping_method_slug": "test-shipping",
             "province": "tehran",
-            "city": "تهران",
+            "city_code": self.city.code,
             "address": "آدرس آزمایشی معتبر برای ثبت سفارش",
             "postal_code": "1234567890",
             "first_name": "Test",
@@ -283,7 +292,9 @@ class CartAPITests(APITestCase):
 
         item = CartItem.objects.get(cart__user=self.user)
 
-        response = self.client.delete(reverse("cart-remove-item", args=[item.id]))
+        response = self.client.delete(
+            reverse("cart-remove-item", args=[item.id])
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CartItem.objects.filter(pk=item.id).exists())
@@ -297,7 +308,9 @@ class CartAPITests(APITestCase):
             quantity=1,
         )
 
-        response = self.client.delete(reverse("cart-remove-item", args=[other_item.id]))
+        response = self.client.delete(
+            reverse("cart-remove-item", args=[other_item.id])
+        )
 
         self.assertEqual(response.status_code, 404)
         self.assertTrue(CartItem.objects.filter(pk=other_item.id).exists())

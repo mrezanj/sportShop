@@ -1,7 +1,10 @@
+
 from django.contrib import admin
-from .models import Category, Brand, Product, ProductImage, ProductVariant
+
 from jalali_suite.admin import JalaliDateModelAdmin
+
 from .forms import ProductVariantForm
+from .models import Brand, Category, Product, ProductImage, ProductVariant
 
 
 class ProductImageInline(admin.TabularInline):
@@ -9,10 +12,42 @@ class ProductImageInline(admin.TabularInline):
     extra = 1
 
 
-class ProductVariantInline(admin.TabularInline):
+class ProductVariantInline(admin.StackedInline):
     model = ProductVariant
     form = ProductVariantForm
     extra = 1
+    fieldsets = (
+        (
+            "مشخصات تنوع محصول",
+            {
+                "fields": (
+                    ("flavor", "weight", "servings"),
+                    ("size", "color", "sku"),
+                    ("price", "is_active"),
+                )
+            },
+        ),
+        (
+            "اطلاعات حمل و ابعاد بسته",
+            {
+                "fields": (
+                    "shipping_weight_grams",
+                    ("shipping_length_cm", "shipping_width_cm", "shipping_height_cm"),
+                ),
+                "description": "وزن و ابعاد واقعی بسته آماده ارسال را وارد کنید. هر سه بُعد باید با هم تکمیل شوند.",
+            },
+        ),
+        (
+            "بسته‌بندی ویژه",
+            {
+                "fields": (
+                    "requires_special_packaging",
+                    "special_packaging_cost",
+                ),
+                "description": "هزینه بسته‌بندی ویژه برای هر واحد محصول به تومان ثبت می‌شود.",
+            },
+        ),
+    )
 
 
 @admin.register(Category)

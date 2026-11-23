@@ -1,6 +1,11 @@
+
 import uuid
+from decimal import Decimal
+
+from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import Q, UniqueConstraint
+from django.db.models import Q
+
 from jalali_suite.models import JalaliDateTimeField
 
 
@@ -150,7 +155,7 @@ class ProductVariant(models.Model):
         Product, on_delete=models.CASCADE, related_name="variants", verbose_name="محصول"
     )
     flavor = models.CharField(max_length=100, blank=True, verbose_name="طعم")
-    weight = models.CharField(max_length=50, blank=True, verbose_name="وزن (مثلاً 2kg)")
+    weight = models.CharField(max_length=50, blank=True, verbose_name="وزن نمایشی")
     servings = models.PositiveIntegerField(
         null=True, blank=True, verbose_name="تعداد سروینگ"
     )
@@ -159,6 +164,53 @@ class ProductVariant(models.Model):
     sku = models.CharField(
         max_length=100, unique=True, blank=True, verbose_name="کد انبار (SKU)"
     )
+
+    # Physical shipping specifications
+    shipping_weight_grams = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+        verbose_name="وزن قابل ارسال (گرم)",
+        help_text="وزن واقعی بسته‌بندی‌شده برای ارسال، به گرم.",
+    )
+    shipping_length_cm = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="طول بسته (سانتی‌متر)",
+    )
+    shipping_width_cm = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="عرض بسته (سانتی‌متر)",
+    )
+    shipping_height_cm = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="ارتفاع بسته (سانتی‌متر)",
+    )
+
+    # Special packaging
+    requires_special_packaging = models.BooleanField(
+        default=False,
+        verbose_name="نیازمند بسته‌بندی ویژه",
+    )
+    special_packaging_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(Decimal("0"))],
+        verbose_name="هزینه بسته‌بندی ویژه هر واحد (تومان)",
+    )
+
     price = models.DecimalField(
         max_digits=12, decimal_places=0, verbose_name="قیمت (تومان)"
     )
@@ -169,6 +221,27 @@ class ProductVariant(models.Model):
         verbose_name = "تنوع محصول"
         verbose_name_plural = "تنوع‌های محصول"
         unique_together = ["product", "flavor", "weight", "size", "color"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        shipping_length_cm__isnull=True,
+                        shipping_width_cm__isnull=True,
+                        shipping_height_cm__isnull=True,
+                    )
+                    | Q(
+                        shipping_length_cm__isnull=False,
+                        shipping_width_cm__isnull=False,
+                        shipping_height_cm__isnull=False,
+                    )
+                ),
+                name="variant_shipping_dimensions_all_or_none",
+            ),
+            models.CheckConstraint(
+                condition=Q(special_packaging_cost__gte=0),
+                name="variant_special_packaging_cost_nonnegative",
+            ),
+        ]
 
     def __str__(self):
         parts = [self.product.name_fa]

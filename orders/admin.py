@@ -1,3 +1,4 @@
+
 from django.contrib import admin, messages
 from django.db import transaction
 
@@ -9,6 +10,7 @@ from .models import (
     OrderStatusHistory,
     ShippingMethod,
     ShippingRate,
+    ShippingConfiguration,
     StockReservation,
 )
 from .services import (
@@ -63,10 +65,26 @@ class OrderAdmin(JalaliDateModelAdmin):
         "status",
         "total_amount",
         "province",
+        "city",
+        "shipping_method_name",
+        "shipping_cost",
         "created_at",
     ]
-    list_filter = ["status", "province", "created_at"]
-    search_fields = ["order_number", "user__username", "mobile"]
+    list_filter = [
+        "status",
+        "province",
+        "shipping_method",
+        "shipping_is_free",
+        "packaging_is_free",
+        "created_at",
+    ]
+    search_fields = [
+        "order_number",
+        "user__username",
+        "mobile",
+        "city",
+        "tracking_code",
+    ]
 
     readonly_fields = [
         "order_number",
@@ -74,6 +92,12 @@ class OrderAdmin(JalaliDateModelAdmin):
         "reservation_expires_at",
         "created_at",
         "updated_at",
+        "shipping_calculation_snapshot",
+        "shipping_actual_weight_grams",
+        "shipping_volumetric_weight_grams",
+        "shipping_billable_weight_grams",
+        "shipping_is_free",
+        "packaging_is_free",
     ]
 
     inlines = [
@@ -185,7 +209,10 @@ class StockReservationAdmin(admin.ModelAdmin):
         "consumed_at",
     ]
     list_filter = ["status", "expires_at"]
-    search_fields = ["order__order_number", "variant__product__name"]
+    search_fields = [
+        "order__order_number",
+        "variant__product__name",
+    ]
 
     readonly_fields = [
         "order",
@@ -210,12 +237,124 @@ class StockReservationAdmin(admin.ModelAdmin):
 
 @admin.register(ShippingMethod)
 class ShippingMethodAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "is_active", "order"]
-    list_editable = ["is_active", "order"]
-    prepopulated_fields = {"slug": ("name",)}
+    list_display = [
+        "name",
+        "slug",
+        "restricted_province",
+        "restricted_city",
+        "is_active",
+        "order",
+    ]
+    list_filter = [
+        "is_active",
+        "restricted_province",
+    ]
+    search_fields = [
+        "name",
+        "slug",
+        "restricted_city__name",
+        "restricted_city__county_name",
+    ]
+    list_select_related = [
+        "restricted_city",
+        "restricted_city__province",
+    ]
+    list_editable = [
+        "is_active",
+        "order",
+    ]
+    raw_id_fields = [
+        "restricted_city",
+    ]
+    prepopulated_fields = {
+        "slug": ("name",),
+    }
 
 
 @admin.register(ShippingRate)
 class ShippingRateAdmin(admin.ModelAdmin):
-    list_display = ["method", "province", "cost"]
-    list_filter = ["method", "province"]
+    list_display = [
+        "method",
+        "province",
+        "city",
+        "cost",
+        "included_weight_grams",
+        "additional_weight_step_grams",
+        "additional_weight_cost",
+        "cold_shipping_cost",
+        "is_active",
+    ]
+    list_filter = [
+        "method",
+        "province",
+        "is_active",
+        "city__province",
+    ]
+    search_fields = [
+        "method__name",
+        "city__name",
+        "city__county_name",
+        "city__code",
+    ]
+    list_select_related = [
+        "method",
+        "city",
+        "city__province",
+    ]
+    raw_id_fields = [
+        "city",
+    ]
+
+
+@admin.register(ShippingConfiguration)
+class ShippingConfigurationAdmin(admin.ModelAdmin):
+    list_display = [
+        "volumetric_divisor",
+        "free_shipping_threshold",
+        "free_packaging_threshold",
+        "is_active",
+        "updated_at",
+    ]
+
+    readonly_fields = [
+        "singleton_key",
+        "updated_at",
+    ]
+
+    fieldsets = [
+        (
+            "محاسبه وزن حجمی",
+            {
+                "fields": [
+                    "volumetric_divisor",
+                ],
+            },
+        ),
+        (
+            "آستانه‌های رایگان",
+            {
+                "fields": [
+                    "free_shipping_threshold",
+                    "free_packaging_threshold",
+                ],
+            },
+        ),
+        (
+            "وضعیت تنظیمات",
+            {
+                "fields": [
+                    "is_active",
+                    "singleton_key",
+                    "updated_at",
+                ],
+            },
+        ),
+    ]
+
+    def has_add_permission(self, request):
+        if ShippingConfiguration.objects.exists():
+            return False
+        return super().has_add_permission(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return False

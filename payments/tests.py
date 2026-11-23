@@ -22,6 +22,7 @@ from orders.models import (
     StockReservation,
 )
 from orders.serializers import CreateOrderSerializer
+from locations.testing import get_test_tehran_city
 from orders.services import cancel_locked_order
 from payments.gateways import get_gateway
 from payments.models import Payment, MockGatewayTransaction
@@ -100,6 +101,7 @@ class PaymentFlowTests(TestCase):
             product=product,
             price=Decimal("100000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
         self.batch = InventoryBatch.objects.create(
             variant=self.variant,
@@ -159,7 +161,7 @@ class PaymentFlowTests(TestCase):
             ],
             "shipping_method_slug": "payment-test-shipping",
             "province": "tehran",
-            "city": "تهران",
+            "city_code": get_test_tehran_city().code,
             "address": "آدرس آزمایشی معتبر برای تست پرداخت",
             "postal_code": "1234567890",
             "first_name": "Test",
@@ -1590,6 +1592,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             product=product,
             price=Decimal("100000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
         create_inventory_ledger_for_variant(variant, user)
         shipping_method = ShippingMethod.objects.create(
@@ -1613,7 +1616,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 ],
                 "shipping_method_slug": "transaction-test-shipping",
                 "province": "tehran",
-                "city": "تهران",
+                "city_code": get_test_tehran_city().code,
                 "address": "آدرس معتبر آزمایشی",
                 "postal_code": "1234567890",
                 "first_name": "Test",
@@ -1690,6 +1693,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             product=product,
             price=Decimal("100000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
         create_inventory_ledger_for_variant(variant, user)
 
@@ -1714,7 +1718,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 ],
                 "shipping_method_slug": "verify-transaction-shipping",
                 "province": "tehran",
-                "city": "تهران",
+                "city_code": get_test_tehran_city().code,
                 "address": "آدرس معتبر آزمایشی",
                 "postal_code": "1234567890",
                 "first_name": "Test",
@@ -1814,6 +1818,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             product=product,
             price=Decimal("100000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
         create_inventory_ledger_for_variant(variant, user)
         shipping_method = ShippingMethod.objects.create(
@@ -1832,7 +1837,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 "items": [{"variant_id": variant.id, "quantity": 2}],
                 "shipping_method_slug": "verify-concurrency-shipping",
                 "province": "tehran",
-                "city": "تهران",
+                "city_code": get_test_tehran_city().code,
                 "address": "آدرس معتبر آزمایشی",
                 "postal_code": "1234567890",
                 "first_name": "Test",
@@ -1952,6 +1957,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             product=product,
             price=Decimal("100000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
         create_inventory_ledger_for_variant(variant, user)
 
@@ -1971,7 +1977,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 "items": [{"variant_id": variant.id, "quantity": 2}],
                 "shipping_method_slug": "recover-concurrency-shipping",
                 "province": "tehran",
-                "city": "تهران",
+                "city_code": get_test_tehran_city().code,
                 "address": "آدرس معتبر آزمایشی",
                 "postal_code": "1234567890",
                 "first_name": "Test",
@@ -2097,6 +2103,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             product=product,
             price=Decimal("100000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
         create_inventory_ledger_for_variant(variant, user)
 
@@ -2121,7 +2128,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 ],
                 "shipping_method_slug": "verify-exception-shipping",
                 "province": "tehran",
-                "city": "تهران",
+                "city_code": get_test_tehran_city().code,
                 "address": "آدرس معتبر آزمایشی",
                 "postal_code": "1234567890",
                 "first_name": "Test",
@@ -2202,6 +2209,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             product=product,
             price=Decimal("100000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
         create_inventory_ledger_for_variant(variant, user)
 
@@ -2226,7 +2234,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 ],
                 "shipping_method_slug": "concurrent-shipping",
                 "province": "tehran",
-                "city": "Tehran",
+                "city_code": get_test_tehran_city().code,
                 "address": "Concurrent test address",
                 "postal_code": "1234567890",
                 "first_name": "Test",
@@ -2319,6 +2327,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             product=product,
             price=Decimal("100000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
         create_inventory_ledger_for_variant(variant, user)
 
@@ -2343,7 +2352,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 ],
                 "shipping_method_slug": "concurrent-initiate-shipping",
                 "province": "tehran",
-                "city": "Tehran",
+                "city_code": get_test_tehran_city().code,
                 "address": "Concurrent initiate test address",
                 "postal_code": "1234567890",
                 "first_name": "Test",

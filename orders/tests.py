@@ -28,6 +28,7 @@ from orders.models import (
     StockReservation,
 )
 from orders.serializers import CreateOrderSerializer
+from locations.testing import get_test_tehran_city
 from payments.models import Payment
 from orders.services import (
     ALLOWED_ORDER_TRANSITIONS,
@@ -53,6 +54,7 @@ class CreateOrderReservationTests(TestCase):
             user=self.user,
             mobile="09120000000",
         )
+        self.city = get_test_tehran_city()
         self.brand = Brand.objects.create(
             name="Test Brand",
             slug="test-brand",
@@ -75,6 +77,7 @@ class CreateOrderReservationTests(TestCase):
             product=self.product,
             price=Decimal("100000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
 
         self.shipping_method = ShippingMethod.objects.create(
@@ -120,7 +123,7 @@ class CreateOrderReservationTests(TestCase):
             "items": items,
             "shipping_method_slug": "test-shipping",
             "province": "tehran",
-            "city": "تهران",
+            "city_code": self.city.code,
             "address": "آدرس آزمایشی معتبر برای تست سفارش",
             "postal_code": "1234567890",
             "first_name": "Test",

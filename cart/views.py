@@ -1,3 +1,4 @@
+
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
@@ -259,7 +260,7 @@ def checkout(request):
             "items": items,
             "shipping_method_slug": request.data.get("shipping_method_slug"),
             "province": request.data.get("province"),
-            "city": request.data.get("city"),
+            "city_code": request.data.get("city_code"),
             "address": request.data.get("address"),
             "postal_code": request.data.get("postal_code", ""),
             "first_name": request.data.get("first_name"),
