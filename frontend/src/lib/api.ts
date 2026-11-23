@@ -1,3 +1,4 @@
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export interface Brand {
@@ -173,7 +174,6 @@ export async function fetchMe(token: string): Promise<AuthUser> {
   return res.json();
 }
 
-
 export interface UserProfile {
   mobile: string;
   birth_date: string | null;
@@ -220,10 +220,16 @@ export async function updateProfile(
   return data;
 }
 
-
 export interface Province {
   slug: string;
   name: string;
+}
+
+export interface City {
+  code: string;
+  name: string;
+  county_name: string;
+  district_name: string;
 }
 
 export interface ShippingMethod {
@@ -238,7 +244,7 @@ export interface CreateOrderPayload {
   items: { variant_id: number; quantity: number }[];
   shipping_method_slug: string;
   province: string;
-  city: string;
+  city_code: string;
   address: string;
   postal_code?: string;
   first_name: string;
@@ -258,7 +264,7 @@ export interface CreateOrderResponse {
 
 export async function fetchProvinces(): Promise<Province[]> {
   try {
-    const res = await fetch(`${API_URL}/orders/provinces/`, {
+    const res = await fetch(`${API_URL}/locations/provinces/`, {
       cache: 'no-store',
     });
     if (!res.ok) return [];
@@ -268,14 +274,40 @@ export async function fetchProvinces(): Promise<Province[]> {
   }
 }
 
+export async function fetchCities(province: string): Promise<City[]> {
+  if (!province) return [];
+
+  try {
+    const url = new URL(`${API_URL}/locations/cities/`);
+    url.searchParams.set('province', province);
+
+    const res = await fetch(url.toString(), { cache: 'no-store' });
+    if (!res.ok) return [];
+
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchShippingMethods(
-  province: string
+  province: string,
+  cityCode: string
 ): Promise<ShippingMethod[]> {
-  const url = new URL(`${API_URL}/orders/shipping-methods/`);
-  url.searchParams.set('province', province);
-  const res = await fetch(url.toString(), { cache: 'no-store' });
-  if (!res.ok) return [];
-  return res.json();
+  if (!province || !cityCode) return [];
+
+  try {
+    const url = new URL(`${API_URL}/orders/shipping-methods/`);
+    url.searchParams.set('province', province);
+    url.searchParams.set('city_code', cityCode);
+
+    const res = await fetch(url.toString(), { cache: 'no-store' });
+    if (!res.ok) return [];
+
+    return res.json();
+  } catch {
+    return [];
+  }
 }
 
 export async function createOrder(
@@ -293,7 +325,6 @@ export async function createOrder(
   const data = await res.json();
 
   if (!res.ok) {
-    // Extract the first meaningful error
     let msg = 'خطا در ثبت سفارش.';
     if (data && typeof data === 'object') {
       for (const key of Object.keys(data)) {
@@ -312,6 +343,7 @@ export async function createOrder(
   }
   return data;
 }
+
 export interface OrderItemDetail {
   product_name: string;
   product_slug: string;
@@ -338,6 +370,9 @@ export interface OrderDetail {
   postal_code: string;
   shipping_method_name: string;
   shipping_cost: number;
+  packaging_cost: number;
+  shipping_is_free: boolean;
+  packaging_is_free: boolean;
   subtotal: number;
   vat_amount: number;
   total_amount: number;
@@ -373,6 +408,7 @@ export async function fetchOrderDetail(
   if (!res.ok) throw new Error('Order not found');
   return res.json();
 }
+
 export interface InitiatePaymentResponse {
   success: boolean;
   payment_id: number;
@@ -420,6 +456,7 @@ export async function verifyPayment(
   });
   return res.json();
 }
+
 export interface Testimonial {
   id: number;
   name: string;

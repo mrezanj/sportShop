@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
@@ -10,16 +11,33 @@ import {
   type OrderDetail,
 } from '@/lib/api';
 
+type OrderRequestResult = {
+  key: string;
+  order: OrderDetail | null;
+  error: string | null;
+};
+
 function PaymentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orderNumber = searchParams.get('order') || '';
   const { isAuthenticated, loading: authLoading, token } = useAuth();
 
-  const [order, setOrder] = useState<OrderDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [requestResult, setRequestResult] =
+    useState<OrderRequestResult | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
+
+  const requestKey = token && orderNumber
+    ? JSON.stringify([orderNumber, token])
+    : '';
+
+  const currentResult =
+    requestResult?.key === requestKey ? requestResult : null;
+
+  const order = currentResult?.order ?? null;
+  const error = paymentError ?? currentResult?.error ?? null;
+  const loading = Boolean(token && orderNumber && !currentResult);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -31,27 +49,51 @@ function PaymentContent() {
 
   useEffect(() => {
     if (!token || !orderNumber) return;
-    setLoading(true);
+
+    let cancelled = false;
+
     fetchOrderDetail(orderNumber, token)
       .then((data) => {
-        setOrder(data);
+        if (cancelled) return;
+
+        setRequestResult({
+          key: requestKey,
+          order: data,
+          error: null,
+        });
+
         if (data.status === 'paid') {
           router.push(`/account/orders/${orderNumber}`);
         }
       })
-      .catch(() => setError('سفارش یافت نشد.'))
-      .finally(() => setLoading(false));
-  }, [token, orderNumber, router]);
+      .catch(() => {
+        if (cancelled) return;
+
+        setRequestResult({
+          key: requestKey,
+          order: null,
+          error: 'سفارش یافت نشد.',
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, orderNumber, requestKey, router]);
 
   const handlePay = async () => {
     if (!token || !order) return;
-    setError(null);
+
+    setPaymentError(null);
     setRedirecting(true);
+
     try {
       const res = await initiatePayment(order.order_number, token);
       window.location.href = res.redirect_url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'خطای نامشخص');
+      setPaymentError(
+        err instanceof Error ? err.message : 'خطای نامشخص'
+      );
       setRedirecting(false);
     }
   };
@@ -113,25 +155,44 @@ function PaymentContent() {
                 {order.subtotal.toLocaleString('fa-IR')} تومان
               </span>
             </div>
+
             <div className="flex justify-between">
-              <span className="text-gray-700">مالیات (۱۰٪)</span>
+              <span className="text-gray-700">مالیات</span>
               <span className="font-medium text-gray-900">
                 {order.vat_amount.toLocaleString('fa-IR')} تومان
               </span>
             </div>
+
             <div className="flex justify-between">
               <span className="text-gray-700">هزینه ارسال</span>
               <span
-                className={`font-medium ${order.shipping_cost === 0
+                className={`font-medium ${
+                  order.shipping_is_free || order.shipping_cost === 0
                     ? 'text-green-700'
                     : 'text-gray-900'
-                  }`}
+                }`}
               >
-                {order.shipping_cost === 0
+                {order.shipping_is_free || order.shipping_cost === 0
                   ? 'رایگان'
                   : `${order.shipping_cost.toLocaleString('fa-IR')} تومان`}
               </span>
             </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-700">هزینه بسته‌بندی</span>
+              <span
+                className={`font-medium ${
+                  order.packaging_is_free || order.packaging_cost === 0
+                    ? 'text-green-700'
+                    : 'text-gray-900'
+                }`}
+              >
+                {order.packaging_is_free || order.packaging_cost === 0
+                  ? 'رایگان'
+                  : `${order.packaging_cost.toLocaleString('fa-IR')} تومان`}
+              </span>
+            </div>
+
             <div className="border-t border-pink-300 pt-3 flex justify-between items-center">
               <span className="font-bold text-gray-900">مبلغ قابل پرداخت</span>
               <span className="font-bold text-pink-900 text-xl">

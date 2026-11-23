@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,22 +8,31 @@ import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import {
   fetchProvinces,
+  fetchCities,
   fetchShippingMethods,
   createOrder,
   type Province,
+  type City,
   type ShippingMethod,
 } from '@/lib/api';
-
-const VAT_RATE = 0.10;
+import {
+  fetchShippingPreview,
+  type ShippingPreviewResponse,
+} from '@/lib/shipping';
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { isAuthenticated, loading: authLoading, user, token } = useAuth();
-  const { items, totalPrice, clearCart } = useCart();
+  const { items, totalPrice } = useCart();
 
   const [provinces, setProvinces] = useState<Province[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
   const [loadingMethods, setLoadingMethods] = useState(false);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [preview, setPreview] = useState<ShippingPreviewResponse | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,26 +41,27 @@ export default function CheckoutPage() {
     last_name: '',
     mobile: user?.mobile ?? '',
     province: '',
-    city: '',
+    city_code: '',
     address: '',
     postal_code: '',
     notes: '',
   });
+
   const [selectedMethodSlug, setSelectedMethodSlug] = useState('');
 
-  // Redirect if not authenticated
+  // Redirect if not authenticated.
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push('/login?returnTo=/checkout');
     }
   }, [authLoading, isAuthenticated, router]);
 
-  // Load provinces
+  // Load provinces.
   useEffect(() => {
     fetchProvinces().then(setProvinces);
   }, []);
 
-  // Pre-fill mobile
+  // Pre-fill mobile.
   useEffect(() => {
     if (user?.mobile && !form.mobile) {
       setForm((f) => ({ ...f, mobile: user.mobile! }));
@@ -58,40 +69,175 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Load shipping methods when province changes
+  // Load cities whenever the province changes.
   useEffect(() => {
+    let cancelled = false;
+
+    setCities([]);
+    setShippingMethods([]);
+    setSelectedMethodSlug('');
+    setPreview(null);
+    setPreviewError(null);
+
     if (!form.province) {
-      setShippingMethods([]);
-      setSelectedMethodSlug('');
+      setLoadingCities(false);
+      setLoadingMethods(false);
       return;
     }
-    setLoadingMethods(true);
-    fetchShippingMethods(form.province)
-      .then((methods) => {
-        setShippingMethods(methods);
-        setSelectedMethodSlug(methods[0]?.slug ?? '');
+
+    setLoadingCities(true);
+
+    fetchCities(form.province)
+      .then((result) => {
+        if (!cancelled) {
+          setCities(result);
+        }
       })
-      .finally(() => setLoadingMethods(false));
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingCities(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [form.province]);
 
-  // Redirect if cart empty (only after mount)
+  // Load shipping methods whenever both province and city are selected.
+  useEffect(() => {
+    let cancelled = false;
+
+    setShippingMethods([]);
+    setSelectedMethodSlug('');
+    setPreview(null);
+    setPreviewError(null);
+
+    if (!form.province || !form.city_code) {
+      setLoadingMethods(false);
+      return;
+    }
+
+    setLoadingMethods(true);
+
+    fetchShippingMethods(form.province, form.city_code)
+      .then((methods) => {
+        if (!cancelled) {
+          setShippingMethods(methods);
+          setSelectedMethodSlug(methods[0]?.slug ?? '');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingMethods(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.province, form.city_code]);
+
+  // Redirect if cart is empty.
   useEffect(() => {
     if (!authLoading && items.length === 0 && !submitting) {
       router.push('/cart');
     }
   }, [items.length, authLoading, router, submitting]);
 
+  // Calculate the actual order amounts whenever cart or shipping selection changes.
+  useEffect(() => {
+    let cancelled = false;
+
+    setPreview(null);
+    setPreviewError(null);
+
+    if (
+      !token ||
+      !form.province ||
+      !form.city_code ||
+      !selectedMethodSlug ||
+      items.length === 0
+    ) {
+      setLoadingPreview(false);
+      return;
+    }
+
+    setLoadingPreview(true);
+
+    fetchShippingPreview(
+      {
+        items: items.map((item) => ({
+          variant_id: item.variantId,
+          quantity: item.quantity,
+        })),
+        shipping_method_slug: selectedMethodSlug,
+        province: form.province,
+        city_code: form.city_code,
+      },
+      token
+    )
+      .then((result) => {
+        if (!cancelled) {
+          setPreview(result);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPreviewError(
+            err instanceof Error
+              ? err.message
+              : 'محاسبه هزینه سفارش با خطا مواجه شد.'
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingPreview(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    items,
+    token,
+    form.province,
+    form.city_code,
+    selectedMethodSlug,
+  ]);
+
   const selectedMethod = shippingMethods.find(
     (m) => m.slug === selectedMethodSlug
   );
-  const shippingCost = selectedMethod?.cost ?? 0;
-  const vat = Math.round(totalPrice * VAT_RATE);
-  const grandTotal = totalPrice + vat + shippingCost;
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
   ) => {
     const { name, value } = e.target;
+
+    if (name === 'province') {
+      setForm((f) => ({
+        ...f,
+        province: value,
+        city_code: '',
+      }));
+      setError(null);
+      return;
+    }
+
+    if (name === 'city_code') {
+      setForm((f) => ({
+        ...f,
+        city_code: value,
+      }));
+      setError(null);
+      return;
+    }
+
     setForm((f) => ({ ...f, [name]: value }));
   };
 
@@ -99,16 +245,38 @@ export default function CheckoutPage() {
     e.preventDefault();
     setError(null);
 
-    if (!form.province) return setError('استان را انتخاب کنید.');
-    if (!form.city.trim()) return setError('شهر را وارد کنید.');
-    if (!form.address.trim() || form.address.trim().length < 10)
+    if (!form.province) {
+      return setError('استان را انتخاب کنید.');
+    }
+
+    if (!form.city_code) {
+      return setError('شهر را انتخاب کنید.');
+    }
+
+    if (!form.address.trim() || form.address.trim().length < 10) {
       return setError('آدرس را کامل وارد کنید (حداقل ۱۰ کاراکتر).');
-    if (!selectedMethodSlug) return setError('روش ارسال را انتخاب کنید.');
-    if (!/^09\d{9}$/.test(form.mobile))
+    }
+
+    if (!selectedMethodSlug) {
+      return setError('روش ارسال را انتخاب کنید.');
+    }
+
+    if (!/^09\d{9}$/.test(form.mobile)) {
       return setError('شماره موبایل معتبر نیست.');
-    if (!token) return setError('ابتدا وارد حساب کاربری شوید.');
+    }
+
+    if (!token) {
+      return setError('ابتدا وارد حساب کاربری شوید.');
+    }
+
+    if (loadingPreview || !preview) {
+      return setError(
+        previewError || 'ابتدا باید محاسبه هزینه سفارش با موفقیت انجام شود.'
+      );
+    }
 
     setSubmitting(true);
+
     try {
       const response = await createOrder(
         {
@@ -118,7 +286,7 @@ export default function CheckoutPage() {
           })),
           shipping_method_slug: selectedMethodSlug,
           province: form.province,
-          city: form.city,
+          city_code: form.city_code,
           address: form.address,
           postal_code: form.postal_code,
           first_name: form.first_name,
@@ -129,7 +297,7 @@ export default function CheckoutPage() {
         token
       );
 
-      // Don't clear cart yet - payment must succeed first
+      // Keep the cart until payment succeeds.
       router.push(`/checkout/payment?order=${response.order_number}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای نامشخص');
@@ -144,6 +312,9 @@ export default function CheckoutPage() {
       </div>
     );
   }
+
+  const formatPrice = (amount: number) =>
+    amount.toLocaleString('fa-IR');
 
   return (
     <div className="min-h-screen bg-page" dir="rtl">
@@ -161,10 +332,10 @@ export default function CheckoutPage() {
         </h1>
 
         <form onSubmit={handleSubmit} className="grid lg:grid-cols-3 gap-6">
-          {/* Form fields */}
           <div className="lg:col-span-2 space-y-4">
             <div className="border border-gray-200 rounded-xl p-4 bg-white">
               <h2 className="font-bold text-gray-800 mb-3">اطلاعات گیرنده</h2>
+
               <div className="grid sm:grid-cols-2 gap-3">
                 <input
                   name="first_name"
@@ -174,6 +345,7 @@ export default function CheckoutPage() {
                   required
                   className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-800 text-gray-900"
                 />
+
                 <input
                   name="last_name"
                   value={form.last_name}
@@ -182,6 +354,7 @@ export default function CheckoutPage() {
                   required
                   className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-800 text-gray-900"
                 />
+
                 <input
                   name="mobile"
                   value={form.mobile}
@@ -196,6 +369,7 @@ export default function CheckoutPage() {
                   className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-800 text-center text-gray-900"
                   required
                 />
+
                 <input
                   name="postal_code"
                   value={form.postal_code}
@@ -216,6 +390,7 @@ export default function CheckoutPage() {
 
             <div className="border border-gray-200 rounded-xl p-4 bg-white">
               <h2 className="font-bold text-gray-800 mb-3">آدرس</h2>
+
               <div className="grid sm:grid-cols-2 gap-3 mb-3">
                 <select
                   name="province"
@@ -231,15 +406,44 @@ export default function CheckoutPage() {
                     </option>
                   ))}
                 </select>
-                <input
-                  name="city"
-                  value={form.city}
+
+                <select
+                  name="city_code"
+                  value={form.city_code}
                   onChange={handleChange}
-                  placeholder="شهر *"
                   required
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-800 text-gray-900"
-                />
+                  disabled={!form.province || loadingCities || cities.length === 0}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-pink-800 text-gray-900 bg-white disabled:bg-gray-100 disabled:text-gray-500"
+                >
+                  <option value="">
+                    {!form.province
+                      ? 'ابتدا استان را انتخاب کنید'
+                      : loadingCities
+                        ? 'در حال دریافت شهرها...'
+                        : cities.length === 0
+                          ? 'شهری برای این استان یافت نشد'
+                          : 'انتخاب شهر *'}
+                  </option>
+
+                  {cities.map((city) => {
+                    const details = [
+                      city.county_name,
+                      city.district_name,
+                    ].filter(Boolean);
+
+                    const label = details.length
+                      ? `${city.name} (${details.join(' - ')})`
+                      : city.name;
+
+                    return (
+                      <option key={city.code} value={city.code}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
+
               <textarea
                 name="address"
                 value={form.address}
@@ -253,25 +457,33 @@ export default function CheckoutPage() {
 
             <div className="border border-gray-200 rounded-xl p-4 bg-white">
               <h2 className="font-bold text-gray-800 mb-3">روش ارسال</h2>
+
               {!form.province ? (
                 <p className="text-sm text-gray-500">
                   ابتدا استان را انتخاب کنید.
                 </p>
+              ) : !form.city_code ? (
+                <p className="text-sm text-gray-500">
+                  ابتدا شهر را انتخاب کنید.
+                </p>
               ) : loadingMethods ? (
-                <p className="text-sm text-gray-500">در حال بارگذاری...</p>
+                <p className="text-sm text-gray-500">
+                  در حال بارگذاری روش‌های ارسال...
+                </p>
               ) : shippingMethods.length === 0 ? (
                 <p className="text-sm text-red-600">
-                  برای این استان روش ارسالی تعریف نشده است.
+                  برای این شهر روش ارسالی تعریف نشده است.
                 </p>
               ) : (
                 <div className="space-y-2">
                   {shippingMethods.map((m) => (
                     <label
                       key={m.id}
-                      className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${selectedMethodSlug === m.slug
+                      className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                        selectedMethodSlug === m.slug
                           ? 'border-pink-800 bg-pink-50'
                           : 'border-gray-200 hover:border-pink-300'
-                        }`}
+                      }`}
                     >
                       <input
                         type="radio"
@@ -281,22 +493,29 @@ export default function CheckoutPage() {
                         onChange={() => setSelectedMethodSlug(m.slug)}
                         className="mt-1 accent-pink-800"
                       />
+
                       <div className="flex-1">
                         <div className="flex justify-between items-center">
                           <span className="font-medium text-gray-900">
                             {m.name}
                           </span>
+
                           <span className="text-sm font-bold text-pink-900">
-                            {m.cost === 0
-                              ? 'رایگان'
-                              : `${(m.cost ?? 0).toLocaleString('fa-IR')} تومان`}
+                            {m.cost === null
+                              ? 'تعرفه نامشخص'
+                              : `${formatPrice(m.cost)} تومان`}
                           </span>
                         </div>
+
                         {m.description && (
                           <p className="text-xs text-gray-600 mt-1">
                             {m.description}
                           </p>
                         )}
+
+                        <p className="text-xs text-gray-500 mt-1">
+                          تعرفه پایه؛ مبلغ نهایی پس از محاسبه وزن و شرایط سفارش مشخص می‌شود.
+                        </p>
                       </div>
                     </label>
                   ))}
@@ -308,6 +527,7 @@ export default function CheckoutPage() {
               <h2 className="font-bold text-gray-800 mb-3">
                 یادداشت سفارش (اختیاری)
               </h2>
+
               <textarea
                 name="notes"
                 value={form.notes}
@@ -319,7 +539,6 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Summary */}
           <aside className="bg-pink-50 rounded-xl p-6 h-fit sticky top-24">
             <h2 className="font-bold text-pink-900 mb-4">خلاصه سفارش</h2>
 
@@ -332,8 +551,9 @@ export default function CheckoutPage() {
                   <span className="truncate ml-2">
                     {i.productName} × {i.quantity}
                   </span>
+
                   <span className="whitespace-nowrap font-medium">
-                    {(i.price * i.quantity).toLocaleString('fa-IR')}
+                    {formatPrice(i.price * i.quantity)}
                   </span>
                 </div>
               ))}
@@ -343,32 +563,69 @@ export default function CheckoutPage() {
               <div className="flex justify-between">
                 <span className="text-gray-700">جمع کالاها</span>
                 <span className="font-semibold text-gray-900">
-                  {totalPrice.toLocaleString('fa-IR')}
+                  {preview ? formatPrice(preview.subtotal) : '—'}
                 </span>
               </div>
+
               <div className="flex justify-between">
-                <span className="text-gray-700">مالیات (۱۰٪)</span>
+                <span className="text-gray-700">مالیات</span>
                 <span className="font-semibold text-gray-900">
-                  {vat.toLocaleString('fa-IR')}
+                  {preview ? formatPrice(preview.vat_amount) : '—'}
                 </span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-gray-700">هزینه ارسال</span>
                 <span
-                  className={`font-semibold ${shippingCost === 0 ? 'text-green-700' : 'text-gray-900'
-                    }`}
+                  className={`font-semibold ${
+                    preview?.shipping_cost === 0
+                      ? 'text-green-700'
+                      : 'text-gray-900'
+                  }`}
                 >
-                  {!selectedMethod
+                  {!preview
                     ? '—'
-                    : shippingCost === 0
+                    : preview.shipping.is_free
                       ? 'رایگان'
-                      : shippingCost.toLocaleString('fa-IR')}
+                      : formatPrice(preview.shipping_cost)}
                 </span>
               </div>
+
+              <div className="flex justify-between">
+                <span className="text-gray-700">هزینه بسته‌بندی</span>
+                <span
+                  className={`font-semibold ${
+                    preview?.packaging_cost === 0
+                      ? 'text-green-700'
+                      : 'text-gray-900'
+                  }`}
+                >
+                  {!preview
+                    ? '—'
+                    : preview.packaging.is_free
+                      ? 'رایگان'
+                      : formatPrice(preview.packaging_cost)}
+                </span>
+              </div>
+
+              {loadingPreview && (
+                <p className="text-xs text-gray-500">
+                  در حال محاسبه هزینه‌های سفارش...
+                </p>
+              )}
+
+              {previewError && (
+                <p className="text-xs text-red-600">
+                  {previewError}
+                </p>
+              )}
+
               <div className="border-t border-pink-300 pt-3 flex justify-between">
                 <span className="font-bold text-gray-900">مبلغ نهایی</span>
                 <span className="font-bold text-pink-900 text-lg">
-                  {grandTotal.toLocaleString('fa-IR')} تومان
+                  {preview
+                    ? `${formatPrice(preview.total_amount)} تومان`
+                    : '—'}
                 </span>
               </div>
             </div>
@@ -381,10 +638,22 @@ export default function CheckoutPage() {
 
             <button
               type="submit"
-              disabled={submitting || !selectedMethodSlug}
+              disabled={
+                submitting ||
+                loadingCities ||
+                loadingMethods ||
+                loadingPreview ||
+                !form.city_code ||
+                !selectedMethodSlug ||
+                !preview
+              }
               className="w-full mt-4 bg-pink-800 hover:bg-pink-900 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors"
             >
-              {submitting ? 'در حال ثبت سفارش...' : 'ثبت سفارش'}
+              {submitting
+                ? 'در حال ثبت سفارش...'
+                : loadingPreview
+                  ? 'در حال محاسبه هزینه...'
+                  : 'ثبت سفارش'}
             </button>
 
             <p className="text-xs text-gray-600 text-center mt-3">
