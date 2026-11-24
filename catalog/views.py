@@ -1,6 +1,6 @@
 import csv
 from pathlib import Path
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from io import TextIOWrapper
 
 from django.db import transaction
@@ -77,11 +77,11 @@ def _apply_price_updates(rows, mode, user, note, change_type):
             old_price = variant.price
             value = normalized[variant.sku]
             if mode == "fixed":
-                new_price = value.quantize(Decimal("1"))
+                new_price = value.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
             elif mode == "increase_percent":
-                new_price = (old_price * (Decimal("1") + value / 100)).quantize(Decimal("1"))
+                new_price = (old_price * (Decimal("1") + value / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
             else:
-                new_price = (old_price * (Decimal("1") - value / 100)).quantize(Decimal("1"))
+                new_price = (old_price * (Decimal("1") - value / 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
             if new_price < 1:
                 raise ValidationError({"price": f"قیمت SKU {variant.sku} نمی‌تواند کمتر از ۱ باشد."})
             if new_price > Decimal("999999999999"):
