@@ -109,6 +109,15 @@ class ReturnRequestTests(TestCase):
                 ],
             )
 
+    def test_customer_cannot_request_fractional_return_quantity(self):
+        with self.assertRaises(ReturnRequestError):
+            create_return_request(
+                order_number=self.order.order_number, user=self.user,
+                reason="مرجوعی", items=[
+                    {"order_item_id": self.item.pk, "quantity": 1.5}
+                ],
+            )
+
     def test_customer_cannot_request_return_for_unpaid_order(self):
         self.order.status = "pending"
         self.order.save(update_fields=["status"])
