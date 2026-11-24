@@ -42,14 +42,14 @@ function localDateValue(date: Date) {
   return adjusted.toISOString().slice(0, 16);
 }
 
-function emptyForm(): CampaignForm {
-  const start = new Date();
-  const end = new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
+function emptyForm(now?: Date): CampaignForm {
+  const start = now;
+  const end = start ? new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000) : null;
   return {
     name: '', code: '', scope: 'product', product: '', category: '', brand: '',
     discount_type: 'percent', value: '10', maximum_discount_amount: '',
-    minimum_order_amount: '0', starts_at: localDateValue(start),
-    ends_at: localDateValue(end), priority: '100', is_stackable: false,
+    minimum_order_amount: '0', starts_at: start ? localDateValue(start) : '',
+    ends_at: end ? localDateValue(end) : '', priority: '100', is_stackable: false,
     first_purchase_only: false, max_uses: '', per_user_limit: '', is_active: true,
   };
 }
@@ -116,6 +116,10 @@ export default function DiscountsAdminPage() {
   }, [token]);
 
   useEffect(() => {
+    setForm((current) => current.starts_at ? current : emptyForm(new Date()));
+  }, []);
+
+  useEffect(() => {
     if (token && user?.is_staff) void load();
   }, [token, user, load]);
 
@@ -123,7 +127,7 @@ export default function DiscountsAdminPage() {
     setForm((current) => ({ ...current, [key]: value }));
 
   const reset = () => {
-    setForm(emptyForm());
+    setForm(emptyForm(new Date()));
     setEditingId(null);
   };
 
