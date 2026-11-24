@@ -16,6 +16,7 @@ from .models import (
     OrderDiscrepancy,
     ReturnRequest,
     ReturnRequestItem,
+    ReturnRequestHistory,
 )
 from .services import (
     InvalidOrderStatusTransition,
@@ -419,13 +420,24 @@ class OrderDiscrepancyAdmin(admin.ModelAdmin):
         return False
 
 
+class ReturnRequestHistoryInline(admin.TabularInline):
+    model = ReturnRequestHistory
+    extra = 0
+    can_delete = False
+    fields = ("old_status", "new_status", "changed_by", "note", "created_at")
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(ReturnRequest)
 class ReturnRequestAdmin(admin.ModelAdmin):
     list_display = ("order", "user", "status", "created_at", "reviewed_by")
     list_filter = ("status", "created_at")
     search_fields = ("order__order_number", "user__username", "reason")
     readonly_fields = ("order", "user", "reason", "status", "staff_note", "reviewed_by", "created_at", "updated_at")
-    inlines = [ReturnRequestItemInline]
+    inlines = [ReturnRequestItemInline, ReturnRequestHistoryInline]
 
     def has_add_permission(self, request):
         return False
