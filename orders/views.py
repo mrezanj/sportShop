@@ -409,8 +409,8 @@ def discrepancies_list(request):
             "previous_order_status": case.previous_order_status,
             "opened_by": case.opened_by_id,
             "resolved_by": case.resolved_by_id,
-            "created_at": case.created_at,
-            "resolved_at": case.resolved_at,
+            "created_at": str(case.created_at) if case.created_at else None,
+            "resolved_at": str(case.resolved_at) if case.resolved_at else None,
         }
         for case in queryset
     ])
