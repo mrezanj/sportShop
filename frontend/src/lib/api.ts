@@ -501,3 +501,134 @@ export function toAbsoluteUrl(url: string | null): string | null {
   const path = url.startsWith('/') ? url : '/' + url;
   return `${base}${path}`;
 }
+
+
+export interface InventorySummary {
+  sku_count: number;
+  low_stock_count: number;
+  physical_quantity: number;
+  reserved_quantity: number;
+  available_quantity: number;
+  pending_review_count: number;
+  pending_approval_count: number;
+}
+
+export interface InventoryStockRow {
+  variant_id: number;
+  sku: string;
+  product_name: string;
+  brand_name: string;
+  physical: number;
+  reserved: number;
+  available: number;
+  minimum_quantity: number;
+  low_stock: boolean;
+}
+
+export interface InventoryDocumentRow {
+  id: number;
+  document_number: string;
+  document_type: string;
+  status: string;
+  reference: string | null;
+  reason: string;
+  created_by_username: string | null;
+  reviewed_by_username: string | null;
+  approved_by_username: string | null;
+  item_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventoryDocumentItem {
+  id: number;
+  sku: string;
+  product_name: string;
+  batch_number: string | null;
+  batch_status: string | null;
+  batch_expiration_date: string | null;
+  quantity: number;
+  direction: string;
+  unit_cost: number | null;
+  reason: string;
+}
+
+export interface InventoryDocumentDetail extends InventoryDocumentRow {
+  items: InventoryDocumentItem[];
+}
+
+export interface InventoryDocumentLog {
+  id: number;
+  action: string;
+  from_status: string;
+  to_status: string;
+  actor_type: string;
+  actor_username: string | null;
+  note: string;
+  created_at: string;
+}
+
+async function inventoryRequest<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}/inventory/${path}`, {
+    ...init,
+    headers: {
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      Authorization: `Token ${token}`,
+      ...init?.headers,
+    },
+    cache: 'no-store',
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message =
+      data?.detail ||
+      (typeof data === 'object' ? Object.values(data).flat().find((v) => typeof v === 'string') : null) ||
+      'خطا در دریافت اطلاعات انبار.';
+    throw new Error(String(message));
+  }
+  return data as T;
+}
+
+export function fetchInventorySummary(token: string) {
+  return inventoryRequest<InventorySummary>('summary/', token);
+}
+
+export function fetchInventoryLowStock(token: string) {
+  return inventoryRequest<{ count: number; results: InventoryStockRow[] }>('low-stock/', token);
+}
+
+export function fetchInventoryThresholds(token: string) {
+  return inventoryRequest<InventoryStockRow[]>('thresholds/', token);
+}
+
+export function updateInventoryThreshold(token: string, variantId: number, minimumQuantity: number) {
+  return inventoryRequest<{ variant_id: number; sku: string; minimum_quantity: number }>(
+    `thresholds/${variantId}/`,
+    token,
+    { method: 'PUT', body: JSON.stringify({ minimum_quantity: minimumQuantity }) }
+  );
+}
+
+export function fetchInventoryDocuments(
+  token: string,
+  params: { page?: number; status?: string; type?: string; search?: string } = {}
+) {
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', String(params.page));
+  if (params.status) query.set('status', params.status);
+  if (params.type) query.set('type', params.type);
+  if (params.search) query.set('search', params.search);
+  const suffix = query.size ? `?${query.toString()}` : '';
+  return inventoryRequest<PaginatedResponse<InventoryDocumentRow>>(
+    `documents/${suffix}`,
+    token
+  );
+}
+
+export function fetchInventoryDocumentDetail(token: string, documentId: number) {
+  return inventoryRequest<InventoryDocumentDetail>(`documents/${documentId}/`, token);
+}
+
+export function fetchInventoryDocumentHistory(token: string, documentId: number) {
+  return inventoryRequest<InventoryDocumentLog[]>(`documents/${documentId}/history/`, token);
+}
