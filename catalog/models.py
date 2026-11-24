@@ -278,7 +278,10 @@ class ProductVariant(models.Model):
     )
 
     price = models.DecimalField(
-        max_digits=12, decimal_places=0, verbose_name="قیمت (تومان)"
+        max_digits=12,
+        decimal_places=0,
+        validators=[MinValueValidator(Decimal("1"))],
+        verbose_name="قیمت (تومان)",
     )
     stock = models.PositiveIntegerField(default=0, verbose_name="موجودی")
     is_active = models.BooleanField(default=True, verbose_name="فعال")
@@ -287,7 +290,14 @@ class ProductVariant(models.Model):
         verbose_name = "تنوع محصول"
         verbose_name_plural = "تنوع‌های محصول"
         unique_together = ["product", "flavor", "weight", "size", "color"]
+        permissions = [
+            ("can_manage_product_prices", "Can manage product prices"),
+        ]
         constraints = [
+            models.CheckConstraint(
+                condition=Q(price__gte=1),
+                name="variant_price_positive",
+            ),
             models.CheckConstraint(
                 condition=(
                     Q(
@@ -375,3 +385,64 @@ class ProductVariant(models.Model):
             )
 
         self.sku = candidate
+
+
+
+class ProductVariantPriceHistory(models.Model):
+    CHANGE_TYPE_CHOICES = [
+        ("manual", "تغییر دستی"),
+        ("bulk", "تغییر گروهی"),
+        ("import", "ورود فایل"),
+        ("initial", "قیمت اولیه"),
+    ]
+
+    variant = models.ForeignKey(
+        ProductVariant,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="price_history",
+        verbose_name="تنوع محصول",
+    )
+    sku = models.CharField(max_length=100, db_index=True, verbose_name="SKU")
+    product_name = models.CharField(max_length=200, verbose_name="نام محصول")
+    old_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
+        null=True,
+        blank=True,
+        verbose_name="قیمت قبلی",
+    )
+    new_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
+        validators=[MinValueValidator(Decimal("1"))],
+        verbose_name="قیمت جدید",
+    )
+    change_type = models.CharField(
+        max_length=20,
+        choices=CHANGE_TYPE_CHOICES,
+        default="manual",
+        verbose_name="نوع تغییر",
+    )
+    changed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="product_price_changes",
+        verbose_name="تغییردهنده",
+    )
+    note = models.CharField(max_length=500, blank=True, verbose_name="توضیحات")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان تغییر")
+
+    class Meta:
+        verbose_name = "سابقه تغییر قیمت"
+        verbose_name_plural = "سوابق تغییر قیمت"
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["sku", "created_at"], name="variant_price_hist_sku_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.sku}: {self.old_price or '—'} → {self.new_price}"

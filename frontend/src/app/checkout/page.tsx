@@ -33,6 +33,8 @@ export default function CheckoutPage() {
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [preview, setPreview] = useState<ShippingPreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [priceConfirmed, setPriceConfirmed] = useState(false);
+  const [quoteRefreshKey, setQuoteRefreshKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +80,7 @@ export default function CheckoutPage() {
     setSelectedMethodSlug('');
     setPreview(null);
     setPreviewError(null);
+    setPriceConfirmed(false);
 
     if (!form.province) {
       setLoadingCities(false);
@@ -151,6 +154,8 @@ export default function CheckoutPage() {
 
     setPreview(null);
     setPreviewError(null);
+    setPriceConfirmed(false);
+    setError(null);
 
     if (
       !token ||
@@ -206,6 +211,7 @@ export default function CheckoutPage() {
     form.province,
     form.city_code,
     selectedMethodSlug,
+    quoteRefreshKey,
   ]);
 
   const selectedMethod = shippingMethods.find(
@@ -269,10 +275,14 @@ export default function CheckoutPage() {
       return setError('ابتدا وارد حساب کاربری شوید.');
     }
 
-    if (loadingPreview || !preview) {
+    if (loadingPreview || !preview?.quote_token) {
       return setError(
         previewError || 'ابتدا باید محاسبه هزینه سفارش با موفقیت انجام شود.'
       );
+    }
+
+    if (!priceConfirmed) {
+      return setError('لطفاً مبلغ نهایی و جزئیات قیمت را بررسی و تأیید کنید.');
     }
 
     setSubmitting(true);
@@ -284,6 +294,7 @@ export default function CheckoutPage() {
             variant_id: i.variantId,
             quantity: i.quantity,
           })),
+          quote_token: preview.quote_token,
           shipping_method_slug: selectedMethodSlug,
           province: form.province,
           city_code: form.city_code,
@@ -300,7 +311,12 @@ export default function CheckoutPage() {
       // Keep the cart until payment succeeds.
       router.push(`/checkout/payment?order=${response.order_number}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'خطای نامشخص');
+      const message = err instanceof Error ? err.message : 'خطای نامشخص';
+      setError(message);
+      if (message.includes('پیش‌نمایش') || message.includes('قیمت') || message.includes('مبلغ نهایی')) {
+        setPriceConfirmed(false);
+        setQuoteRefreshKey((current) => current + 1);
+      }
       setSubmitting(false);
     }
   };
@@ -550,10 +566,16 @@ export default function CheckoutPage() {
                 >
                   <span className="truncate ml-2">
                     {i.productName} × {i.quantity}
+                    {preview?.items.some((quoted) => quoted.variant_id === i.variantId && quoted.unit_price !== i.price) && (
+                      <span className="mr-1 text-amber-700"> (قیمت به‌روز)</span>
+                    )}
                   </span>
 
                   <span className="whitespace-nowrap font-medium">
-                    {formatPrice(i.price * i.quantity)}
+                    {formatPrice(
+                      preview?.items.find((quoted) => quoted.variant_id === i.variantId)?.line_subtotal
+                      ?? i.price * i.quantity
+                    )}
                   </span>
                 </div>
               ))}
@@ -630,6 +652,21 @@ export default function CheckoutPage() {
               </div>
             </div>
 
+            {preview?.quote_token && (
+              <label className="mt-4 flex items-start gap-2 rounded-lg border border-pink-200 bg-white p-3 text-xs leading-6 text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={priceConfirmed}
+                  onChange={(event) => setPriceConfirmed(event.target.checked)}
+                  className="mt-1 accent-pink-800"
+                />
+                <span>
+                  مبلغ نهایی، قیمت روز کالاها، مالیات و هزینه‌های ارسال و بسته‌بندی را بررسی کردم و تأیید می‌کنم.
+                  <span className="block text-gray-500">اعتبار این پیش‌نمایش ۱۰ دقیقه است؛ پس از تغییر سبد یا اطلاعات ارسال باید دوباره تأیید کنید.</span>
+                </span>
+              </label>
+            )}
+
             {error && (
               <div className="mt-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
                 {error}
@@ -645,7 +682,8 @@ export default function CheckoutPage() {
                 loadingPreview ||
                 !form.city_code ||
                 !selectedMethodSlug ||
-                !preview
+                !preview ||
+                !priceConfirmed
               }
               className="w-full mt-4 bg-pink-800 hover:bg-pink-900 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors"
             >

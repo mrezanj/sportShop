@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
+from django.core import signing
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -15,6 +16,7 @@ from inventory.services import (
 )
 from locations.models import City
 from .models import (
+    CheckoutPriceQuote,
     Order,
     OrderItem,
     ShippingMethod,
@@ -112,6 +114,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "packaging_is_free",
             "subtotal",
             "vat_amount",
+            "discount_amount",
             "total_amount",
             "tracking_code",
             "notes",
@@ -142,12 +145,34 @@ class CreateOrderSerializer(serializers.Serializer):
         required=False,
         default="",
     )
+    quote_token = serializers.CharField(write_only=True, max_length=10000)
 
     def validate(self, data):
         if not data["items"]:
             raise serializers.ValidationError(
                 {"items": "سبد خرید خالی است."}
             )
+
+        try:
+            price_quote = signing.loads(
+                data["quote_token"],
+                salt="orders.checkout-price-quote",
+                max_age=600,
+            )
+        except signing.BadSignature:
+            raise serializers.ValidationError({
+                "quote_token": "پیش‌نمایش قیمت منقضی یا نامعتبر است؛ دوباره محاسبه کنید."
+            })
+
+        request = self.context.get("request")
+        if (
+            not request
+            or price_quote.get("user_id") != request.user.pk
+            or not price_quote.get("quote_id")
+        ):
+            raise serializers.ValidationError({
+                "quote_token": "پیش‌نمایش قیمت متعلق به این کاربر نیست."
+            })
 
         quantities = {}
 
@@ -267,6 +292,24 @@ class CreateOrderSerializer(serializers.Serializer):
                 }
             )
 
+        quoted_items = {
+            int(item["variant_id"]): int(item["quantity"])
+            for item in price_quote.get("items", [])
+        }
+        if quoted_items != quantities:
+            raise serializers.ValidationError({
+                "quote_token": "سبد خرید پس از محاسبه قیمت تغییر کرده است؛ دوباره محاسبه کنید."
+            })
+        if (
+            price_quote.get("province") != data["province"]
+            or price_quote.get("city_code") != city.code
+            or price_quote.get("shipping_method_slug") != method.slug
+        ):
+            raise serializers.ValidationError({
+                "quote_token": "اطلاعات ارسال پس از محاسبه قیمت تغییر کرده است؛ دوباره محاسبه کنید."
+            })
+
+        data["_price_quote"] = price_quote
         data["_quantities"] = quantities
         data["_method"] = method
         data["_city"] = city
@@ -279,6 +322,7 @@ class CreateOrderSerializer(serializers.Serializer):
         quantities = validated_data["_quantities"]
         method = validated_data["_method"]
         city = validated_data["_city"]
+        price_quote = validated_data["_price_quote"]
         now = timezone.now()
 
         reservation_minutes = getattr(
@@ -289,6 +333,26 @@ class CreateOrderSerializer(serializers.Serializer):
         expires_at = now + timedelta(minutes=reservation_minutes)
 
         with transaction.atomic():
+            quote_record = (
+                CheckoutPriceQuote.objects.select_for_update()
+                .filter(pk=price_quote.get("quote_id"), user=user)
+                .first()
+            )
+            signed_payload = {
+                key: value
+                for key, value in price_quote.items()
+                if key != "quote_id"
+            }
+            if (
+                quote_record is None
+                or quote_record.consumed_at is not None
+                or quote_record.expires_at <= now
+                or quote_record.payload != signed_payload
+            ):
+                raise serializers.ValidationError({
+                    "quote_token": "این پیش‌نمایش قبلاً استفاده شده یا منقضی است؛ دوباره محاسبه کنید."
+                })
+
             # Lock variants in a consistent order to prevent overselling.
             variants = list(
                 ProductVariant.objects.select_for_update()
@@ -306,6 +370,27 @@ class CreateOrderSerializer(serializers.Serializer):
                 variant.id: variant
                 for variant in variants
             }
+
+            # Recheck quoted SKU and price while variant rows are locked.
+            quoted_by_id = {
+                int(item["variant_id"]): item
+                for item in price_quote["items"]
+            }
+            for variant_id, quantity in quantities.items():
+                variant = variants_by_id[variant_id]
+                quoted = quoted_by_id.get(variant_id)
+                if (
+                    not quoted
+                    or int(quoted["quantity"]) != quantity
+                    or quoted["sku"] != variant.sku
+                    or Decimal(quoted["unit_price"]) != variant.price
+                ):
+                    raise serializers.ValidationError({
+                        "price_changed": (
+                            f"قیمت یا مشخصات {variant.product.name_fa} تغییر کرده است؛ "
+                            "پیش‌نمایش جدید را بررسی و تأیید کنید."
+                        )
+                    })
 
             # Recheck product availability after acquiring locks.
             for variant_id in quantities:
@@ -436,6 +521,35 @@ class CreateOrderSerializer(serializers.Serializer):
             shipping_cost = shipping_result["shipping_cost"]
             packaging_cost = shipping_result["packaging_cost"]
 
+            quoted_totals = {
+                "subtotal": int(subtotal),
+                "vat_amount": int(vat_amount),
+                "shipping_cost": int(shipping_cost),
+                "packaging_cost": int(packaging_cost),
+                "total_amount": int(
+                    subtotal + shipping_cost + packaging_cost + vat_amount
+                ),
+            }
+            if (
+                price_quote.get("vat_rate") != str(vat_rate)
+                or price_quote.get("shipping_snapshot") != shipping_snapshot
+            ):
+                raise serializers.ValidationError({
+                    "price_changed": (
+                        "مالیات یا شرایط ارسال تغییر کرده است؛ پیش‌نمایش جدید را "
+                        "بررسی و دوباره تأیید کنید."
+                    )
+                })
+
+            for field, current_value in quoted_totals.items():
+                if price_quote.get(field) != current_value:
+                    raise serializers.ValidationError({
+                        "price_changed": (
+                            "مبلغ نهایی سفارش تغییر کرده است؛ پیش‌نمایش جدید را "
+                            "بررسی و دوباره تأیید کنید."
+                        )
+                    })
+
             total = (
                 subtotal
                 + shipping_cost
@@ -470,6 +584,43 @@ class CreateOrderSerializer(serializers.Serializer):
                 shipping_calculation_snapshot=shipping_snapshot,
                 subtotal=subtotal,
                 vat_amount=vat_amount,
+                discount_amount=0,
+                pricing_snapshot={
+                    "version": 1,
+                    "quoted_at": price_quote.get("issued_at"),
+                    "items": [
+                        {
+                            "variant_id": item["variant_id"],
+                            "sku": item["sku"],
+                            "product_name": variants_by_id[int(item["variant_id"])].product.name_fa,
+                            "variant_label": " - ".join(filter(None, [
+                                variants_by_id[int(item["variant_id"])].flavor,
+                                variants_by_id[int(item["variant_id"])].weight,
+                                variants_by_id[int(item["variant_id"])].size,
+                                variants_by_id[int(item["variant_id"])].color,
+                                *[
+                                    f"{key}: {value}"
+                                    for key, value in variants_by_id[int(item["variant_id"])].attributes.items()
+                                ],
+                            ])),
+                            "quantity": item["quantity"],
+                            "unit_price": item["unit_price"],
+                            "discount_amount": "0",
+                            "line_subtotal": str(
+                                variants_by_id[int(item["variant_id"])].price
+                                * int(item["quantity"])
+                            ),
+                        }
+                        for item in price_quote["items"]
+                    ],
+                    "subtotal": str(subtotal),
+                    "vat_rate": str(vat_rate),
+                    "vat_amount": str(vat_amount),
+                    "shipping_cost": str(shipping_cost),
+                    "packaging_cost": str(packaging_cost),
+                    "discount_amount": "0",
+                    "total_amount": str(total),
+                },
                 total_amount=total,
                 notes=validated_data.get("notes", ""),
                 reservation_expires_at=expires_at,
@@ -532,5 +683,8 @@ class CreateOrderSerializer(serializers.Serializer):
                     raise serializers.ValidationError(
                         {"items": str(exc)}
                     ) from exc
+
+            quote_record.consumed_at = now
+            quote_record.save(update_fields=["consumed_at"])
 
             return order

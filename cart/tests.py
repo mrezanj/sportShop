@@ -148,7 +148,7 @@ class CartAPITests(APITestCase):
         )
 
     def checkout_payload(self):
-        return {
+        payload = {
             "shipping_method_slug": "test-shipping",
             "province": "tehran",
             "city_code": self.city.code,
@@ -159,6 +159,22 @@ class CartAPITests(APITestCase):
             "mobile": "09123456789",
             "notes": "",
         }
+        cart = Cart.objects.filter(user=self.user).first()
+        items = list(cart.items.values("variant_id", "quantity")) if cart else []
+        if items:
+            preview = self.client.post(
+                reverse("shipping-preview"),
+                {
+                    "items": items,
+                    "shipping_method_slug": payload["shipping_method_slug"],
+                    "province": payload["province"],
+                    "city_code": payload["city_code"],
+                },
+                format="json",
+            )
+            self.assertEqual(preview.status_code, 200, preview.data)
+            payload["quote_token"] = preview.data["quote_token"]
+        return payload
 
     def test_authenticated_user_can_view_empty_cart(self):
         response = self.client.get(self.cart_url)
@@ -435,12 +451,13 @@ class CartAPITests(APITestCase):
 
     def test_checkout_with_insufficient_stock_keeps_cart_items(self):
         self.add_item(quantity=2)
+        payload = self.checkout_payload()
 
         self.create_reservation(quantity=4)
 
         response = self.client.post(
             self.checkout_url,
-            self.checkout_payload(),
+            payload,
             format="json",
         )
 

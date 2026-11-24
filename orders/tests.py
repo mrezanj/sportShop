@@ -10,7 +10,7 @@ from orders.admin import OrderAdmin
 from django.contrib.auth.models import User, Permission
 from users.models import Profile
 from django.core.management import call_command
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -24,6 +24,7 @@ from inventory.models import (
 )
 from catalog.models import Brand, Category, Product, ProductVariant
 from orders.models import (
+    CheckoutPriceQuote,
     Order,
     OrderItem,
     OrderStatusHistory,
@@ -32,6 +33,7 @@ from orders.models import (
     StockReservation,
 )
 from orders.serializers import CreateOrderSerializer
+from orders.shipping_preview import ShippingPreviewSerializer
 from locations.testing import get_test_tehran_city
 from payments.models import Payment
 from orders.services import (
@@ -137,6 +139,18 @@ class CreateOrderReservationTests(TestCase):
         }
 
         request = SimpleNamespace(user=self.user)
+        preview_data = {
+            "items": items,
+            "shipping_method_slug": data["shipping_method_slug"],
+            "province": data["province"],
+            "city_code": data["city_code"],
+        }
+        preview = ShippingPreviewSerializer(
+            data=preview_data,
+            context={"request": request},
+        )
+        preview.is_valid(raise_exception=True)
+        data["quote_token"] = preview.validated_data["_result"]["quote_token"]
 
         return CreateOrderSerializer(
             data=data,
@@ -224,15 +238,6 @@ class CreateOrderReservationTests(TestCase):
         self.assertEqual(self.variant.stock, 5)
 
     def test_active_reservations_reduce_available_stock(self):
-        self.create_order(
-            [
-                {
-                    "variant_id": self.variant.id,
-                    "quantity": 3,
-                }
-            ]
-        )
-
         serializer = self.make_serializer(
             [
                 {
@@ -241,8 +246,16 @@ class CreateOrderReservationTests(TestCase):
                 }
             ]
         )
-
         serializer.is_valid(raise_exception=True)
+
+        self.create_order(
+            [
+                {
+                    "variant_id": self.variant.id,
+                    "quantity": 3,
+                }
+            ]
+        )
 
         with self.assertRaises(ValidationError):
             serializer.save()
@@ -461,6 +474,7 @@ class CreateOrderReservationTests(TestCase):
             product=restricted_product,
             price=Decimal("150000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
 
         batch = InventoryBatch.objects.create(
@@ -517,6 +531,145 @@ class CreateOrderReservationTests(TestCase):
         self.assertIn("items", serializer.errors)
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(StockReservation.objects.count(), 0)
+
+
+
+    def test_order_persists_immutable_price_snapshot(self):
+        order = self.create_order([
+            {"variant_id": self.variant.id, "quantity": 2},
+        ])
+
+        self.assertEqual(order.pricing_snapshot["subtotal"], "200000")
+        self.assertEqual(order.pricing_snapshot["items"][0]["sku"], self.variant.sku)
+        self.assertEqual(order.pricing_snapshot["items"][0]["unit_price"], "100000")
+        self.assertEqual(order.discount_amount, Decimal("0"))
+
+    def test_expired_quote_cannot_create_an_order(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        serializer.is_valid(raise_exception=True)
+        CheckoutPriceQuote.objects.filter(
+            user=self.user,
+            consumed_at__isnull=True,
+        ).update(expires_at=timezone.now() - timedelta(seconds=1))
+
+        with self.assertRaises(ValidationError) as raised:
+            serializer.save()
+
+        self.assertIn("quote_token", raised.exception.detail)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_consumed_quote_cannot_create_a_second_order(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        serializer.is_valid(raise_exception=True)
+        order = serializer.save()
+        self.assertTrue(order.pricing_snapshot)
+
+        replay = CreateOrderSerializer(
+            data=serializer.initial_data,
+            context={"request": SimpleNamespace(user=self.user)},
+        )
+        replay.is_valid(raise_exception=True)
+        with self.assertRaises(ValidationError) as raised:
+            replay.save()
+
+        self.assertIn("quote_token", raised.exception.detail)
+        self.assertEqual(Order.objects.count(), 1)
+
+    def test_order_item_snapshot_does_not_follow_future_catalog_price(self):
+        order = self.create_order([
+            {"variant_id": self.variant.id, "quantity": 2},
+        ])
+        item = order.items.get()
+        original_snapshot = order.pricing_snapshot.copy()
+
+        self.variant.price = Decimal("180000")
+        self.variant.save(update_fields=["price"])
+
+        item.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(item.price, Decimal("100000"))
+        self.assertEqual(order.pricing_snapshot, original_snapshot)
+        self.assertEqual(order.total_amount, Decimal("270000"))
+
+    def test_price_change_after_preview_requires_new_confirmation(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 2},
+        ])
+        self.variant.price = Decimal("125000")
+        self.variant.save(update_fields=["price"])
+
+        serializer.is_valid(raise_exception=True)
+        with self.assertRaises(ValidationError) as raised:
+            serializer.save()
+
+        self.assertIn("price_changed", raised.exception.detail)
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(StockReservation.objects.count(), 0)
+
+    def test_tampered_quote_is_rejected(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        payload = dict(serializer.initial_data)
+        token_parts = payload["quote_token"].split(":")
+        token_parts[0] = ("A" if token_parts[0][0] != "A" else "B") + token_parts[0][1:]
+        payload["quote_token"] = ":".join(token_parts)
+        tampered = CreateOrderSerializer(
+            data=payload,
+            context={"request": SimpleNamespace(user=self.user)},
+        )
+
+        self.assertFalse(tampered.is_valid())
+        self.assertIn("quote_token", tampered.errors)
+
+    def test_tax_rate_change_after_preview_requires_new_quote(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        serializer.is_valid(raise_exception=True)
+
+        with override_settings(VAT_RATE=0.11):
+            with self.assertRaises(ValidationError) as raised:
+                serializer.save()
+
+        self.assertIn("price_changed", raised.exception.detail)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_shipping_rate_change_after_preview_requires_new_quote(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        self.shipping_rate.cost = Decimal("60000")
+        self.shipping_rate.save(update_fields=["cost"])
+
+        serializer.is_valid(raise_exception=True)
+        with self.assertRaises(ValidationError) as raised:
+            serializer.save()
+
+        self.assertIn("price_changed", raised.exception.detail)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_quote_cannot_be_reused_by_another_user(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        serializer.is_valid(raise_exception=True)
+        other_user = User.objects.create_user(
+            username="other-quote-user",
+            password="test-password",
+        )
+        other_serializer = CreateOrderSerializer(
+            data={**serializer.initial_data},
+            context={"request": SimpleNamespace(user=other_user)},
+        )
+
+        self.assertFalse(other_serializer.is_valid())
+        self.assertIn("quote_token", other_serializer.errors)
+
 
 class CancelOrderTests(APITestCase):
     def setUp(self):

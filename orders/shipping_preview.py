@@ -1,5 +1,8 @@
 
+from datetime import timedelta
 from decimal import Decimal
+from django.core import signing
+from django.utils import timezone
 
 from django.conf import settings
 from rest_framework import serializers
@@ -11,7 +14,7 @@ from catalog.models import ProductVariant
 from inventory.services import get_variants_inventory
 from locations.models import City
 
-from .models import ShippingMethod
+from .models import CheckoutPriceQuote, ShippingMethod
 from .shipping import ShippingCalculationError, calculate_shipping
 
 
@@ -158,7 +161,54 @@ class ShippingPreviewSerializer(serializers.Serializer):
             + packaging_cost
         )
 
+        quote_payload = {
+            "user_id": self.context["request"].user.pk,
+            "items": [
+                {"variant_id": variant_id, "quantity": quantity,
+                 "sku": variants_by_id[variant_id].sku,
+                 "unit_price": str(variants_by_id[variant_id].price)}
+                for variant_id, quantity in sorted(quantities.items())
+            ],
+            "province": data["province"],
+            "city_code": city.code,
+            "shipping_method_slug": method.slug,
+            "subtotal": int(subtotal),
+            "vat_amount": int(vat_amount),
+            "shipping_cost": int(shipping_cost),
+            "packaging_cost": int(packaging_cost),
+            "total_amount": int(total_amount),
+            "vat_rate": str(vat_rate),
+            "shipping_snapshot": shipping_result["snapshot"],
+            "issued_at": int(timezone.now().timestamp()),
+        }
+        quote_record = CheckoutPriceQuote.objects.create(
+            user=self.context["request"].user,
+            payload=quote_payload,
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+        quote_token = signing.dumps(
+            {
+                **quote_payload,
+                "quote_id": str(quote_record.pk),
+            },
+            salt="orders.checkout-price-quote",
+            compress=True,
+        )
+
         data["_result"] = {
+            "quote_token": quote_token,
+            "items": [
+                {
+                    "variant_id": variant_id,
+                    "sku": variants_by_id[variant_id].sku,
+                    "product_name": variants_by_id[variant_id].product.name_fa,
+                    "quantity": quantity,
+                    "unit_price": int(variants_by_id[variant_id].price),
+                    "line_subtotal": int(variants_by_id[variant_id].price * quantity),
+                }
+                for variant_id, quantity in sorted(quantities.items())
+            ],
+            "quote_expires_in": 600,
             "subtotal": int(subtotal),
             "vat_amount": int(vat_amount),
             "shipping_cost": int(shipping_cost),
@@ -201,7 +251,10 @@ class ShippingPreviewSerializer(serializers.Serializer):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def shipping_preview(request):
-    serializer = ShippingPreviewSerializer(data=request.data)
+    serializer = ShippingPreviewSerializer(
+        data=request.data,
+        context={"request": request},
+    )
     serializer.is_valid(raise_exception=True)
 
     return Response({
