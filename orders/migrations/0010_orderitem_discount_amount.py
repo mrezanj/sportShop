@@ -20,6 +20,15 @@ class Migration(migrations.Migration):
                 verbose_name="تخفیف قلم سفارش",
             ),
         ),
+        migrations.AlterField(
+            model_name="orderitem",
+            name="subtotal",
+            field=models.DecimalField(
+                decimal_places=0,
+                max_digits=12,
+                verbose_name="جمع قبل از تخفیف",
+            ),
+        ),
         migrations.AddConstraint(
             model_name="orderitem",
             constraint=models.CheckConstraint(
