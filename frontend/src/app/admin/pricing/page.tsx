@@ -56,7 +56,7 @@ export default function PricingAdminPage() {
     event.preventDefault();
     if (!token) return;
     const rows = rowsText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const items = [];
+    const items: { sku: string; value: number }[] = [];
     for (const [index, line] of rows.entries()) {
       const [skuRaw, valueRaw] = line.split(/[;,\t]/, 2);
       const sku = (skuRaw || '').trim();
