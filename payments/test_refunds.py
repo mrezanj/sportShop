@@ -115,3 +115,7 @@ class RefundWorkflowTests(TestCase):
         self.assertEqual(completed.pk, repeated.pk)
         self.assertEqual(repeated.status, "succeeded")
         self.assertEqual(repeated.provider_reference, "REFUND-123")
+        self.assertEqual(list(repeated.history.values_list("new_status", flat=True)), ["requested", "approved", "processing", "succeeded"])
+        self.return_request.refresh_from_db()
+        self.assertEqual(self.return_request.status, "closed")
+        self.assertEqual(list(self.return_request.history.values_list("new_status", flat=True)), ["closed"])
