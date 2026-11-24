@@ -5,6 +5,7 @@ import django.core.validators
 class Migration(migrations.Migration):
 
     dependencies = [
+        ("catalog", "0008_discount_campaign"),
         ("orders", "0009_checkout_price_quote"),
     ]
 
