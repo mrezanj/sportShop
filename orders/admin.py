@@ -369,6 +369,9 @@ class ShippingConfigurationAdmin(admin.ModelAdmin):
 
 @admin.register(CheckoutPriceQuote)
 class CheckoutPriceQuoteAdmin(admin.ModelAdmin):
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
     list_display = ("id", "user", "expires_at", "consumed_at", "created_at")
     list_filter = ("expires_at", "consumed_at")
     search_fields = ("id", "user__username")
