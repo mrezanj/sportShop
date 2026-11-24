@@ -64,6 +64,22 @@ class InventoryDashboardAPITests(TestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["document_number"], "DASH-DOC-001")
 
+    def test_document_create_endpoint_remains_backward_compatible(self):
+        creator_permission = Permission.objects.get(codename="can_create_inventory_document")
+        self.user.user_permissions.add(creator_permission)
+        self.client.force_authenticate(self.user)
+        response = self.client.post(
+            "/api/inventory/documents/",
+            {
+                "document_number": "DASH-CREATED-001",
+                "document_type": "inbound",
+                "reason": "Compatibility test",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["document_number"], "DASH-CREATED-001")
+
     def test_document_list_rejects_invalid_filter(self):
         self.client.force_authenticate(self.user)
         response = self.client.get("/api/inventory/documents/?status=unknown")

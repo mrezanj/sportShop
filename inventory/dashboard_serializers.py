@@ -4,10 +4,6 @@ from .models import InventoryDocument, InventoryDocumentItem, InventoryDocumentL
 
 
 class InventoryDocumentListSerializer(serializers.ModelSerializer):
-    source_order_id = serializers.IntegerField(read_only=True, allow_null=True)
-    created_by_id = serializers.IntegerField(read_only=True, allow_null=True)
-    reviewed_by_id = serializers.IntegerField(read_only=True, allow_null=True)
-    approved_by_id = serializers.IntegerField(read_only=True, allow_null=True)
     created_by_username = serializers.CharField(
         source="created_by.username", read_only=True, allow_null=True
     )
@@ -32,8 +28,6 @@ class InventoryDocumentListSerializer(serializers.ModelSerializer):
 
 
 class InventoryDocumentItemReadSerializer(serializers.ModelSerializer):
-    variant_id = serializers.IntegerField(read_only=True)
-    batch_id = serializers.IntegerField(read_only=True, allow_null=True)
     sku = serializers.CharField(source="variant.sku", read_only=True)
     product_name = serializers.CharField(source="variant.product.name_fa", read_only=True)
     batch_number = serializers.CharField(
@@ -64,7 +58,6 @@ class InventoryDocumentDetailSerializer(InventoryDocumentListSerializer):
 
 
 class InventoryDocumentLogSerializer(serializers.ModelSerializer):
-    actor_id = serializers.IntegerField(read_only=True, allow_null=True)
     actor_username = serializers.CharField(
         source="actor.username", read_only=True, allow_null=True
     )
