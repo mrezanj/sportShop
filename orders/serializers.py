@@ -65,6 +65,8 @@ class ShippingMethodSerializer(serializers.ModelSerializer):
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
+    final_subtotal = serializers.SerializerMethodField()
+
     class Meta:
         model = OrderItem
         fields = [
@@ -76,7 +78,12 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "price",
             "quantity",
             "subtotal",
+            "discount_amount",
+            "final_subtotal",
         ]
+
+    def get_final_subtotal(self, obj):
+        return obj.subtotal - obj.discount_amount
 
 
 class OrderSerializer(serializers.ModelSerializer):
