@@ -281,3 +281,136 @@ def cancel_order(request, order_number):
                 "status": order.status,
             }
         )
+
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def return_requests(request):
+    from .models import ReturnRequest
+    from .return_services import create_return_request, ReturnRequestError
+    from .return_serializers import ReturnRequestSerializer
+
+    if request.method == "GET":
+        queryset = ReturnRequest.objects.all() if request.user.has_perm("orders.can_review_return_requests") else ReturnRequest.objects.filter(user=request.user)
+        queryset = queryset.prefetch_related("items")
+        return Response(ReturnRequestSerializer(queryset, many=True).data)
+
+    try:
+        result = create_return_request(
+            order_number=request.data.get("order_number", ""),
+            user=request.user,
+            reason=request.data.get("reason", ""),
+            items=request.data.get("items", []),
+        )
+    except Order.DoesNotExist:
+        return Response({"detail": "سفارش یافت نشد."}, status=404)
+    except ReturnRequestError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    return Response(ReturnRequestSerializer(result).data, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def review_return(request, request_id):
+    from .return_services import review_return_request, ReturnRequestError
+    from .return_serializers import ReturnRequestSerializer
+    if not request.user.has_perm("orders.can_review_return_requests"):
+        return Response({"detail": "اجازه بررسی درخواست مرجوعی را ندارید."}, status=403)
+    from .models import ReturnRequest
+    try:
+        result = review_return_request(
+            request_id=request_id,
+            actor=request.user,
+            decision=request.data.get("decision", ""),
+            note=request.data.get("note", ""),
+        )
+    except ReturnRequest.DoesNotExist:
+        return Response({"detail": "درخواست مرجوعی یافت نشد."}, status=404)
+    except ReturnRequestError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    return Response(ReturnRequestSerializer(result).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def receive_return(request, request_id):
+    from .return_services import mark_return_received, ReturnRequestError
+    from .return_serializers import ReturnRequestSerializer
+    if not request.user.has_perm("orders.can_review_return_requests"):
+        return Response({"detail": "اجازه ثبت دریافت مرجوعی را ندارید."}, status=403)
+    from .models import ReturnRequest
+    try:
+        result = mark_return_received(
+            request_id=request_id, actor=request.user, note=request.data.get("note", "")
+        )
+    except ReturnRequest.DoesNotExist:
+        return Response({"detail": "درخواست مرجوعی یافت نشد."}, status=404)
+    except ReturnRequestError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    return Response(ReturnRequestSerializer(result).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def open_discrepancy(request, order_number):
+    from .discrepancy_services import open_order_discrepancy, DiscrepancyError
+    if not request.user.has_perm("orders.can_manage_order_discrepancies"):
+        return Response({"detail": "اجازه ثبت مغایرت سفارش را ندارید."}, status=403)
+    try:
+        order = Order.objects.get(order_number=order_number)
+        case = open_order_discrepancy(
+            order_id=order.pk, reason=request.data.get("reason", ""),
+            actor=request.user,
+        )
+    except Order.DoesNotExist:
+        return Response({"detail": "سفارش یافت نشد."}, status=404)
+    except DiscrepancyError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    return Response({"id": case.pk, "status": case.status, "order_number": order_number}, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def resolve_discrepancy(request, case_id):
+    from .discrepancy_services import resolve_order_discrepancy, DiscrepancyError
+    from .models import OrderDiscrepancy
+    if not request.user.has_perm("orders.can_manage_order_discrepancies"):
+        return Response({"detail": "اجازه رسیدگی به مغایرت سفارش را ندارید."}, status=403)
+    try:
+        case = resolve_order_discrepancy(
+            case_id=case_id, resolution=request.data.get("resolution", ""),
+            actor=request.user,
+        )
+    except OrderDiscrepancy.DoesNotExist:
+        return Response({"detail": "پرونده مغایرت یافت نشد."}, status=404)
+    except DiscrepancyError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    return Response({"id": case.pk, "status": case.status, "order_status": case.order.status})
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def discrepancies_list(request):
+    from .models import OrderDiscrepancy
+    if not request.user.has_perm("orders.can_manage_order_discrepancies"):
+        return Response({"detail": "اجازه مشاهده پرونده‌های مغایرت را ندارید."}, status=403)
+    queryset = OrderDiscrepancy.objects.select_related(
+        "order", "opened_by", "resolved_by"
+    ).order_by("-created_at")
+    return Response([
+        {
+            "id": case.pk,
+            "order_number": case.order.order_number,
+            "status": case.status,
+            "reason": case.reason,
+            "resolution": case.resolution,
+            "previous_order_status": case.previous_order_status,
+            "opened_by": case.opened_by_id,
+            "resolved_by": case.resolved_by_id,
+            "created_at": str(case.created_at) if case.created_at else None,
+            "resolved_at": str(case.resolved_at) if case.resolved_at else None,
+        }
+        for case in queryset
+    ])

@@ -266,6 +266,7 @@ class Order(models.Model):
         ("shipped", "ارسال شده"),
         ("delivered", "تحویل شده"),
         ("cancelled", "لغو شده"),
+        ("discrepancy", "دارای مغایرت"),
     ]
 
     order_number = models.CharField(
@@ -618,3 +619,179 @@ class CheckoutPriceQuote(models.Model):
 
     def __str__(self):
         return f"{self.user_id} - {self.id}"
+
+
+
+class OrderDiscrepancy(models.Model):
+    STATUS_CHOICES = [
+        ("open", "در حال بررسی"),
+        ("resolved", "رسیدگی‌شده"),
+    ]
+
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.PROTECT,
+        related_name="discrepancies",
+        verbose_name="سفارش",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="open",
+        verbose_name="وضعیت پرونده",
+    )
+    reason = models.TextField(verbose_name="شرح مغایرت")
+    resolution = models.TextField(blank=True, verbose_name="نتیجه رسیدگی")
+    previous_order_status = models.CharField(
+        max_length=20,
+        choices=Order.STATUS_CHOICES,
+        blank=True,
+        verbose_name="وضعیت سفارش پیش از توقف",
+    )
+    opened_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="opened_order_discrepancies",
+        verbose_name="ثبت‌کننده",
+    )
+    resolved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_order_discrepancies",
+        verbose_name="رسیدگی‌کننده",
+    )
+    created_at = JalaliDateTimeField(auto_now_add=True, verbose_name="زمان ثبت")
+    resolved_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان رسیدگی")
+
+    class Meta:
+        verbose_name = "مغایرت سفارش"
+        verbose_name_plural = "مغایرت‌های سفارش"
+        ordering = ["-created_at", "-id"]
+        permissions = [
+            ("can_manage_order_discrepancies", "Can manage order discrepancies"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order"],
+                condition=models.Q(status="open"),
+                name="unique_open_order_discrepancy",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.order.order_number} - {self.get_status_display()}"
+
+
+class ReturnRequest(models.Model):
+    STATUS_CHOICES = [
+        ("requested", "درخواست‌شده"),
+        ("approved", "تأییدشده"),
+        ("rejected", "ردشده"),
+        ("received", "دریافت و بررسی‌شده"),
+        ("closed", "بسته‌شده"),
+    ]
+
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.PROTECT,
+        related_name="return_requests",
+        verbose_name="سفارش",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="return_requests",
+        verbose_name="مشتری",
+    )
+    reason = models.TextField(verbose_name="علت درخواست")
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="requested",
+        verbose_name="وضعیت",
+    )
+    staff_note = models.TextField(blank=True, verbose_name="یادداشت بررسی")
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_return_requests",
+        verbose_name="بررسی‌کننده",
+    )
+    created_at = JalaliDateTimeField(auto_now_add=True, verbose_name="زمان درخواست")
+    updated_at = JalaliDateTimeField(auto_now=True, verbose_name="آخرین بروزرسانی")
+
+    class Meta:
+        verbose_name = "درخواست مرجوعی"
+        verbose_name_plural = "درخواست‌های مرجوعی"
+        ordering = ["-created_at", "-id"]
+        permissions = [
+            ("can_review_return_requests", "Can review return requests"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order"],
+                condition=models.Q(status__in=["requested", "approved", "received"]),
+                name="unique_active_return_request_per_order",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.order.order_number} - {self.get_status_display()}"
+
+
+class ReturnRequestItem(models.Model):
+    return_request = models.ForeignKey(
+        ReturnRequest,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name="درخواست مرجوعی",
+    )
+    order_item = models.ForeignKey(
+        OrderItem,
+        on_delete=models.PROTECT,
+        related_name="return_request_items",
+        verbose_name="قلم سفارش",
+    )
+    quantity = models.PositiveIntegerField(verbose_name="تعداد درخواستی")
+
+    class Meta:
+        verbose_name = "قلم مرجوعی"
+        verbose_name_plural = "اقلام مرجوعی"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["return_request", "order_item"],
+                name="unique_return_request_order_item",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(quantity__gt=0),
+                name="return_request_item_quantity_positive",
+            ),
+        ]
+
+
+
+class ReturnRequestHistory(models.Model):
+    return_request = models.ForeignKey(
+        ReturnRequest,
+        on_delete=models.CASCADE,
+        related_name="history",
+        verbose_name="درخواست مرجوعی",
+    )
+    old_status = models.CharField(max_length=20, blank=True, default="")
+    new_status = models.CharField(max_length=20, choices=ReturnRequest.STATUS_CHOICES)
+    changed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="return_request_status_changes",
+    )
+    note = models.TextField(blank=True)
+    created_at = JalaliDateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        verbose_name = "تاریخچه مرجوعی"
+        verbose_name_plural = "تاریخچه مرجوعی‌ها"

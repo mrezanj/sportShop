@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { fetchOrderDetail, type OrderDetail } from '@/lib/api';
+import { createReturnRequest, fetchOrderDetail, fetchReturnRequests, type OrderDetail, type ReturnRequestRecord } from '@/lib/api';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -14,6 +14,7 @@ const STATUS_COLORS: Record<string, string> = {
   shipped: 'bg-indigo-100 text-indigo-800 border-indigo-200',
   delivered: 'bg-green-100 text-green-800 border-green-200',
   cancelled: 'bg-red-100 text-red-800 border-red-200',
+  discrepancy: 'bg-orange-100 text-orange-800 border-orange-200',
 };
 
 export default function OrderDetailPage() {
@@ -39,6 +40,11 @@ function OrderDetailContent() {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [returnReason, setReturnReason] = useState('');
+  const [returnQuantities, setReturnQuantities] = useState<Record<number, number>>({});
+  const [returnRequest, setReturnRequest] = useState<ReturnRequestRecord | null>(null);
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
+  const [returnMessage, setReturnMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -50,10 +56,42 @@ function OrderDetailContent() {
     if (!token || !orderNumber) return;
 
     fetchOrderDetail(orderNumber, token)
-      .then(setOrder)
+      .then(async (result) => {
+        setOrder(result);
+        try {
+          const requests = await fetchReturnRequests(token);
+          setReturnRequest(requests.find((item) => item.order_id === result.id && ["requested", "approved", "received"].includes(item.status)) ?? null);
+        } catch {
+          // The order remains usable if return history cannot be loaded.
+        }
+      })
       .catch(() => setError('سفارش یافت نشد.'))
       .finally(() => setLoading(false));
   }, [token, orderNumber]);
+
+  async function submitReturnRequest() {
+    if (!token || !order) return;
+    const items = order.items
+      .map((item) => ({ order_item_id: item.id, quantity: returnQuantities[item.id] || 0 }))
+      .filter((item) => item.quantity > 0);
+    if (!returnReason.trim() || items.length === 0) {
+      setReturnMessage('علت مرجوعی و حداقل یک قلم با تعداد معتبر را وارد کنید.');
+      return;
+    }
+    setReturnSubmitting(true);
+    setReturnMessage(null);
+    try {
+      const result = await createReturnRequest(order.order_number, returnReason, items, token);
+      setReturnRequest(result);
+      setReturnMessage('درخواست مرجوعی با موفقیت ثبت شد و در انتظار بررسی است.');
+      setReturnReason('');
+      setReturnQuantities({});
+    } catch (err) {
+      setReturnMessage(err instanceof Error ? err.message : 'ثبت درخواست ناموفق بود.');
+    } finally {
+      setReturnSubmitting(false);
+    }
+  }
 
   if (authLoading || loading) {
     return (
@@ -304,6 +342,60 @@ function OrderDetailContent() {
             </div>
           </div>
         </div>
+
+        {['paid', 'processing', 'shipped', 'delivered'].includes(order.status) && (
+          <section className="border border-gray-200 rounded-xl p-5 mt-6">
+            <h2 className="font-bold text-gray-900 mb-2">درخواست مرجوعی</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              اقلام و تعداد موردنظر را مشخص کنید. درخواست پس از ثبت توسط پشتیبانی بررسی می‌شود.
+            </p>
+            {returnRequest ? (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm">
+                درخواست مرجوعی شما ثبت شده است: {returnRequest.status_display}
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3 mb-4">
+                  {order.items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-gray-800">{item.product_name} (حداکثر {item.quantity.toLocaleString('fa-IR')})</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={item.quantity}
+                        value={returnQuantities[item.id] || ''}
+                        onChange={(event) => {
+                          const value = Math.max(0, Math.min(item.quantity, Number(event.target.value) || 0));
+                          setReturnQuantities((current) => ({ ...current, [item.id]: value }));
+                        }}
+                        aria-label={`تعداد مرجوعی ${item.product_name}`}
+                        className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-center"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="return-reason">علت مرجوعی</label>
+                <textarea
+                  id="return-reason"
+                  value={returnReason}
+                  onChange={(event) => setReturnReason(event.target.value)}
+                  rows={3}
+                  className="w-full rounded-lg border border-gray-300 p-3 text-sm"
+                  placeholder="علت درخواست را توضیح دهید..."
+                />
+                <button
+                  type="button"
+                  onClick={submitReturnRequest}
+                  disabled={returnSubmitting}
+                  className="mt-3 rounded-lg bg-pink-800 px-5 py-2 text-sm font-semibold text-white hover:bg-pink-900 disabled:opacity-50"
+                >
+                  {returnSubmitting ? 'در حال ثبت...' : 'ثبت درخواست مرجوعی'}
+                </button>
+              </>
+            )}
+            {returnMessage && <p className="mt-3 text-sm text-gray-700" role="status">{returnMessage}</p>}
+          </section>
+        )}
 
         {order.notes && (
           <div className="border border-gray-200 rounded-xl p-4 mt-4">

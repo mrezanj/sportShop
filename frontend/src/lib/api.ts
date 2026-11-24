@@ -364,6 +364,7 @@ export async function createOrder(
 }
 
 export interface OrderItemDetail {
+  id: number;
   product_name: string;
   product_slug: string;
   brand_name: string;
@@ -429,6 +430,49 @@ export async function fetchOrderDetail(
   });
   if (!res.ok) throw new Error('Order not found');
   return res.json();
+}
+
+export interface ReturnRequestItemPayload {
+  order_item_id: number;
+  quantity: number;
+}
+
+export interface ReturnRequestRecord {
+  id: number;
+  order_id: number;
+  reason: string;
+  status: string;
+  status_display: string;
+  staff_note: string;
+  items: ReturnRequestItemPayload[];
+  created_at: string;
+  updated_at: string;
+}
+
+export async function createReturnRequest(
+  orderNumber: string,
+  reason: string,
+  items: ReturnRequestItemPayload[],
+  token: string
+): Promise<ReturnRequestRecord> {
+  const res = await fetch(`${API_URL}/orders/returns/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Token ${token}` },
+    body: JSON.stringify({ order_number: orderNumber, reason, items }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'ثبت درخواست مرجوعی انجام نشد.');
+  return data;
+}
+
+export async function fetchReturnRequests(token: string): Promise<ReturnRequestRecord[]> {
+  const res = await fetch(`${API_URL}/orders/returns/`, {
+    headers: { Authorization: `Token ${token}` },
+    cache: 'no-store',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'دریافت درخواست‌های مرجوعی ناموفق بود.');
+  return data;
 }
 
 export interface InitiatePaymentResponse {

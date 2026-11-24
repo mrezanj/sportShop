@@ -1271,3 +1271,87 @@ def mock_payment_page(request, payment_id):
         "payments/mock_payment.html",
         {"payment": payment, "order": order},
     )
+
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def create_refund(request):
+    from .refund_services import create_refund, RefundError
+    from orders.models import ReturnRequest
+    if not request.user.has_perm("payments.can_manage_refunds"):
+        return Response({"detail": "اجازه مدیریت بازپرداخت را ندارید."}, status=403)
+    if request.method == "GET":
+        from .models import Refund
+        queryset = Refund.objects.select_related(
+            "return_request__order", "payment", "requested_by", "processed_by"
+        ).prefetch_related("history").order_by("-created_at")
+        return Response([
+            {
+                "id": refund.pk,
+                "order_number": refund.return_request.order.order_number,
+                "return_request_id": refund.return_request_id,
+                "payment_id": refund.payment_id,
+                "amount": refund.amount,
+                "status": refund.status,
+                "provider_reference": refund.provider_reference,
+                "provider_response": refund.provider_response,
+                "idempotency_key": str(refund.idempotency_key),
+                "created_at": str(refund.created_at) if refund.created_at else None,
+                "completed_at": str(refund.completed_at) if refund.completed_at else None,
+                "history": [
+                    {
+                        "old_status": entry.old_status,
+                        "new_status": entry.new_status,
+                        "provider_reference": entry.provider_reference,
+                        "note": entry.note,
+                        "created_at": str(entry.created_at) if entry.created_at else None,
+                    }
+                    for entry in refund.history.all()
+                ],
+            }
+            for refund in queryset
+        ])
+    try:
+        refund = create_refund(
+            return_request_id=request.data.get("return_request_id"),
+            amount=request.data.get("amount"),
+            actor=request.user,
+            idempotency_key=request.data.get("idempotency_key"),
+        )
+    except ReturnRequest.DoesNotExist:
+        return Response({"detail": "درخواست مرجوعی یافت نشد."}, status=404)
+    except (RefundError, TypeError, ValueError) as exc:
+        return Response({"detail": str(exc)}, status=400)
+    return Response({
+        "id": refund.pk, "amount": refund.amount, "status": refund.status,
+        "idempotency_key": str(refund.idempotency_key),
+    }, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def transition_refund(request, refund_id):
+    from .refund_services import transition_refund as apply_transition, RefundError
+    from .models import Refund
+    if not request.user.has_perm("payments.can_manage_refunds"):
+        return Response({"detail": "اجازه مدیریت بازپرداخت را ندارید."}, status=403)
+    try:
+        refund = apply_transition(
+            refund_id=refund_id,
+            actor=request.user,
+            decision=request.data.get("decision", ""),
+            provider_reference=request.data.get("provider_reference", ""),
+            provider_response=request.data.get("provider_response", {}),
+            note=request.data.get("note", ""),
+        )
+    except Refund.DoesNotExist:
+        return Response({"detail": "بازپرداخت یافت نشد."}, status=404)
+    except RefundError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    return Response({
+        "id": refund.pk, "amount": refund.amount, "status": refund.status,
+        "provider_reference": refund.provider_reference,
+        "provider_response": refund.provider_response,
+        "completed_at": str(refund.completed_at) if refund.completed_at else None,
+    })
