@@ -22,6 +22,7 @@ export interface ShippingPreviewResponse {
     product_name: string;
     quantity: number;
     unit_price: number;
+    discount_amount: number;
     line_subtotal: number;
   }[];
   subtotal: number;
