@@ -1274,13 +1274,44 @@ def mock_payment_page(request, payment_id):
 
 
 
-@api_view(["POST"])
+@api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def create_refund(request):
     from .refund_services import create_refund, RefundError
     from orders.models import ReturnRequest
     if not request.user.has_perm("payments.can_manage_refunds"):
-        return Response({"detail": "اجازه ثبت بازپرداخت را ندارید."}, status=403)
+        return Response({"detail": "اجازه مدیریت بازپرداخت را ندارید."}, status=403)
+    if request.method == "GET":
+        from .models import Refund
+        queryset = Refund.objects.select_related(
+            "return_request__order", "payment", "requested_by", "processed_by"
+        ).prefetch_related("history").order_by("-created_at")
+        return Response([
+            {
+                "id": refund.pk,
+                "order_number": refund.return_request.order.order_number,
+                "return_request_id": refund.return_request_id,
+                "payment_id": refund.payment_id,
+                "amount": refund.amount,
+                "status": refund.status,
+                "provider_reference": refund.provider_reference,
+                "provider_response": refund.provider_response,
+                "idempotency_key": str(refund.idempotency_key),
+                "created_at": refund.created_at,
+                "completed_at": refund.completed_at,
+                "history": [
+                    {
+                        "old_status": entry.old_status,
+                        "new_status": entry.new_status,
+                        "provider_reference": entry.provider_reference,
+                        "note": entry.note,
+                        "created_at": entry.created_at,
+                    }
+                    for entry in refund.history.all()
+                ],
+            }
+            for refund in queryset
+        ])
     try:
         refund = create_refund(
             return_request_id=request.data.get("return_request_id"),
