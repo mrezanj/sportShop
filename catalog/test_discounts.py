@@ -230,6 +230,7 @@ class DiscountCalculationTests(TestCase):
         self.campaign(
             code="FUTURE",
             starts_at=self.now + timedelta(days=1),
+            ends_at=self.now + timedelta(days=2),
         )
         with self.assertRaises(ValidationError):
             self.calculate(code="FUTURE")
