@@ -543,6 +543,41 @@ class CreateOrderReservationTests(TestCase):
         self.assertEqual(order.pricing_snapshot["items"][0]["unit_price"], "100000")
         self.assertEqual(order.discount_amount, Decimal("0"))
 
+    def test_consumed_quote_cannot_create_a_second_order(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        serializer.is_valid(raise_exception=True)
+        order = serializer.save()
+        self.assertTrue(order.pricing_snapshot)
+
+        replay = CreateOrderSerializer(
+            data=serializer.initial_data,
+            context={"request": SimpleNamespace(user=self.user)},
+        )
+        replay.is_valid(raise_exception=True)
+        with self.assertRaises(ValidationError) as raised:
+            replay.save()
+
+        self.assertIn("quote_token", raised.exception.detail)
+        self.assertEqual(Order.objects.count(), 1)
+
+    def test_order_item_snapshot_does_not_follow_future_catalog_price(self):
+        order = self.create_order([
+            {"variant_id": self.variant.id, "quantity": 2},
+        ])
+        item = order.items.get()
+        original_snapshot = order.pricing_snapshot.copy()
+
+        self.variant.price = Decimal("180000")
+        self.variant.save(update_fields=["price"])
+
+        item.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(item.price, Decimal("100000"))
+        self.assertEqual(order.pricing_snapshot, original_snapshot)
+        self.assertEqual(order.total_amount, Decimal("270000"))
+
     def test_price_change_after_preview_requires_new_confirmation(self):
         serializer = self.make_serializer([
             {"variant_id": self.variant.id, "quantity": 2},
