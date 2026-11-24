@@ -146,7 +146,7 @@ export default function InventoryDashboardPage() {
     try {
       await updateInventoryThreshold(token, row.variant_id, value);
       setThresholdDrafts(prev => ({ ...prev, [row.variant_id]: String(value) }));
-      setNotice(\`حداقل موجودی \${row.sku} ذخیره شد.\`);
+      setNotice(`حداقل موجودی ${row.sku} ذخیره شد.`);
       await loadDashboard();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : 'ذخیره حداقل موجودی انجام نشد.');
@@ -174,7 +174,7 @@ export default function InventoryDashboardPage() {
     }
   };
 
-  const addItem = async (event: React.FormEvent<HTMLFormElement>) => {
+  const addItem = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!token || !selected) return;
     const quantity = Number(itemForm.quantity);
@@ -315,7 +315,7 @@ export default function InventoryDashboardPage() {
         <section className="rounded-2xl border border-pink-100 bg-white p-4 shadow-sm sm:p-6">
           <div className="mb-4"><h2 className="text-xl">مدیریت حداقل موجودی SKU</h2><p className="mt-1 text-xs text-gray-500">تغییر حداقل موجودی با مجوز مدیر انجام می‌شود.</p></div>
           <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b border-gray-100 text-right text-gray-500"><th className="p-3">SKU / محصول</th><th className="p-3">قابل فروش</th><th className="p-3">حداقل فعلی</th><th className="p-3">حداقل جدید</th><th className="p-3">عملیات</th></tr></thead>
-            <tbody>{thresholds.slice(0, 30).map(row => <tr key={row.variant_id} className="border-b border-gray-50 last:border-0"><td className="p-3"><strong className="block text-gray-800">{row.sku}</strong><span className="text-xs text-gray-500">{row.product_name}</span></td><td className="p-3 tabular-nums">{number(row.available)}</td><td className="p-3 tabular-nums">{number(row.minimum_quantity)}</td><td className="p-3"><input aria-label={\`حداقل موجودی \${row.sku}\`} inputMode="numeric" value={thresholdDrafts[row.variant_id] ?? String(row.minimum_quantity)} onChange={e => setThresholdDrafts(prev => ({...prev, [row.variant_id]: e.target.value}))} className="w-24 rounded-lg border border-gray-200 px-3 py-2 outline-none focus:border-pink-500" /></td><td className="p-3"><button disabled={!canManageThreshold || savingThreshold === row.variant_id} onClick={() => void saveThreshold(row)} className="rounded-lg bg-pink-800 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{savingThreshold === row.variant_id ? 'در حال ذخیره' : 'ذخیره'}</button></td></tr>)}</tbody>
+            <tbody>{thresholds.slice(0, 30).map(row => <tr key={row.variant_id} className="border-b border-gray-50 last:border-0"><td className="p-3"><strong className="block text-gray-800">{row.sku}</strong><span className="text-xs text-gray-500">{row.product_name}</span></td><td className="p-3 tabular-nums">{number(row.available)}</td><td className="p-3 tabular-nums">{number(row.minimum_quantity)}</td><td className="p-3"><input aria-label={`حداقل موجودی ${row.sku}`} inputMode="numeric" value={thresholdDrafts[row.variant_id] ?? String(row.minimum_quantity)} onChange={e => setThresholdDrafts(prev => ({...prev, [row.variant_id]: e.target.value}))} className="w-24 rounded-lg border border-gray-200 px-3 py-2 outline-none focus:border-pink-500" /></td><td className="p-3"><button disabled={!canManageThreshold || savingThreshold === row.variant_id} onClick={() => void saveThreshold(row)} className="rounded-lg bg-pink-800 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{savingThreshold === row.variant_id ? 'در حال ذخیره' : 'ذخیره'}</button></td></tr>)}</tbody>
           </table></div>
           {!canManageThreshold && <p className="mt-3 text-xs text-amber-700">تغییر حداقل موجودی فقط برای مدیر دارای مجوز تأیید نهایی فعال است.</p>}
           {thresholds.length > 30 && <p className="mt-3 text-xs text-gray-500">در این نما ۳۰ SKU نخست نمایش داده می‌شود.</p>}
@@ -362,7 +362,7 @@ export default function InventoryDashboardPage() {
             </form>
           </section>}
           <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead><tr className="border-b text-right text-gray-500"><th className="p-3">SKU / کالا</th><th className="p-3">بچ</th><th className="p-3">جهت</th><th className="p-3">تعداد</th><th className="p-3">بهای واحد</th><th className="p-3">تاریخ انقضا</th>{canEditDraft&&<th className="p-3">عملیات</th>}</tr></thead>
-            <tbody>{selected.items.map(item=><tr key={item.id} className="border-b border-gray-50"><td className="p-3"><strong>{item.sku}</strong><span className="block text-xs text-gray-500">{item.product_name}</span></td><td className="p-3">{item.batch_number ?? '—'}{item.new_batch_number ? \` · \${item.new_batch_number}\` : ''}</td><td className="p-3">{item.direction==='inbound'?'ورودی':'خروجی'}</td><td className="p-3 tabular-nums">{number(item.quantity)}</td><td className="p-3 tabular-nums">{item.unit_cost===null?'—':number(Number(item.unit_cost))}</td><td className="p-3">{item.batch_expiration_date ?? item.new_batch_expiration_date ?? '—'}</td>{canEditDraft&&<td className="p-3"><button disabled={saving} onClick={()=>void removeItem(item.id)} className="font-bold text-red-700 disabled:opacity-40">حذف</button></td>}</tr>)}</tbody>
+            <tbody>{selected.items.map(item=><tr key={item.id} className="border-b border-gray-50"><td className="p-3"><strong>{item.sku}</strong><span className="block text-xs text-gray-500">{item.product_name}</span></td><td className="p-3">{item.batch_number ?? '—'}{item.new_batch_number ? ` · ${item.new_batch_number}` : ''}</td><td className="p-3">{item.direction==='inbound'?'ورودی':'خروجی'}</td><td className="p-3 tabular-nums">{number(item.quantity)}</td><td className="p-3 tabular-nums">{item.unit_cost===null?'—':number(Number(item.unit_cost))}</td><td className="p-3">{item.batch_expiration_date ?? item.new_batch_expiration_date ?? '—'}</td>{canEditDraft&&<td className="p-3"><button disabled={saving} onClick={()=>void removeItem(item.id)} className="font-bold text-red-700 disabled:opacity-40">حذف</button></td>}</tr>)}</tbody>
           </table>{!selected.items.length&&<p className="py-6 text-center text-sm text-gray-500">هنوز کالایی به سند اضافه نشده است.</p>}</div>
           {(canEditDraft || canReview || canApprove || canReject) && <section className="mt-6 rounded-xl border border-gray-200 p-4"><h3 className="font-bold">اقدام روی سند</h3>
             {(canReview || canApprove || canReject) && <div className="mt-3"><label className="mb-1 block text-xs text-gray-600">یادداشت بررسی / دلیل رد</label><textarea rows={2} value={workflowNote} onChange={e=>setWorkflowNote(e.target.value)} className={inputClass} placeholder="برای رد سند، توضیح الزامی است." /></div>}
@@ -384,11 +384,11 @@ function Field({label,children}:{label:string;children:ReactNode}) {
   return <label className="block text-sm"><span className="mb-1.5 block text-xs font-semibold text-gray-600">{label}</span>{children}</label>;
 }
 function Metric({title,value,detail,warning=false}:{title:string;value:number;detail:string;warning?:boolean}) {
-  return <div className={\`rounded-2xl border bg-white p-4 shadow-sm sm:p-5 \${warning?'border-amber-200':'border-pink-100'}\`}><p className="text-xs font-semibold text-gray-500">{title}</p><p className={\`mt-2 text-3xl font-extrabold tabular-nums \${warning?'text-amber-700':'text-pink-950'}\`}>{number(value)}</p><p className="mt-1 text-[11px] text-gray-400">{detail}</p></div>;
+  return <div className={`rounded-2xl border bg-white p-4 shadow-sm sm:p-5 ${warning?'border-amber-200':'border-pink-100'}`}><p className="text-xs font-semibold text-gray-500">{title}</p><p className={`mt-2 text-3xl font-extrabold tabular-nums ${warning?'text-amber-700':'text-pink-950'}`}>{number(value)}</p><p className="mt-1 text-[11px] text-gray-400">{detail}</p></div>;
 }
 function StatusPill({status}:{status:string}) {
   const tone = status==='approved'?'bg-emerald-50 text-emerald-800':status==='rejected'||status==='cancelled'?'bg-red-50 text-red-700':status==='draft'?'bg-gray-100 text-gray-700':'bg-amber-50 text-amber-800';
-  return <span className={\`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold \${tone}\`}>{STATUS_LABELS[status]??status}</span>;
+  return <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${tone}`}>{STATUS_LABELS[status]??status}</span>;
 }
 function StockTable({rows}:{rows:InventoryStockRow[]}) {
   return <div className="overflow-x-auto"><table className="w-full min-w-[650px] text-sm"><thead><tr className="border-b border-gray-100 text-right text-gray-500"><th className="p-3">SKU / محصول</th><th className="p-3">فیزیکی</th><th className="p-3">رزروشده</th><th className="p-3">قابل فروش</th><th className="p-3">حداقل</th></tr></thead><tbody>{rows.map(row=><tr key={row.variant_id} className="border-b border-gray-50 last:border-0"><td className="p-3"><strong className="block">{row.sku}</strong><span className="text-xs text-gray-500">{row.product_name}</span></td><td className="p-3 tabular-nums">{number(row.physical)}</td><td className="p-3 tabular-nums">{number(row.reserved)}</td><td className="p-3 font-bold tabular-nums text-amber-700">{number(row.available)}</td><td className="p-3 tabular-nums">{number(row.minimum_quantity)}</td></tr>)}</tbody></table>{!rows.length&&<p className="py-7 text-center text-sm text-emerald-700">در حال حاضر کالایی زیر حداقل موجودی نیست.</p>}</div>;
