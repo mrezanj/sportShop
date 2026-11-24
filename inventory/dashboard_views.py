@@ -1,9 +1,10 @@
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -12,6 +13,8 @@ from rest_framework.views import APIView
 from catalog.models import ProductVariant
 from .models import InventoryDocument, InventoryDocumentLog, InventoryStockThreshold
 from .services import get_variants_inventory
+from . import document_services
+from .serializers import InventoryDocumentCreateSerializer
 from .dashboard_serializers import (
     InventoryDocumentDetailSerializer,
     InventoryDocumentListSerializer,
@@ -64,11 +67,36 @@ def _inventory_snapshot(variants):
 class InventoryDocumentListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def post(self, request):
+        serializer = InventoryDocumentCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            document = document_services.create_inventory_document(
+                user=request.user,
+                **serializer.validated_data,
+            )
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(str(exc))
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.messages)
+        except InventoryDocument.DoesNotExist as exc:
+            raise NotFound("Inventory document not found.") from exc
+
+        return Response(
+            {
+                "id": document.id,
+                "document_number": document.document_number,
+                "document_type": document.document_type,
+                "status": document.status,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
     def get(self, request):
         _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
         queryset = InventoryDocument.objects.select_related(
             "created_by", "reviewed_by", "approved_by", "source_order"
-        ).annotate(item_count=Count("items"))
+        ).annotate(item_count=Count("items")).order_by("-created_at", "-pk")
 
         status_filter = request.query_params.get("status")
         type_filter = request.query_params.get("type")
