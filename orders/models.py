@@ -347,6 +347,18 @@ class Order(models.Model):
         decimal_places=0,
         verbose_name="مالیات",
     )
+    discount_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name="مبلغ تخفیف",
+    )
+    pricing_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="تصویر ثابت قیمت‌گذاری سفارش",
+    )
     total_amount = models.DecimalField(
         max_digits=12,
         decimal_places=0,
