@@ -1771,7 +1771,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
         )
 
         serializer = CreateOrderSerializer(
-            data={
+            data=attach_checkout_quote({
                 "items": [
                     {
                         "variant_id": variant.id,
@@ -1787,7 +1787,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 "last_name": "User",
                 "mobile": "09123456789",
                 "notes": "",
-            },
+            }, user),
             context={"request": SimpleNamespace(user=user)},
         )
 
@@ -1895,7 +1895,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
         )
 
         serializer = CreateOrderSerializer(
-            data={
+            data=attach_checkout_quote({
                 "items": [{"variant_id": variant.id, "quantity": 2}],
                 "shipping_method_slug": "verify-concurrency-shipping",
                 "province": "tehran",
@@ -1906,7 +1906,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 "last_name": "User",
                 "mobile": "09123456789",
                 "notes": "",
-            },
+            }, user),
             context={"request": SimpleNamespace(user=user)},
         )
 
@@ -2035,7 +2035,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
         )
 
         serializer = CreateOrderSerializer(
-            data={
+            data=attach_checkout_quote({
                 "items": [{"variant_id": variant.id, "quantity": 2}],
                 "shipping_method_slug": "recover-concurrency-shipping",
                 "province": "tehran",
@@ -2046,7 +2046,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 "last_name": "User",
                 "mobile": "09123456789",
                 "notes": "",
-            },
+            }, user),
             context={"request": SimpleNamespace(user=user)},
         )
 
@@ -2181,7 +2181,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
         )
 
         serializer = CreateOrderSerializer(
-            data={
+            data=attach_checkout_quote({
                 "items": [
                     {
                         "variant_id": variant.id,
@@ -2197,7 +2197,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 "last_name": "User",
                 "mobile": "09123456789",
                 "notes": "",
-            },
+            }, user),
             context={"request": SimpleNamespace(user=user)},
         )
 
@@ -2287,7 +2287,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
         )
 
         serializer = CreateOrderSerializer(
-            data={
+            data=attach_checkout_quote({
                 "items": [
                     {
                         "variant_id": variant.id,
@@ -2303,7 +2303,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 "last_name": "User",
                 "mobile": "09123456789",
                 "notes": "",
-            },
+            }, user),
             context={"request": SimpleNamespace(user=user)},
         )
 
@@ -2405,7 +2405,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
         )
 
         serializer = CreateOrderSerializer(
-            data={
+            data=attach_checkout_quote({
                 "items": [
                     {
                         "variant_id": variant.id,
@@ -2421,7 +2421,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 "last_name": "User",
                 "mobile": "09123456789",
                 "notes": "",
-            },
+            }, user),
             context={"request": SimpleNamespace(user=user)},
         )
 
