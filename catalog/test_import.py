@@ -1,6 +1,3 @@
-import csv
-from io import StringIO
-
 from django.contrib.auth.models import Permission, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
