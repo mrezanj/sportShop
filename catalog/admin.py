@@ -23,6 +23,7 @@ class ProductVariantInline(admin.StackedInline):
                 "fields": (
                     ("flavor", "weight", "servings"),
                     ("size", "color", "sku"),
+                    "attributes",
                     ("price", "is_active"),
                 )
             },
@@ -79,7 +80,24 @@ class ProductAdmin(JalaliDateModelAdmin):
             "اطلاعات اصلی",
             {"fields": ("name_fa", "name_en", "slug", "brand", "category")},
         ),
-        ("محتوا", {"fields": ("description", "ingredients", "usage", "warnings")}),
+        (
+            "محتوا و اطلاعات علمی",
+            {
+                "fields": (
+                    "description",
+                    "ingredients",
+                    "usage",
+                    "warnings",
+                    "contraindications",
+                    "medical_advice",
+                    "consumption_goals",
+                )
+            },
+        ),
+        (
+            "مجوز و اصالت",
+            {"fields": ("license_id", "authenticity_code", "license_details")},
+        ),
         (
             "تنظیمات",
             {"fields": ("requires_cold_shipping", "minimum_age", "is_active")},
