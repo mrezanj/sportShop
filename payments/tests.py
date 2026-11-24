@@ -24,6 +24,7 @@ from orders.models import (
     StockReservation,
 )
 from orders.serializers import CreateOrderSerializer
+from orders.shipping_preview import ShippingPreviewSerializer
 from locations.testing import get_test_tehran_city
 from orders.services import cancel_locked_order
 from payments.gateways import get_gateway
@@ -68,6 +69,22 @@ def create_inventory_ledger_for_variant(variant, user, quantity=5):
         quantity_delta=quantity,
         created_by=user,
     )
+
+
+
+def attach_checkout_quote(data, user):
+    preview = ShippingPreviewSerializer(
+        data={
+            "items": data["items"],
+            "shipping_method_slug": data["shipping_method_slug"],
+            "province": data["province"],
+            "city_code": data["city_code"],
+        },
+        context={"request": SimpleNamespace(user=user)},
+    )
+    preview.is_valid(raise_exception=True)
+    data["quote_token"] = preview.validated_data["_result"]["quote_token"]
+    return data
 
 
 @override_settings(DEBUG=True, ACTIVE_PAYMENT_GATEWAY="mock")
@@ -172,6 +189,7 @@ class PaymentFlowTests(TestCase):
             "notes": "",
         }
 
+        data = attach_checkout_quote(data, self.user)
         serializer = CreateOrderSerializer(
             data=data,
             context={"request": SimpleNamespace(user=self.user)},
@@ -1651,7 +1669,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
         )
 
         serializer = CreateOrderSerializer(
-            data={
+            data=attach_checkout_quote({
                 "items": [
                     {
                         "variant_id": variant.id,
@@ -1667,7 +1685,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                 "last_name": "User",
                 "mobile": "09123456789",
                 "notes": "",
-            },
+            }, user),
             context={"request": SimpleNamespace(user=user)},
         )
 
