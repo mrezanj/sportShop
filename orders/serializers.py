@@ -677,7 +677,6 @@ class CreateOrderSerializer(serializers.Serializer):
                     result=discount_result,
                     order=order,
                     user=user,
-                    discount_code=price_quote.get("discount_code", ""),
                 )
 
             OrderStatusHistory.objects.create(
