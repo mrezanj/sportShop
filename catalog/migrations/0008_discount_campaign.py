@@ -82,11 +82,37 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name="discountcampaign",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("discount_type", "fixed")) | models.Q(("value__lte", 100)),
+                name="discount_percent_max_100",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="discountcampaign",
+            constraint=models.CheckConstraint(
+                condition=(
+                    models.Q(("scope", "product"), ("product__isnull", False), ("category__isnull", True), ("brand__isnull", True))
+                    | models.Q(("scope", "category"), ("product__isnull", True), ("category__isnull", False), ("brand__isnull", True))
+                    | models.Q(("scope", "brand"), ("product__isnull", True), ("category__isnull", True), ("brand__isnull", False))
+                    | models.Q(("scope", "cart"), ("product__isnull", True), ("category__isnull", True), ("brand__isnull", True))
+                ),
+                name="discount_scope_target_consistent",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="discountcampaign",
             constraint=models.CheckConstraint(condition=models.Q(("ends_at__gt", models.F("starts_at"))), name="discount_campaign_valid_window"),
         ),
         migrations.AddConstraint(
             model_name="discountredemption",
             constraint=models.UniqueConstraint(fields=("campaign", "order"), name="unique_discount_per_order"),
+        ),
+        migrations.AddConstraint(
+            model_name="discountredemption",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("discount_amount__gte", 0)),
+                name="discount_redemption_amount_nonnegative",
+            ),
         ),
         migrations.AddIndex(
             model_name="discountredemption",
