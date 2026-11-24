@@ -113,7 +113,7 @@ class ProductAdmin(JalaliDateModelAdmin):
                     product_name=instance.product.name_fa,
                     old_price=old_price,
                     new_price=new_price,
-                    change_type="manual",
+                    change_type="initial" if old_price is None else "manual",
                     changed_by=request.user,
                     note="تغییر قیمت از فرم مدیریت محصول",
                 )
