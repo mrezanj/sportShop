@@ -201,6 +201,9 @@ def calculate_discounts(*, user, variants, quantities, discount_code="", now=Non
             "name": campaign.name,
             "code": campaign.code or "",
             "scope": campaign.scope,
+            "discount_type": campaign.discount_type,
+            "value": str(campaign.value),
+            "priority": campaign.priority,
             "discount_amount": int(amount),
             "is_stackable": campaign.is_stackable,
         })
