@@ -35,6 +35,18 @@ class DiscountCampaignSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "usage_count", "created_at", "updated_at"]
 
     def validate(self, attrs):
+        if "code" in attrs:
+            normalized_code = (attrs["code"] or "").strip().upper() or None
+            if normalized_code:
+                duplicate = DiscountCampaign.objects.filter(code=normalized_code)
+                if self.instance:
+                    duplicate = duplicate.exclude(pk=self.instance.pk)
+                if duplicate.exists():
+                    raise serializers.ValidationError({
+                        "code": "این کد تخفیف قبلاً ثبت شده است."
+                    })
+            attrs["code"] = normalized_code
+
         campaign = self.instance or DiscountCampaign()
         for field, value in attrs.items():
             setattr(campaign, field, value)
@@ -44,6 +56,8 @@ class DiscountCampaignSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 getattr(exc, "message_dict", None) or exc.messages
             ) from exc
+        if "code" in attrs:
+            attrs["code"] = campaign.code
         return attrs
 
 
