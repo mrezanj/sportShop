@@ -22,7 +22,7 @@ from inventory.models import (
     InventoryDocumentItem,
     InventoryMovement,
 )
-from catalog.models import Brand, Category, Product, ProductVariant
+from catalog.models import Brand, Category, Product, ProductVariant, DiscountCampaign, DiscountRedemption
 from orders.models import (
     CheckoutPriceQuote,
     Order,
@@ -40,6 +40,7 @@ from orders.services import (
     ALLOWED_ORDER_TRANSITIONS,
     InvalidOrderStatusTransition,
     cancel_locked_order,
+    consume_order_discount_redemptions,
     transition_order_status,
 )
 from inventory.models import (
@@ -124,7 +125,7 @@ class CreateOrderReservationTests(TestCase):
             cost=Decimal("50000"),
         )
 
-    def make_serializer(self, items):
+    def make_serializer(self, items, discount_code=""):
         data = {
             "items": items,
             "shipping_method_slug": "test-shipping",
@@ -144,6 +145,7 @@ class CreateOrderReservationTests(TestCase):
             "shipping_method_slug": data["shipping_method_slug"],
             "province": data["province"],
             "city_code": data["city_code"],
+            "discount_code": discount_code,
         }
         preview = ShippingPreviewSerializer(
             data=preview_data,
@@ -164,10 +166,79 @@ class CreateOrderReservationTests(TestCase):
             birth_date=birth_date,
         )
 
-    def create_order(self, items):
-        serializer = self.make_serializer(items)
+    def create_order(self, items, discount_code=""):
+        serializer = self.make_serializer(items, discount_code=discount_code)
         serializer.is_valid(raise_exception=True)
         return serializer.save()
+
+    def create_discount_campaign(self, **overrides):
+        now = timezone.now()
+        values = {
+            "name": "Test discount",
+            "code": "SAVE10",
+            "scope": "product",
+            "product": self.product,
+            "discount_type": "percent",
+            "value": Decimal("10"),
+            "starts_at": now - timedelta(days=1),
+            "ends_at": now + timedelta(days=1),
+            "max_uses": 1,
+            "per_user_limit": 1,
+        }
+        values.update(overrides)
+        return DiscountCampaign.objects.create(**values)
+
+    def test_discount_is_revalidated_and_saved_in_order_snapshot(self):
+        campaign = self.create_discount_campaign()
+        order = self.create_order(
+            [{"variant_id": self.variant.id, "quantity": 2}],
+            discount_code="save10",
+        )
+
+        self.assertEqual(order.subtotal, Decimal("200000"))
+        self.assertEqual(order.discount_amount, Decimal("20000"))
+        self.assertEqual(order.vat_amount, Decimal("18000"))
+        self.assertEqual(order.total_amount, Decimal("238000"))
+        self.assertEqual(order.pricing_snapshot["discount_amount"], "20000")
+        self.assertEqual(order.pricing_snapshot["discounted_subtotal"], "180000")
+        self.assertEqual(
+            order.pricing_snapshot["items"][0]["discount_amount"],
+            "20000",
+        )
+        self.assertEqual(
+            order.pricing_snapshot["items"][0]["line_subtotal"],
+            "180000",
+        )
+        redemption = DiscountRedemption.objects.get(order=order, campaign=campaign)
+        self.assertEqual(redemption.status, "reserved")
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.usage_count, 1)
+
+    def test_cancelling_unpaid_order_releases_discount_usage(self):
+        campaign = self.create_discount_campaign()
+        order = self.create_order(
+            [{"variant_id": self.variant.id, "quantity": 1}],
+            discount_code="SAVE10",
+        )
+        reservations = list(order.stock_reservations.select_for_update())
+        cancel_locked_order(order, reservations, timezone.now(), changed_by=self.user)
+
+        redemption = DiscountRedemption.objects.get(order=order, campaign=campaign)
+        self.assertEqual(redemption.status, "released")
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.usage_count, 0)
+
+    def test_successful_payment_consumes_reserved_discount_usage(self):
+        campaign = self.create_discount_campaign()
+        order = self.create_order(
+            [{"variant_id": self.variant.id, "quantity": 1}],
+            discount_code="SAVE10",
+        )
+        consume_order_discount_redemptions(order)
+        redemption = DiscountRedemption.objects.get(order=order, campaign=campaign)
+        self.assertEqual(redemption.status, "consumed")
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.usage_count, 1)
 
     def test_order_reserves_stock_without_decreasing_physical_stock(self):
         order = self.create_order(
