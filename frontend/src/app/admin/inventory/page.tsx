@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   addInventoryDocumentItem,
@@ -155,7 +155,7 @@ export default function InventoryDashboardPage() {
     }
   };
 
-  const createDocument = async (event: React.FormEvent<HTMLFormElement>) => {
+  const createDocument = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!token) return;
     setSaving(true);
@@ -380,7 +380,7 @@ export default function InventoryDashboardPage() {
   );
 }
 
-function Field({label,children}:{label:string;children:React.ReactNode}) {
+function Field({label,children}:{label:string;children:ReactNode}) {
   return <label className="block text-sm"><span className="mb-1.5 block text-xs font-semibold text-gray-600">{label}</span>{children}</label>;
 }
 function Metric({title,value,detail,warning=false}:{title:string;value:number;detail:string;warning?:boolean}) {
