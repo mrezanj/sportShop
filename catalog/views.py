@@ -129,6 +129,33 @@ class PriceManagementMixin:
 
     @action(
         detail=False,
+        methods=["get"],
+        url_path="price-history",
+        permission_classes=[IsAdminUser],
+    )
+    def price_history(self, request):
+        _price_permission(request.user)
+        queryset = ProductVariantPriceHistory.objects.select_related(
+            "changed_by"
+        ).order_by("-created_at", "-id")
+        sku = request.query_params.get("sku", "").strip()
+        if sku:
+            queryset = queryset.filter(sku__icontains=sku)
+        rows = list(queryset.values(
+            "id",
+            "sku",
+            "product_name",
+            "old_price",
+            "new_price",
+            "change_type",
+            "changed_by__username",
+            "note",
+            "created_at",
+        )[:100])
+        return Response(rows)
+
+    @action(
+        detail=False,
         methods=["post"],
         url_path="import-prices",
         permission_classes=[IsAdminUser],
