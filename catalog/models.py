@@ -571,12 +571,12 @@ class DiscountCampaign(models.Model):
             raise ValidationError({"value": "درصد تخفیف نمی‌تواند بیشتر از ۱۰۰ باشد."})
         if self.ends_at and self.starts_at and self.ends_at <= self.starts_at:
             raise ValidationError({"ends_at": "پایان کمپین باید بعد از شروع آن باشد."})
-        if self.code:
-            self.code = self.code.strip().upper()
+        if self.code is not None:
+            self.code = self.code.strip().upper() or None
 
     def save(self, *args, **kwargs):
-        if self.code:
-            self.code = self.code.strip().upper()
+        if self.code is not None:
+            self.code = self.code.strip().upper() or None
         return super().save(*args, **kwargs)
 
     def __str__(self):
