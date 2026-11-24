@@ -16,6 +16,7 @@ from .gateways.base import PaymentResult
 from inventory.sale_services import record_order_sale
 from orders.services import (
     cancel_locked_order,
+    consume_order_discount_redemptions,
     transition_order_status,
 )
 from datetime import timedelta
@@ -129,6 +130,8 @@ def _complete_successful_payment(
             "gateway_response",
         ]
     )
+
+    consume_order_discount_redemptions(order)
 
     transition_order_status(
         order=order,
