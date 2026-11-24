@@ -60,7 +60,7 @@ function OrderDetailContent() {
         setOrder(result);
         try {
           const requests = await fetchReturnRequests(token);
-          setReturnRequest(requests.find((item) => item.order_id === result.id) ?? null);
+          setReturnRequest(requests.find((item) => item.order_id === result.id && ["requested", "approved", "received"].includes(item.status)) ?? null);
         } catch {
           // The order remains usable if return history cannot be loaded.
         }
