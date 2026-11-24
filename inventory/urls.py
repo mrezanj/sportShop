@@ -1,52 +1,37 @@
 from django.urls import path
-from .views import (
-    InventoryDocumentCreateAPIView,
-    InventoryReportAPIView,
+
+from .dashboard_views import (
+    InventoryDocumentDetailAPIView,
+    InventoryDocumentHistoryAPIView,
+    InventoryDocumentListAPIView,
+    InventoryLowStockAPIView,
+    InventorySummaryAPIView,
+    InventoryThresholdDetailAPIView,
+    InventoryThresholdListAPIView,
 )
 from .views import (
+    InventoryDocumentApproveAPIView,
     InventoryDocumentCreateAPIView,
     InventoryDocumentItemCreateAPIView,
-    InventoryReportAPIView,
-    InventoryDocumentSubmitAPIView,
-    InventoryDocumentReviewAPIView,
     InventoryDocumentRejectAPIView,
-    InventoryDocumentApproveAPIView,
+    InventoryDocumentReviewAPIView,
+    InventoryDocumentSubmitAPIView,
+    InventoryReportAPIView,
 )
 
 urlpatterns = [
-    path(
-        "reports/",
-        InventoryReportAPIView.as_view(),
-        name="inventory-report",
-    ),
-    path(
-        "documents/",
-        InventoryDocumentCreateAPIView.as_view(),
-        name="inventory-document-create",
-    ),
-    path(
-        "documents/<int:document_id>/items/",
-        InventoryDocumentItemCreateAPIView.as_view(),
-        name="inventory-document-item-create",
-    ),
-    path(
-        "documents/<int:document_id>/submit/",
-        InventoryDocumentSubmitAPIView.as_view(),
-        name="inventory-document-submit",
-    ),
-    path(
-        "documents/<int:document_id>/review/",
-        InventoryDocumentReviewAPIView.as_view(),
-        name="inventory-document-review",
-    ),
-    path(
-        "documents/<int:document_id>/reject/",
-        InventoryDocumentRejectAPIView.as_view(),
-        name="inventory-document-reject",
-    ),
-    path(
-        "documents/<int:document_id>/approve/",
-        InventoryDocumentApproveAPIView.as_view(),
-        name="inventory-document-approve",
-    ),
+    path("reports/", InventoryReportAPIView.as_view(), name="inventory-report"),
+    path("summary/", InventorySummaryAPIView.as_view(), name="inventory-summary"),
+    path("low-stock/", InventoryLowStockAPIView.as_view(), name="inventory-low-stock"),
+    path("thresholds/", InventoryThresholdListAPIView.as_view(), name="inventory-threshold-list"),
+    path("thresholds/<int:variant_id>/", InventoryThresholdDetailAPIView.as_view(), name="inventory-threshold-detail"),
+    path("documents/", InventoryDocumentListAPIView.as_view(), name="inventory-document-list"),
+    path("documents/create/", InventoryDocumentCreateAPIView.as_view(), name="inventory-document-create"),
+    path("documents/<int:document_id>/", InventoryDocumentDetailAPIView.as_view(), name="inventory-document-detail"),
+    path("documents/<int:document_id>/history/", InventoryDocumentHistoryAPIView.as_view(), name="inventory-document-history"),
+    path("documents/<int:document_id>/items/", InventoryDocumentItemCreateAPIView.as_view(), name="inventory-document-item-create"),
+    path("documents/<int:document_id>/submit/", InventoryDocumentSubmitAPIView.as_view(), name="inventory-document-submit"),
+    path("documents/<int:document_id>/review/", InventoryDocumentReviewAPIView.as_view(), name="inventory-document-review"),
+    path("documents/<int:document_id>/reject/", InventoryDocumentRejectAPIView.as_view(), name="inventory-document-reject"),
+    path("documents/<int:document_id>/approve/", InventoryDocumentApproveAPIView.as_view(), name="inventory-document-approve"),
 ]
