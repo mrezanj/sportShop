@@ -8,6 +8,7 @@ from django.test import TransactionTestCase
 from payments.gateways.base import PaymentResult
 from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured
+from django.core.management import call_command
 from django.http import Http404
 from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
@@ -789,6 +790,51 @@ class PaymentFlowTests(TestCase):
 
         self.assertEqual(self.get_batch_physical_quantity(), 5)
         self.assertFalse(InventoryDocument.objects.filter(source_order=order).exists())
+
+    @patch("payments.views.get_gateway")
+    def test_expiry_command_does_not_release_reservation_during_verification(
+        self,
+        get_gateway_mock,
+    ):
+        order = self.create_order(quantity=2)
+        reservation = StockReservation.objects.get(order=order)
+        payment = self.start_payment(order)
+
+        expired_at = timezone.now() - timedelta(minutes=1)
+        Order.objects.filter(pk=order.pk).update(reservation_expires_at=expired_at)
+        StockReservation.objects.filter(order=order).update(expires_at=expired_at)
+
+        gateway = get_gateway()
+        gateway.verify = Mock(
+            side_effect=lambda *args, **kwargs: self._run_expiry_during_verification(
+                payment,
+            )
+        )
+        get_gateway_mock.return_value = gateway
+
+        response = self.verify(order, payment.authority)
+
+        self.assertEqual(response.status_code, 409)
+        order.refresh_from_db()
+        payment.refresh_from_db()
+        reservation.refresh_from_db()
+
+        self.assertEqual(order.status, "cancelled")
+        self.assertEqual(payment.status, "unknown")
+        self.assertEqual(reservation.status, "expired")
+        self.assertIsNotNone(reservation.released_at)
+        self.assertEqual(self.get_batch_physical_quantity(), 5)
+        self.assertFalse(InventoryDocument.objects.filter(source_order=order).exists())
+
+    def _run_expiry_during_verification(self, payment):
+        call_command("expire_orders", stdout=StringIO())
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, "verifying")
+        return PaymentResult(
+            success=True,
+            ref_id="RACE-VERIFY-REF",
+            raw_response={"status": "success"},
+        )
 
     def test_successful_gateway_payment_with_insufficient_inventory_marks_payment_unknown(
         self,
