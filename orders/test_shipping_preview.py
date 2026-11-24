@@ -15,6 +15,7 @@ from inventory.models import (
 )
 from locations.testing import get_test_tehran_city
 from orders.models import Order, StockReservation
+from catalog.models import DiscountCampaign
 
 from .test_shipping import ShippingTestDataMixin
 
@@ -138,6 +139,43 @@ class ShippingPreviewAPITests(
             14000,
         )
         self.assertFalse(response.data["packaging"]["is_free"])
+
+    def test_preview_applies_coupon_and_recalculates_tax_and_total(self):
+        now = timezone.now()
+        DiscountCampaign.objects.create(
+            name="Preview coupon",
+            code="PREVIEW10",
+            scope="product",
+            product=self.variant.product,
+            discount_type="percent",
+            value=Decimal("10"),
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=1),
+        )
+
+        response = self.client.post(
+            self.url,
+            self.payload(discount_code="preview10"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["subtotal"], 200000)
+        self.assertEqual(response.data["discount_amount"], 20000)
+        self.assertEqual(response.data["discounted_subtotal"], 180000)
+        self.assertEqual(response.data["vat_amount"], 18000)
+        self.assertEqual(response.data["total_amount"], 262000)
+        self.assertEqual(response.data["discounts"][0]["code"], "PREVIEW10")
+        self.assertEqual(response.data["items"][0]["line_subtotal"], 180000)
+
+    def test_preview_rejects_unknown_discount_code(self):
+        response = self.client.post(
+            self.url,
+            self.payload(discount_code="NOT-A-REAL-CODE"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("discount_code", response.data)
 
     def test_preview_does_not_create_order_or_stock_reservation(self):
         response = self.client.post(
