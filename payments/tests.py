@@ -1,4 +1,5 @@
 from datetime import timedelta
+from io import StringIO
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -791,10 +792,8 @@ class PaymentFlowTests(TestCase):
         self.assertEqual(self.get_batch_physical_quantity(), 5)
         self.assertFalse(InventoryDocument.objects.filter(source_order=order).exists())
 
-    @patch("payments.views.get_gateway")
     def test_expiry_command_does_not_release_reservation_during_verification(
         self,
-        get_gateway_mock,
     ):
         order = self.create_order(quantity=2)
         reservation = StockReservation.objects.get(order=order)
@@ -810,9 +809,8 @@ class PaymentFlowTests(TestCase):
                 payment,
             )
         )
-        get_gateway_mock.return_value = gateway
-
-        response = self.verify(order, payment.authority)
+        with patch("payments.views.get_gateway", return_value=gateway):
+            response = self.verify(order, payment.authority)
 
         self.assertEqual(response.status_code, 409)
         order.refresh_from_db()
