@@ -536,6 +536,8 @@ export interface InventoryDocumentRow {
   status: string;
   reference: string | null;
   reason: string;
+  created_by_id: number | null;
+  reviewed_by_id: number | null;
   created_by_username: string | null;
   reviewed_by_username: string | null;
   approved_by_username: string | null;
