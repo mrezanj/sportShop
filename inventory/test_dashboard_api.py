@@ -205,3 +205,72 @@ class InventoryDashboardAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
         self.assertTrue(InventoryDocumentItem.objects.filter(pk=self.item.id).exists())
+
+    def test_document_operational_workflow_creates_stock_only_after_manager_approval(self):
+        creator_permission = Permission.objects.get(codename="can_create_inventory_document")
+        reviewer_permission = Permission.objects.get(codename="can_review_inventory_document")
+        approver_permission = Permission.objects.get(codename="can_approve_inventory_document")
+        self.user.user_permissions.add(creator_permission)
+        accountant = User.objects.create_user(username="dashboard_accountant", password="test-pass")
+        accountant.user_permissions.add(reviewer_permission)
+        self.manager.user_permissions.add(approver_permission)
+
+        self.client.force_authenticate(self.user)
+        created = self.client.post(
+            "/api/inventory/documents/create/",
+            {
+                "document_number": "DASH-WORKFLOW-001",
+                "document_type": "purchase",
+                "reason": "Purchase receipt",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201)
+        document_id = created.data["id"]
+
+        added = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 7,
+                "direction": "inbound",
+                "new_batch_number": "DASH-WORKFLOW-BATCH",
+                "unit_cost": "125000",
+            },
+            format="json",
+        )
+        self.assertEqual(added.status_code, 201)
+
+        submitted = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(submitted.status_code, 200)
+        self.assertEqual(submitted.data["status"], "pending_review")
+
+        self.client.force_authenticate(accountant)
+        reviewed = self.client.post(
+            f"/api/inventory/documents/{document_id}/review/",
+            {"note": "Invoice checked"},
+            format="json",
+        )
+        self.assertEqual(reviewed.status_code, 200)
+        self.assertEqual(reviewed.data["status"], "pending_approval")
+
+        self.client.force_authenticate(self.manager)
+        approved = self.client.post(
+            f"/api/inventory/documents/{document_id}/approve/",
+            {"note": "Approved"},
+            format="json",
+        )
+        self.assertEqual(approved.status_code, 200)
+        self.assertEqual(approved.data["status"], "approved")
+        self.assertEqual(
+            InventoryDocument.objects.get(pk=document_id).items.first().movements.count(),
+            1,
+        )
+        self.assertEqual(
+            InventoryDocumentLog.objects.filter(document_id=document_id).count(),
+            5,
+        )
