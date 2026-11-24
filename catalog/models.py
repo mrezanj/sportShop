@@ -336,33 +336,35 @@ class ProductVariant(models.Model):
             with transaction.atomic():
                 Product.objects.select_for_update().get(pk=self.product_id)
                 self._generate_sku()
+                if kwargs.get("update_fields") is not None:
+                    kwargs["update_fields"] = set(kwargs["update_fields"]) | {"sku"}
                 return super().save(*args, **kwargs)
 
         super().save(*args, **kwargs)
 
     def _generate_sku(self):
-            brand_prefix = self.product.brand.name[:3].upper().replace(" ", "") or "PRD"
-            prefix = f"{brand_prefix}-{self.product.id}-"
+        brand_prefix = self.product.brand.name[:3].upper().replace(" ", "") or "PRD"
+        prefix = f"{brand_prefix}-{self.product.id}-"
 
-            existing_skus = ProductVariant.objects.filter(
-                product=self.product
-            ).values_list("sku", flat=True)
+        existing_skus = ProductVariant.objects.filter(
+            product=self.product
+        ).values_list("sku", flat=True)
 
-            max_num = 0
-            for s in existing_skus:
-                if s and s.startswith(prefix):
-                    try:
-                        n = int(s[len(prefix) :])
-                        max_num = max(max_num, n)
-                    except ValueError:
-                        continue
+        max_num = 0
+        for sku in existing_skus:
+            if sku and sku.startswith(prefix):
+                try:
+                    number = int(sku[len(prefix) :])
+                    max_num = max(max_num, number)
+                except ValueError:
+                    continue
 
-            candidate = f"{prefix}{max_num + 1:03d}"
+        candidate = f"{prefix}{max_num + 1:03d}"
 
-            # Safety: resolve any rare collision
-            while ProductVariant.objects.filter(sku=candidate).exists():
-                candidate = (
-                    f"{prefix}{max_num + 1:03d}-" f"{uuid.uuid4().hex[:4].upper()}"
-                )
+        # Safety: resolve any rare collision.
+        while ProductVariant.objects.filter(sku=candidate).exists():
+            candidate = (
+                f"{prefix}{max_num + 1:03d}-{uuid.uuid4().hex[:4].upper()}"
+            )
 
-            self.sku = candidate
+        self.sku = candidate
