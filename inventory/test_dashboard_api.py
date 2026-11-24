@@ -158,3 +158,14 @@ class InventoryDashboardAPITests(TestCase):
         response = self.client.get("/api/inventory/thresholds/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data[0]["minimum_quantity"], 0)
+
+    def test_summary_reports_threshold_management_permission(self):
+        self.client.force_authenticate(self.user)
+        viewer_summary = self.client.get("/api/inventory/summary/")
+        self.assertEqual(viewer_summary.status_code, 200)
+        self.assertFalse(viewer_summary.data["can_manage_threshold"])
+
+        self.client.force_authenticate(self.manager)
+        manager_summary = self.client.get("/api/inventory/summary/")
+        self.assertEqual(manager_summary.status_code, 200)
+        self.assertTrue(manager_summary.data["can_manage_threshold"])

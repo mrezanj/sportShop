@@ -511,6 +511,7 @@ export interface InventorySummary {
   available_quantity: number;
   pending_review_count: number;
   pending_approval_count: number;
+  can_manage_threshold: boolean;
 }
 
 export interface InventoryStockRow {

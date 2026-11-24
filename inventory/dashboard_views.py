@@ -229,4 +229,5 @@ class InventorySummaryAPIView(APIView):
             "available_quantity": sum(row["available"] for row in rows),
             "pending_review_count": InventoryDocument.objects.filter(status="pending_review").count(),
             "pending_approval_count": InventoryDocument.objects.filter(status="pending_approval").count(),
+            "can_manage_threshold": request.user.has_perm("inventory.can_approve_inventory_document"),
         })
