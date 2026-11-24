@@ -10,6 +10,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from catalog.models import ProductVariant
+from catalog.discounts import calculate_discounts, record_discount_redemptions
 from inventory.services import (
     allocate_stock_reservation,
     get_variants_inventory,
@@ -438,6 +439,35 @@ class CreateOrderSerializer(serializers.Serializer):
                         }
                     )
 
+            # Recalculate discounts while campaign rows are locked. The quote
+            # is accepted only if its complete discount allocation is unchanged.
+            discount_result = calculate_discounts(
+                user=user,
+                variants=variants,
+                quantities=quantities,
+                discount_code=price_quote.get("discount_code", ""),
+                now=now,
+                lock=True,
+            )
+            discount_amount = Decimal(discount_result["discount_amount"])
+            discounted_subtotal = Decimal(discount_result["discounted_subtotal"])
+            if (
+                price_quote.get("discount_amount") != int(discount_amount)
+                or price_quote.get("discounted_subtotal") != int(discounted_subtotal)
+                or price_quote.get("discounts") != discount_result["discounts"]
+                or price_quote.get("discount_lines") != discount_result["lines"]
+            ):
+                raise serializers.ValidationError({
+                    "price_changed": (
+                        "شرایط یا ظرفیت تخفیف تغییر کرده است؛ پیش‌نمایش جدید را "
+                        "بررسی و دوباره تأیید کنید."
+                    )
+                })
+            discount_lines_by_id = {
+                item["variant_id"]: item
+                for item in discount_result["lines"]
+            }
+
             # Build order items using trusted database data.
             subtotal = Decimal("0")
             items_data = []
@@ -515,7 +545,7 @@ class CreateOrderSerializer(serializers.Serializer):
             # VAT calculation remains based on the products subtotal.
             vat_rate = getattr(settings, "VAT_RATE", 0.10)
             vat_amount = (
-                subtotal * Decimal(str(vat_rate))
+                discounted_subtotal * Decimal(str(vat_rate))
             ).quantize(Decimal("1"))
 
             shipping_cost = shipping_result["shipping_cost"]
@@ -523,11 +553,13 @@ class CreateOrderSerializer(serializers.Serializer):
 
             quoted_totals = {
                 "subtotal": int(subtotal),
+                "discount_amount": int(discount_amount),
+                "discounted_subtotal": int(discounted_subtotal),
                 "vat_amount": int(vat_amount),
                 "shipping_cost": int(shipping_cost),
                 "packaging_cost": int(packaging_cost),
                 "total_amount": int(
-                    subtotal + shipping_cost + packaging_cost + vat_amount
+                    discounted_subtotal + shipping_cost + packaging_cost + vat_amount
                 ),
             }
             if (
@@ -584,7 +616,7 @@ class CreateOrderSerializer(serializers.Serializer):
                 shipping_calculation_snapshot=shipping_snapshot,
                 subtotal=subtotal,
                 vat_amount=vat_amount,
-                discount_amount=0,
+                discount_amount=discount_amount,
                 pricing_snapshot={
                     "version": 1,
                     "quoted_at": price_quote.get("issued_at"),
@@ -605,26 +637,41 @@ class CreateOrderSerializer(serializers.Serializer):
                             ])),
                             "quantity": item["quantity"],
                             "unit_price": item["unit_price"],
-                            "discount_amount": "0",
-                            "line_subtotal": str(
+                            "gross_line_subtotal": str(
                                 variants_by_id[int(item["variant_id"])].price
                                 * int(item["quantity"])
+                            ),
+                            "discount_amount": str(
+                                discount_lines_by_id[int(item["variant_id"])]["discount_amount"]
+                            ),
+                            "line_subtotal": str(
+                                discount_lines_by_id[int(item["variant_id"])]["line_subtotal"]
                             ),
                         }
                         for item in price_quote["items"]
                     ],
                     "subtotal": str(subtotal),
+                    "discounts": price_quote.get("discounts", []),
+                    "discounted_subtotal": str(discounted_subtotal),
                     "vat_rate": str(vat_rate),
                     "vat_amount": str(vat_amount),
                     "shipping_cost": str(shipping_cost),
                     "packaging_cost": str(packaging_cost),
-                    "discount_amount": "0",
+                    "discount_amount": str(discount_amount),
                     "total_amount": str(total),
                 },
                 total_amount=total,
                 notes=validated_data.get("notes", ""),
                 reservation_expires_at=expires_at,
             )
+
+            if discount_result.get("_campaigns"):
+                record_discount_redemptions(
+                    result=discount_result,
+                    order=order,
+                    user=user,
+                    discount_code=price_quote.get("discount_code", ""),
+                )
 
             OrderStatusHistory.objects.create(
                 order=order,
