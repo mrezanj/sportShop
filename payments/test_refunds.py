@@ -32,7 +32,7 @@ class RefundWorkflowTests(TestCase):
         with self.assertRaises(RefundError):
             create_refund(
                 return_request_id=self.return_request.pk,
-                amount=Decimal("110001"), actor=self.staff,
+                amount=Decimal("110001"), actor=self.staff, idempotency_key=uuid4(),
             )
 
     def test_refund_reserves_amount_against_duplicate_partial_refunds(self):
@@ -96,7 +96,7 @@ class RefundWorkflowTests(TestCase):
     def test_refund_success_records_provider_reference_and_is_idempotent(self):
         refund = create_refund(
             return_request_id=self.return_request.pk,
-            amount=Decimal("10000"), actor=self.staff,
+            amount=Decimal("10000"), actor=self.staff, idempotency_key=uuid4(),
         )
         transition_refund(
             refund_id=refund.pk, actor=self.staff, decision="approve"
