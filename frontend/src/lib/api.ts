@@ -394,6 +394,7 @@ export interface OrderDetail {
   packaging_is_free: boolean;
   subtotal: number;
   vat_amount: number;
+  discount_amount: number;
   total_amount: number;
   tracking_code: string;
   notes: string;
