@@ -146,6 +146,14 @@ export default function Header({ categories }: { categories: Category[] }) {
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            {user?.is_staff && (
+              <Link
+                href="/admin/inventory"
+                className="hidden md:inline-flex rounded-lg border border-pink-200 px-3 py-2 text-sm font-semibold text-pink-900 hover:bg-pink-50"
+              >
+                پنل انبار
+              </Link>
+            )}
             {loading ? (
               <span className="text-xs text-gray-400">...</span>
             ) : isAuthenticated && user ? (
@@ -260,6 +268,14 @@ export default function Header({ categories }: { categories: Category[] }) {
                   </MobileLink>
                 ))}
               </div>
+
+              {user?.is_staff && (
+                <div className="pt-4 mt-4 border-t border-pink-100">
+                  <MobileLink href="/admin/inventory" active={pathname === '/admin/inventory'}>
+                    داشبورد انبار
+                  </MobileLink>
+                </div>
+              )}
 
               <div className="pt-4 mt-4 border-t border-pink-100">
                 <MobileLink
