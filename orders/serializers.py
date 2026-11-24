@@ -583,7 +583,7 @@ class CreateOrderSerializer(serializers.Serializer):
                     })
 
             total = (
-                subtotal
+                discounted_subtotal
                 + shipping_cost
                 + packaging_cost
                 + vat_amount
@@ -690,6 +690,9 @@ class CreateOrderSerializer(serializers.Serializer):
                 OrderItem.objects.create(
                     order=order,
                     variant=variant,
+                    discount_amount=Decimal(
+                        discount_lines_by_id[variant.id]["discount_amount"]
+                    ),
                     **item,
                     shipping_weight_grams=(
                         shipping_item["shipping_weight_grams"]
