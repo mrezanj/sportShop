@@ -15,23 +15,26 @@ class RefundError(Exception):
 @transaction.atomic
 def create_refund(*, return_request_id, amount, actor, idempotency_key=None):
     request = ReturnRequest.objects.select_for_update().select_related("order").get(pk=return_request_id)
-    if request.status != "received":
-        raise RefundError("بازپرداخت فقط پس از دریافت و بررسی کالای مرجوعی مجاز است.")
     try:
         amount = Decimal(str(amount))
         key = UUID(str(idempotency_key)) if idempotency_key else None
     except (InvalidOperation, TypeError, ValueError):
         raise RefundError("مبلغ یا کلید یکتای درخواست نامعتبر است.")
-    if amount != amount.to_integral_value():
-        raise RefundError("مبلغ بازپرداخت باید به تومان کامل وارد شود.")
-    if key:
-        existing = Refund.objects.filter(idempotency_key=key).first()
-        if existing:
-            if existing.return_request_id != request.pk or existing.amount != amount:
-                raise RefundError("کلید یکتای درخواست قبلاً برای اطلاعات دیگری استفاده شده است.")
-            return existing
+    if key is None:
+        raise RefundError("کلید یکتای درخواست بازپرداخت الزامی است.")
     if not amount.is_finite() or amount <= 0:
         raise RefundError("مبلغ بازپرداخت باید بیشتر از صفر باشد.")
+    if amount != amount.to_integral_value():
+        raise RefundError("مبلغ بازپرداخت باید به تومان کامل وارد شود.")
+
+    existing = Refund.objects.filter(idempotency_key=key).first()
+    if existing:
+        if existing.return_request_id != request.pk or existing.amount != amount:
+            raise RefundError("کلید یکتای درخواست قبلاً برای اطلاعات دیگری استفاده شده است.")
+        return existing
+
+    if request.status != "received":
+        raise RefundError("بازپرداخت فقط پس از دریافت و بررسی کالای مرجوعی مجاز است.")
     payments = list(
         Payment.objects.select_for_update().filter(
             order=request.order, status="success"
@@ -40,22 +43,33 @@ def create_refund(*, return_request_id, amount, actor, idempotency_key=None):
     if not payments:
         raise RefundError("برای سفارش پرداخت موفقی ثبت نشده است.")
     payment = payments[0]
-    if key:
-        existing = Refund.objects.filter(idempotency_key=key).first()
-        if existing:
-            if existing.return_request_id != request.pk or existing.amount != amount:
-                raise RefundError("کلید یکتای درخواست قبلاً برای اطلاعات دیگری استفاده شده است.")
-            return existing
+
+    # Locking the successful payment serializes concurrent refund reservations.
+    existing = Refund.objects.filter(idempotency_key=key).first()
+    if existing:
+        if existing.return_request_id != request.pk or existing.amount != amount:
+            raise RefundError("کلید یکتای درخواست قبلاً برای اطلاعات دیگری استفاده شده است.")
+        return existing
+
     refunds = Refund.objects.select_for_update().filter(payment=payment)
-    successful = sum((r.amount for r in refunds.filter(status="succeeded")), Decimal("0"))
-    reserved = sum((r.amount for r in refunds.exclude(status__in=["failed", "rejected", "succeeded"])), Decimal("0"))
+    successful = sum(
+        (row.amount for row in refunds.filter(status="succeeded")), Decimal("0")
+    )
+    reserved = sum(
+        (
+            row.amount
+            for row in refunds.exclude(
+                status__in=["failed", "rejected", "succeeded"]
+            )
+        ),
+        Decimal("0"),
+    )
     if successful + reserved + amount > payment.amount:
         raise RefundError("مجموع بازپرداخت‌ها نمی‌تواند از مبلغ پرداخت موفق بیشتر باشد.")
     return Refund.objects.create(
-        return_request=request, payment=payment, amount=amount, requested_by=actor,
-        **({"idempotency_key": key} if key else {}),
+        return_request=request, payment=payment, amount=amount,
+        requested_by=actor, idempotency_key=key,
     )
-
 
 @transaction.atomic
 def transition_refund(*, refund_id, actor, decision, provider_reference="", provider_response=None):
