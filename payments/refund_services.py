@@ -77,13 +77,14 @@ def create_refund(*, return_request_id, amount, actor, idempotency_key=None):
     return refund
 
 @transaction.atomic
-def transition_refund(*, refund_id, actor, decision, provider_reference="", provider_response=None):
+def transition_refund(*, refund_id, actor, decision, provider_reference="", provider_response=None, note=""):
     return_request_id = Refund.objects.values_list("return_request_id", flat=True).get(pk=refund_id)
     return_request = ReturnRequest.objects.select_for_update().get(pk=return_request_id)
     refund = Refund.objects.select_for_update().get(pk=refund_id, return_request_id=return_request_id)
     if not isinstance(provider_reference, str):
         provider_reference = ""
     response = provider_response if isinstance(provider_response, dict) else {}
+    note = note if isinstance(note, str) else ""
     old_status = refund.status
     target_status = {
         "approve": "approved", "processing": "processing",
@@ -118,7 +119,7 @@ def transition_refund(*, refund_id, actor, decision, provider_reference="", prov
     RefundHistory.objects.create(
         refund=refund, old_status=old_status, new_status=refund.status,
         changed_by=actor, provider_reference=provider_reference,
-        provider_response=response, note=f"تغییر وضعیت بازپرداخت به {refund.status}.",
+        provider_response=response, note=note or f"تغییر وضعیت بازپرداخت به {refund.status}.",
     )
     if refund.status == "succeeded":
         from orders.models import ReturnRequestHistory
