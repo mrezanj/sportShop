@@ -22,6 +22,8 @@ def create_refund(*, return_request_id, amount, actor, idempotency_key=None):
         key = UUID(str(idempotency_key)) if idempotency_key else None
     except (InvalidOperation, TypeError, ValueError):
         raise RefundError("مبلغ یا کلید یکتای درخواست نامعتبر است.")
+    if amount != amount.to_integral_value():
+        raise RefundError("مبلغ بازپرداخت باید به تومان کامل وارد شود.")
     if key:
         existing = Refund.objects.filter(idempotency_key=key).first()
         if existing:
@@ -38,6 +40,12 @@ def create_refund(*, return_request_id, amount, actor, idempotency_key=None):
     if not payments:
         raise RefundError("برای سفارش پرداخت موفقی ثبت نشده است.")
     payment = payments[0]
+    if key:
+        existing = Refund.objects.filter(idempotency_key=key).first()
+        if existing:
+            if existing.return_request_id != request.pk or existing.amount != amount:
+                raise RefundError("کلید یکتای درخواست قبلاً برای اطلاعات دیگری استفاده شده است.")
+            return existing
     refunds = Refund.objects.select_for_update().filter(payment=payment)
     successful = sum((r.amount for r in refunds.filter(status="succeeded")), Decimal("0"))
     reserved = sum((r.amount for r in refunds.exclude(status__in=["failed", "rejected", "succeeded"])), Decimal("0"))
@@ -81,4 +89,13 @@ def transition_refund(*, refund_id, actor, decision, provider_reference="", prov
         "status", "processed_by", "provider_reference", "provider_response",
         "completed_at", "updated_at",
     ])
+    if refund.status == "succeeded":
+        from orders.models import ReturnRequest
+        other_pending = Refund.objects.filter(
+            return_request=refund.return_request
+        ).exclude(status__in=["succeeded", "failed", "rejected"]).exists()
+        if not other_pending:
+            ReturnRequest.objects.filter(
+                pk=refund.return_request_id, status="received"
+            ).update(status="closed")
     return refund
