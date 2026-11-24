@@ -5,6 +5,7 @@ from django.db import transaction
 from jalali_suite.admin import JalaliDateModelAdmin
 
 from .models import (
+    CheckoutPriceQuote,
     Order,
     OrderItem,
     OrderStatusHistory,
@@ -360,6 +361,24 @@ class ShippingConfigurationAdmin(admin.ModelAdmin):
         if ShippingConfiguration.objects.exists():
             return False
         return super().has_add_permission(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+
+@admin.register(CheckoutPriceQuote)
+class CheckoutPriceQuoteAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "expires_at", "consumed_at", "created_at")
+    list_filter = ("expires_at", "consumed_at")
+    search_fields = ("id", "user__username")
+    readonly_fields = ("id", "user", "payload", "expires_at", "consumed_at", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return False
