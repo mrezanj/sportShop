@@ -13,7 +13,7 @@ from catalog.models import ProductVariant
 from inventory.services import get_variants_inventory
 from locations.models import City
 
-from .models import ShippingMethod
+from .models import CheckoutPriceQuote, ShippingMethod
 from .shipping import ShippingCalculationError, calculate_shipping
 
 
@@ -178,8 +178,16 @@ class ShippingPreviewSerializer(serializers.Serializer):
             "total_amount": int(total_amount),
             "issued_at": int(timezone.now().timestamp()),
         }
+        quote_record = CheckoutPriceQuote.objects.create(
+            user=self.context["request"].user,
+            payload=quote_payload,
+            expires_at=timezone.now() + timezone.timedelta(minutes=10),
+        )
         quote_token = signing.dumps(
-            quote_payload,
+            {
+                **quote_payload,
+                "quote_id": str(quote_record.pk),
+            },
             salt="orders.checkout-price-quote",
             compress=True,
         )
