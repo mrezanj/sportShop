@@ -566,10 +566,16 @@ export default function CheckoutPage() {
                 >
                   <span className="truncate ml-2">
                     {i.productName} × {i.quantity}
+                    {preview?.items.some((quoted) => quoted.variant_id === i.variantId && quoted.unit_price !== i.price) && (
+                      <span className="mr-1 text-amber-700"> (قیمت به‌روز)</span>
+                    )}
                   </span>
 
                   <span className="whitespace-nowrap font-medium">
-                    {formatPrice(i.price * i.quantity)}
+                    {formatPrice(
+                      preview?.items.find((quoted) => quoted.variant_id === i.variantId)?.line_subtotal
+                      ?? i.price * i.quantity
+                    )}
                   </span>
                 </div>
               ))}
