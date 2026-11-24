@@ -1,4 +1,5 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from uuid import UUID
 
 from django.db import transaction
 from django.utils import timezone
@@ -12,12 +13,22 @@ class RefundError(Exception):
 
 
 @transaction.atomic
-def create_refund(*, return_request_id, amount, actor):
+def create_refund(*, return_request_id, amount, actor, idempotency_key=None):
     request = ReturnRequest.objects.select_for_update().select_related("order").get(pk=return_request_id)
     if request.status != "received":
         raise RefundError("بازپرداخت فقط پس از دریافت و بررسی کالای مرجوعی مجاز است.")
-    amount = Decimal(str(amount))
-    if amount <= 0:
+    try:
+        amount = Decimal(str(amount))
+        key = UUID(str(idempotency_key)) if idempotency_key else None
+    except (InvalidOperation, TypeError, ValueError):
+        raise RefundError("مبلغ یا کلید یکتای درخواست نامعتبر است.")
+    if key:
+        existing = Refund.objects.filter(idempotency_key=key).first()
+        if existing:
+            if existing.return_request_id != request.pk or existing.amount != amount:
+                raise RefundError("کلید یکتای درخواست قبلاً برای اطلاعات دیگری استفاده شده است.")
+            return existing
+    if not amount.is_finite() or amount <= 0:
         raise RefundError("مبلغ بازپرداخت باید بیشتر از صفر باشد.")
     payments = list(
         Payment.objects.select_for_update().filter(
@@ -33,7 +44,8 @@ def create_refund(*, return_request_id, amount, actor):
     if successful + reserved + amount > payment.amount:
         raise RefundError("مجموع بازپرداخت‌ها نمی‌تواند از مبلغ پرداخت موفق بیشتر باشد.")
     return Refund.objects.create(
-        return_request=request, payment=payment, amount=amount, requested_by=actor
+        return_request=request, payment=payment, amount=amount, requested_by=actor,
+        **({"idempotency_key": key} if key else {}),
     )
 
 
@@ -41,6 +53,14 @@ def create_refund(*, return_request_id, amount, actor):
 def transition_refund(*, refund_id, actor, decision, provider_reference="", provider_response=None):
     refund = Refund.objects.select_for_update().select_related("payment").get(pk=refund_id)
     response = provider_response or {}
+    target_status = {
+        "approve": "approved", "processing": "processing",
+        "succeeded": "succeeded", "failed": "failed", "reject": "rejected",
+    }.get(decision)
+    if target_status and refund.status == target_status:
+        if decision == "succeeded" and refund.provider_reference != provider_reference:
+            raise RefundError("بازپرداخت قبلاً با شناسه پیگیری دیگری نهایی شده است.")
+        return refund
     if decision == "approve" and refund.status == "requested":
         refund.status = "approved"
     elif decision == "processing" and refund.status == "approved":
