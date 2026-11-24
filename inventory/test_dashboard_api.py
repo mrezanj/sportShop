@@ -51,6 +51,22 @@ class InventoryDashboardAPITests(TestCase):
         )
         self.client = APIClient()
 
+    def test_document_create_endpoint_remains_backward_compatible(self):
+        creator_permission = Permission.objects.get(codename="can_create_inventory_document")
+        self.user.user_permissions.add(creator_permission)
+        self.client.force_authenticate(self.user)
+        response = self.client.post(
+            "/api/inventory/documents/",
+            {
+                "document_number": "DASH-CREATED-001",
+                "document_type": "inbound",
+                "reason": "Compatibility test",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["document_number"], "DASH-CREATED-001")
+
     def test_document_list_requires_inventory_permission(self):
         denied = User.objects.create_user(username="no_inventory", password="test-pass")
         self.client.force_authenticate(denied)
