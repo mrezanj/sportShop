@@ -12,6 +12,27 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AlterModelOptions(
+            name="productvariant",
+            options={
+                "verbose_name": "تنوع محصول",
+                "verbose_name_plural": "تنوع‌های محصول",
+                "unique_together": {("product", "flavor", "weight", "size", "color")},
+                "permissions": [
+                    ("can_manage_product_prices", "Can manage product prices"),
+                ],
+            },
+        ),
+        migrations.AlterField(
+            model_name="productvariant",
+            name="price",
+            field=models.DecimalField(
+                decimal_places=0,
+                max_digits=12,
+                validators=[MinValueValidator(Decimal("1"))],
+                verbose_name="قیمت (تومان)",
+            ),
+        ),
         migrations.AddConstraint(
             model_name="productvariant",
             constraint=models.CheckConstraint(
