@@ -24,6 +24,7 @@ from inventory.models import (
 )
 from catalog.models import Brand, Category, Product, ProductVariant
 from orders.models import (
+    CheckoutPriceQuote,
     Order,
     OrderItem,
     OrderStatusHistory,
@@ -542,6 +543,22 @@ class CreateOrderReservationTests(TestCase):
         self.assertEqual(order.pricing_snapshot["items"][0]["sku"], self.variant.sku)
         self.assertEqual(order.pricing_snapshot["items"][0]["unit_price"], "100000")
         self.assertEqual(order.discount_amount, Decimal("0"))
+
+    def test_expired_quote_cannot_create_an_order(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        serializer.is_valid(raise_exception=True)
+        CheckoutPriceQuote.objects.filter(
+            user=self.user,
+            consumed_at__isnull=True,
+        ).update(expires_at=timezone.now() - timedelta(seconds=1))
+
+        with self.assertRaises(ValidationError) as raised:
+            serializer.save()
+
+        self.assertIn("quote_token", raised.exception.detail)
+        self.assertEqual(Order.objects.count(), 0)
 
     def test_consumed_quote_cannot_create_a_second_order(self):
         serializer = self.make_serializer([
