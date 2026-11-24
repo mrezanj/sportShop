@@ -209,6 +209,9 @@ class CreateOrderReservationTests(TestCase):
             order.pricing_snapshot["items"][0]["line_subtotal"],
             "180000",
         )
+        order_item = order.items.get()
+        self.assertEqual(order_item.discount_amount, Decimal("20000"))
+        self.assertEqual(order_item.subtotal - order_item.discount_amount, Decimal("180000"))
         redemption = DiscountRedemption.objects.get(order=order, campaign=campaign)
         self.assertEqual(redemption.status, "reserved")
         campaign.refresh_from_db()
