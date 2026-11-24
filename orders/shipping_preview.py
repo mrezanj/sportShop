@@ -195,6 +195,17 @@ class ShippingPreviewSerializer(serializers.Serializer):
 
         data["_result"] = {
             "quote_token": quote_token,
+            "items": [
+                {
+                    "variant_id": variant_id,
+                    "sku": variants_by_id[variant_id].sku,
+                    "product_name": variants_by_id[variant_id].product.name_fa,
+                    "quantity": quantity,
+                    "unit_price": int(variants_by_id[variant_id].price),
+                    "line_subtotal": int(variants_by_id[variant_id].price * quantity),
+                }
+                for variant_id, quantity in sorted(quantities.items())
+            ],
             "quote_expires_in": 600,
             "subtotal": int(subtotal),
             "vat_amount": int(vat_amount),
