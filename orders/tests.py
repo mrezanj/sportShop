@@ -615,9 +615,9 @@ class CreateOrderReservationTests(TestCase):
             {"variant_id": self.variant.id, "quantity": 1},
         ])
         payload = dict(serializer.initial_data)
-        payload["quote_token"] = payload["quote_token"][:-1] + (
-            "a" if payload["quote_token"][-1] != "a" else "b"
-        )
+        token_parts = payload["quote_token"].split(":")
+        token_parts[0] = ("A" if token_parts[0][0] != "A" else "B") + token_parts[0][1:]
+        payload["quote_token"] = ":".join(token_parts)
         tampered = CreateOrderSerializer(
             data=payload,
             context={"request": SimpleNamespace(user=self.user)},
