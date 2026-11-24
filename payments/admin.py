@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Payment
+from .models import Payment, Refund
 from jalali_suite.admin import JalaliDateModelAdmin
 
 
@@ -28,3 +28,25 @@ class PaymentAdmin(JalaliDateModelAdmin):
         "paid_at",
     ]
     ordering = ["-created_at"]
+
+
+
+@admin.register(Refund)
+class RefundAdmin(JalaliDateModelAdmin):
+    list_display = ("id", "return_request", "payment", "amount", "status", "provider_reference", "created_at", "completed_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("return_request__order__order_number", "provider_reference", "idempotency_key")
+    readonly_fields = (
+        "return_request", "payment", "amount", "status", "idempotency_key",
+        "provider_reference", "provider_response", "requested_by", "processed_by",
+        "created_at", "updated_at", "completed_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.has_perm("payments.can_manage_refunds")
+
+    def has_delete_permission(self, request, obj=None):
+        return False
