@@ -13,6 +13,7 @@ class CanManageDiscounts(BasePermission):
         return bool(
             user
             and user.is_authenticated
+            and user.is_staff
             and (
                 user.is_superuser
                 or user.has_perm("catalog.can_manage_product_prices")
