@@ -79,15 +79,25 @@ def release_active_reservations(reservations, now=None):
 def release_order_discount_redemptions(order):
     from catalog.models import DiscountCampaign, DiscountRedemption
 
+    campaign_ids = list(
+        DiscountRedemption.objects.filter(
+            order=order,
+            status="reserved",
+        ).values_list("campaign_id", flat=True)
+    )
+    campaigns = {
+        campaign.pk: campaign
+        for campaign in DiscountCampaign.objects.select_for_update()
+        .filter(pk__in=campaign_ids)
+        .order_by("-priority", "id")
+    }
     redemptions = list(
         DiscountRedemption.objects.select_for_update()
         .filter(order=order, status="reserved")
         .order_by("campaign_id")
     )
     for redemption in redemptions:
-        campaign = DiscountCampaign.objects.select_for_update().get(
-            pk=redemption.campaign_id
-        )
+        campaign = campaigns[redemption.campaign_id]
         campaign.usage_count = max(campaign.usage_count - 1, 0)
         campaign.save(update_fields=["usage_count", "updated_at"])
         redemption.status = "released"
