@@ -50,6 +50,7 @@ def create_return_request(*, order_number, user, reason, items):
 
 @transaction.atomic
 def review_return_request(*, request_id, actor, decision, note=""):
+    note = note if isinstance(note, str) else ""
     request = ReturnRequest.objects.select_for_update().get(pk=request_id)
     if request.status != "requested":
         raise ReturnRequestError("این درخواست قبلاً بررسی شده است.")
@@ -69,6 +70,7 @@ def review_return_request(*, request_id, actor, decision, note=""):
 
 @transaction.atomic
 def mark_return_received(*, request_id, actor, note=""):
+    note = note if isinstance(note, str) else ""
     request = ReturnRequest.objects.select_for_update().get(pk=request_id)
     if request.status != "approved":
         raise ReturnRequestError("فقط درخواست تأییدشده قابل ثبت به‌عنوان کالای دریافت‌شده است.")
