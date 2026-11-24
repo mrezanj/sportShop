@@ -23,7 +23,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="orderitem",
             constraint=models.CheckConstraint(
-                condition=models.Q(("discount_amount__gte", 0), ("discount_amount__lte", models.F("subtotal"))),
+                condition=(models.Q(("discount_amount__gte", 0)) & models.Q(("discount_amount__lte", models.F("subtotal")))),
                 name="order_item_discount_within_subtotal",
             ),
         ),
