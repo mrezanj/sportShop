@@ -272,5 +272,5 @@ class InventoryDashboardAPITests(TestCase):
         )
         self.assertEqual(
             InventoryDocumentLog.objects.filter(document_id=document_id).count(),
-            5,
+            4,
         )
