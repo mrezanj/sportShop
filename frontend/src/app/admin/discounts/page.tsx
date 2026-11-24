@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   createDiscountCampaign,
-  deleteDiscountCampaign,
   fetchDiscountCampaigns,
   updateDiscountCampaign,
   type DiscountCampaign,
@@ -186,21 +185,7 @@ export default function DiscountsAdminPage() {
     }
   };
 
-  const remove = async (item: DiscountCampaign) => {
-    if (!token || !window.confirm(`کمپین «${item.name}» حذف شود؟`)) return;
-    setBusy(true);
-    setError('');
-    try {
-      await deleteDiscountCampaign(token, item.id);
-      setNotice('کمپین حذف شد.');
-      if (editingId === item.id) reset();
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'حذف کمپین انجام نشد.');
-    } finally {
-      setBusy(false);
-    }
-  };
+
 
   if (authLoading) return <main className="grid min-h-[60vh] place-items-center">در حال بررسی دسترسی...</main>;
   if (!user || !token) return <main className="container mx-auto px-4 py-16 text-center">برای مدیریت تخفیف وارد حساب کاربری شوید.</main>;
@@ -280,7 +265,7 @@ export default function DiscountsAdminPage() {
                   <td className="p-2 whitespace-nowrap">{new Date(item.starts_at).toLocaleString('fa-IR')}<br />تا {new Date(item.ends_at).toLocaleString('fa-IR')}</td>
                   <td className="p-2">{number(item.usage_count)}{item.max_uses ? ` / ${number(item.max_uses)}` : ' / نامحدود'}</td>
                   <td className="p-2">{item.is_active ? 'فعال' : 'غیرفعال'}</td>
-                  <td className="p-2"><div className="flex gap-2"><button type="button" onClick={() => edit(item)} className="rounded-lg border border-pink-200 px-3 py-1.5 font-bold text-pink-900">ویرایش</button><button type="button" disabled={busy} onClick={() => void toggleActive(item)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-gray-700 disabled:opacity-50">{item.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}</button><button type="button" disabled={busy || item.usage_count > 0} onClick={() => void remove(item)} title={item.usage_count > 0 ? 'کمپین دارای سابقه مصرف است؛ آن را غیرفعال کنید.' : 'حذف کمپین'} className="rounded-lg border border-red-200 px-3 py-1.5 text-red-700 disabled:opacity-40">حذف</button></div></td>
+                  <td className="p-2"><div className="flex gap-2"><button type="button" onClick={() => edit(item)} className="rounded-lg border border-pink-200 px-3 py-1.5 font-bold text-pink-900">ویرایش</button><button type="button" disabled={busy} onClick={() => void toggleActive(item)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-gray-700 disabled:opacity-50">{item.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'}</button></div></td>
                 </tr>)}</tbody>
               </table>
             </div>
