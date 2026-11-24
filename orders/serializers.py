@@ -16,6 +16,7 @@ from inventory.services import (
 )
 from locations.models import City
 from .models import (
+    CheckoutPriceQuote,
     Order,
     OrderItem,
     ShippingMethod,
@@ -164,7 +165,11 @@ class CreateOrderSerializer(serializers.Serializer):
             })
 
         request = self.context.get("request")
-        if not request or price_quote.get("user_id") != request.user.pk:
+        if (
+            not request
+            or price_quote.get("user_id") != request.user.pk
+            or not price_quote.get("quote_id")
+        ):
             raise serializers.ValidationError({
                 "quote_token": "پیش‌نمایش قیمت متعلق به این کاربر نیست."
             })
@@ -328,6 +333,26 @@ class CreateOrderSerializer(serializers.Serializer):
         expires_at = now + timedelta(minutes=reservation_minutes)
 
         with transaction.atomic():
+            quote_record = (
+                CheckoutPriceQuote.objects.select_for_update()
+                .filter(pk=price_quote.get("quote_id"), user=user)
+                .first()
+            )
+            signed_payload = {
+                key: value
+                for key, value in price_quote.items()
+                if key != "quote_id"
+            }
+            if (
+                quote_record is None
+                or quote_record.consumed_at is not None
+                or quote_record.expires_at <= now
+                or quote_record.payload != signed_payload
+            ):
+                raise serializers.ValidationError({
+                    "quote_token": "این پیش‌نمایش قبلاً استفاده شده یا منقضی است؛ دوباره محاسبه کنید."
+                })
+
             # Lock variants in a consistent order to prevent overselling.
             variants = list(
                 ProductVariant.objects.select_for_update()
@@ -637,5 +662,8 @@ class CreateOrderSerializer(serializers.Serializer):
                     raise serializers.ValidationError(
                         {"items": str(exc)}
                     ) from exc
+
+            quote_record.consumed_at = now
+            quote_record.save(update_fields=["consumed_at"])
 
             return order
