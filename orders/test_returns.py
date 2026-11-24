@@ -100,6 +100,23 @@ class ReturnRequestTests(TestCase):
         self.assertEqual(request.items.get().quantity, 1)
         self.assertEqual(request.status, "requested")
 
+    def test_completed_return_quantity_cannot_be_requested_again(self):
+        previous = create_return_request(
+            order_number=self.order.order_number, user=self.user,
+            reason="مرجوعی اول", items=[
+                {"order_item_id": self.item.pk, "quantity": 1}
+            ],
+        )
+        previous.status = "closed"
+        previous.save(update_fields=["status"])
+        with self.assertRaises(ReturnRequestError):
+            create_return_request(
+                order_number=self.order.order_number, user=self.user,
+                reason="مرجوعی مجدد", items=[
+                    {"order_item_id": self.item.pk, "quantity": 2}
+                ],
+            )
+
     def test_customer_cannot_return_more_than_purchased(self):
         with self.assertRaises(ReturnRequestError):
             create_return_request(
