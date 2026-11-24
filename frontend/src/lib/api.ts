@@ -372,6 +372,8 @@ export interface OrderItemDetail {
   price: number;
   quantity: number;
   subtotal: number;
+  discount_amount: number;
+  final_subtotal: number;
 }
 
 export interface OrderDetail {
