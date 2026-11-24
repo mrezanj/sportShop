@@ -38,7 +38,7 @@ class CatalogImportAPITests(TestCase):
             "product_slug,name_fa,brand_slug,category_slug,description,price,sku,"
             "flavor,weight,consumption_goals\\n"
             "imported-whey,پروتئین وی,import-brand,import-category,توضیحات,125000,"
-            "WHEY-001,شکلات,۲ کیلو,[ریکاوری]\\n"
+            "WHEY-001,شکلات,۲ کیلو,[\"ریکاوری\"]\\n"
         )
         response = self.client.post(
             reverse("product-import-catalog"),
