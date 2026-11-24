@@ -66,6 +66,12 @@ def calculate_discounts(*, user, variants, quantities, discount_code="", now=Non
     """
     now = now or timezone.now()
     code = (discount_code or "").strip().upper()
+
+    # Serialize order creation for the same customer. This closes the race
+    # where two concurrent checkouts could both reserve a first-purchase offer.
+    if lock:
+        type(user).objects.select_for_update().get(pk=user.pk)
+
     variants_by_id = {variant.pk: variant for variant in variants}
     lines = []
     for variant_id, quantity in sorted(quantities.items()):
@@ -132,9 +138,17 @@ def calculate_discounts(*, user, variants, quantities, discount_code="", now=Non
         if campaign.first_purchase_only:
             if first_purchase is None:
                 from orders.models import Order
-                first_purchase = not Order.objects.filter(user=user).filter(
+                has_paid_order = Order.objects.filter(user=user).filter(
                     Q(status="paid") | Q(payments__status="success")
                 ).exists()
+                has_reserved_first_purchase_offer = DiscountRedemption.objects.filter(
+                    user=user,
+                    status__in=["reserved", "consumed"],
+                    campaign__first_purchase_only=True,
+                ).exists()
+                first_purchase = (
+                    not has_paid_order and not has_reserved_first_purchase_offer
+                )
             if not first_purchase:
                 if campaign.code == code:
                     raise ValidationError({"discount_code": "این کد فقط برای اولین خرید قابل استفاده است."})
