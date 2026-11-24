@@ -258,6 +258,7 @@ def checkout(request):
 
         payload = {
             "items": items,
+            "quote_token": request.data.get("quote_token"),
             "shipping_method_slug": request.data.get("shipping_method_slug"),
             "province": request.data.get("province"),
             "city_code": request.data.get("city_code"),
