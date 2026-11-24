@@ -1434,6 +1434,169 @@ class InventoryDocumentWorkflowTests(TestCase):
             4,
         )
 
+    def test_outbound_document_cannot_consume_reserved_stock(self):
+        from django.core.exceptions import ValidationError
+        from orders.models import Order, StockReservation
+        from .services import get_variant_inventory
+
+        now = timezone.now()
+        today = timezone.localdate()
+        batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="RESERVED-BOUNDARY-001",
+            expiration_date=today + timedelta(days=30),
+            created_by=self.creator,
+        )
+
+        inbound = create_inventory_document(
+            user=self.creator,
+            document_number="RESERVED-BOUNDARY-IN",
+            document_type="inbound",
+        )
+        add_inventory_document_item(
+            user=self.creator,
+            document_id=inbound.id,
+            variant=self.variant,
+            quantity=10,
+            direction="inbound",
+            batch=batch,
+        )
+        submit_inventory_document(user=self.creator, document_id=inbound.id)
+        review_inventory_document(user=self.reviewer, document_id=inbound.id)
+        approve_inventory_document(user=self.approver, document_id=inbound.id)
+
+        order = Order.objects.create(
+            user=self.creator,
+            first_name="Reserved",
+            last_name="Customer",
+            mobile="09120000000",
+            province="tehran",
+            city="Tehran",
+            address="Test address",
+            subtotal=100000,
+            vat_amount=0,
+            total_amount=100000,
+            status="pending",
+            reservation_expires_at=now + timedelta(minutes=20),
+        )
+        StockReservation.objects.create(
+            order=order,
+            variant=self.variant,
+            quantity=4,
+            status="active",
+            expires_at=now + timedelta(minutes=10),
+        )
+
+        outbound = create_inventory_document(
+            user=self.creator,
+            document_number="RESERVED-BOUNDARY-OUT",
+            document_type="outbound",
+        )
+        add_inventory_document_item(
+            user=self.creator,
+            document_id=outbound.id,
+            variant=self.variant,
+            quantity=7,
+            direction="outbound",
+        )
+        submit_inventory_document(user=self.creator, document_id=outbound.id)
+        review_inventory_document(user=self.reviewer, document_id=outbound.id)
+
+        with self.assertRaises(ValidationError):
+            approve_inventory_document(
+                user=self.approver,
+                document_id=outbound.id,
+            )
+
+        outbound.refresh_from_db()
+        self.assertEqual(outbound.status, "pending_approval")
+        self.assertFalse(
+            InventoryMovement.objects.filter(document=outbound).exists()
+        )
+        inventory = get_variant_inventory(self.variant, now=now)
+        self.assertEqual(inventory["physical"], 10)
+        self.assertEqual(inventory["reserved"], 4)
+        self.assertEqual(inventory["available"], 6)
+
+    def test_batch_specific_outbound_rejects_unallocated_variant_reservations(self):
+        from django.core.exceptions import ValidationError
+        from orders.models import Order, StockReservation
+
+        now = timezone.now()
+        today = timezone.localdate()
+        batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="RESERVED-BATCH-SPECIFIC-001",
+            expiration_date=today + timedelta(days=30),
+            created_by=self.creator,
+        )
+
+        inbound = create_inventory_document(
+            user=self.creator,
+            document_number="RESERVED-BATCH-SPECIFIC-IN",
+            document_type="inbound",
+        )
+        add_inventory_document_item(
+            user=self.creator,
+            document_id=inbound.id,
+            variant=self.variant,
+            quantity=10,
+            direction="inbound",
+            batch=batch,
+        )
+        submit_inventory_document(user=self.creator, document_id=inbound.id)
+        review_inventory_document(user=self.reviewer, document_id=inbound.id)
+        approve_inventory_document(user=self.approver, document_id=inbound.id)
+
+        order = Order.objects.create(
+            user=self.creator,
+            first_name="Reserved",
+            last_name="Customer",
+            mobile="09120000000",
+            province="tehran",
+            city="Tehran",
+            address="Test address",
+            subtotal=100000,
+            vat_amount=0,
+            total_amount=100000,
+            status="pending",
+            reservation_expires_at=now + timedelta(minutes=20),
+        )
+        StockReservation.objects.create(
+            order=order,
+            variant=self.variant,
+            quantity=2,
+            status="active",
+            expires_at=now + timedelta(minutes=10),
+        )
+
+        outbound = create_inventory_document(
+            user=self.creator,
+            document_number="RESERVED-BATCH-SPECIFIC-OUT",
+            document_type="outbound",
+        )
+        add_inventory_document_item(
+            user=self.creator,
+            document_id=outbound.id,
+            variant=self.variant,
+            quantity=2,
+            direction="outbound",
+            batch=batch,
+        )
+        submit_inventory_document(user=self.creator, document_id=outbound.id)
+        review_inventory_document(user=self.reviewer, document_id=outbound.id)
+
+        with self.assertRaises(ValidationError):
+            approve_inventory_document(
+                user=self.approver,
+                document_id=outbound.id,
+            )
+
+        outbound.refresh_from_db()
+        self.assertEqual(outbound.status, "pending_approval")
+        self.assertFalse(
+            InventoryMovement.objects.filter(document=outbound).exists()
+        )
     def test_insufficient_stock_rolls_back_all_movements(self):
         from django.core.exceptions import ValidationError
 
