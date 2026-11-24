@@ -146,6 +146,38 @@ class RefundPermissionAPITests(TestCase):
         }, format="json")
         self.assertEqual(response.status_code, 403)
 
+    def test_refund_queue_serializes_jalali_timestamps(self):
+        user = User.objects.create_user("refund-queue-customer")
+        staff = self.user
+        order = Order.objects.create(
+            user=user, first_name="Test", last_name="Customer",
+            mobile="09123456789", province="tehran", city="Tehran",
+            address="Test address", subtotal=Decimal("100000"),
+            vat_amount=Decimal("10000"), total_amount=Decimal("110000"),
+            status="delivered",
+        )
+        payment = Payment.objects.create(
+            order=order, gateway="mock", amount=Decimal("110000"),
+            status="success", ref_id="REFUND-QUEUE-CAPTURE",
+        )
+        return_request = ReturnRequest.objects.create(
+            order=order, user=user, reason="مرجوعی", status="received",
+        )
+        refund = create_refund(
+            return_request_id=return_request.pk, amount=Decimal("10000"),
+            actor=staff, idempotency_key=uuid4(),
+        )
+        permission = Permission.objects.get(
+            content_type__app_label="payments", codename="can_manage_refunds",
+        )
+        staff.user_permissions.add(permission)
+        self.client.force_authenticate(user=staff)
+        response = self.client.get("/api/payments/refunds/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data[0]["id"], refund.pk)
+        self.assertIsInstance(response.data[0]["created_at"], str)
+        self.assertIsInstance(response.data[0]["history"][0]["created_at"], str)
+
     def test_refund_permission_grants_access_to_queue(self):
         permission = Permission.objects.get(
             content_type__app_label="payments",
