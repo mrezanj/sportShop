@@ -3,6 +3,7 @@ import uuid
 from decimal import Decimal
 
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 
@@ -123,6 +124,16 @@ class Product(models.Model):
         verbose_name_plural = "محصولات"
         ordering = ["-created_at"]
 
+    def clean(self):
+        super().clean()
+        if not isinstance(self.consumption_goals, list) or any(
+            not isinstance(goal, str) or not goal.strip()
+            for goal in self.consumption_goals
+        ):
+            raise ValidationError(
+                {"consumption_goals": "اهداف مصرف باید فهرستی از متن‌های غیرخالی باشد."}
+            )
+
     def __str__(self):
         return self.name_fa
 
@@ -170,16 +181,21 @@ class ProductImage(models.Model):
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        product = self.product
-        was_primary = self.is_primary
-        super().delete(*args, **kwargs)
-        # If the deleted image was primary, promote another one
-        if was_primary:
-            first_remaining = ProductImage.objects.filter(product=product).first()
-            if first_remaining and not first_remaining.is_primary:
-                ProductImage.objects.filter(pk=first_remaining.pk).update(
-                    is_primary=True
-                )
+        from django.db import transaction
+
+        with transaction.atomic():
+            Product.objects.select_for_update().get(pk=self.product_id)
+            product = self.product
+            was_primary = self.is_primary
+            super().delete(*args, **kwargs)
+            if was_primary:
+                first_remaining = ProductImage.objects.filter(
+                    product=product
+                ).order_by("order", "id").first()
+                if first_remaining and not first_remaining.is_primary:
+                    ProductImage.objects.filter(pk=first_remaining.pk).update(
+                        is_primary=True
+                    )
 
     def __str__(self):
         return self.alt_text or self.product.name_fa
@@ -286,16 +302,6 @@ class ProductVariant(models.Model):
             ),
         ]
 
-    def clean(self):
-        super().clean()
-        if not isinstance(self.consumption_goals, list) or any(
-            not isinstance(goal, str) or not goal.strip()
-            for goal in self.consumption_goals
-        ):
-            raise models.ValidationError(
-                {"consumption_goals": "اهداف مصرف باید فهرستی از متن‌های غیرخالی باشد."}
-            )
-
     def __str__(self):
         parts = [self.product.name_fa]
         if self.flavor:
@@ -316,7 +322,7 @@ class ProductVariant(models.Model):
             or not isinstance(value, (str, int, float, bool))
             for key, value in self.attributes.items()
         ):
-            raise models.ValidationError(
+            raise ValidationError(
                 {"attributes": "ویژگی‌های سفارشی باید شیئی با کلید متنی و مقدار ساده باشند."}
             )
 
