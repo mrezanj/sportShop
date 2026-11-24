@@ -17,7 +17,7 @@ export default function VariantSelector({
 }: Props) {
   const activeVariants = variants.filter((v) => v.is_active);
   const [selectedId, setSelectedId] = useState<number | null>(
-    activeVariants[0]?.id ?? null
+    activeVariants.find((variant) => variant.stock > 0)?.id ?? activeVariants[0]?.id ?? null
   );
   const [message, setMessage] = useState<{
     type: 'success' | 'warning';
@@ -33,7 +33,8 @@ export default function VariantSelector({
     !activeVariants[0].flavor &&
     !activeVariants[0].weight &&
     !activeVariants[0].size &&
-    !activeVariants[0].color;
+    !activeVariants[0].color &&
+    Object.keys(activeVariants[0].attributes ?? {}).length === 0;
 
   if (activeVariants.length === 0) {
     return (
@@ -83,10 +84,11 @@ export default function VariantSelector({
     setTimeout(() => setMessage(null), 2000);
   };
 
-  const variantLabelOf = (variant: ProductVariant) =>
-    [variant.flavor, variant.weight, variant.size, variant.color]
-      .filter(Boolean)
-      .join(' - ');
+  const variantLabelOf = (variant: ProductVariant) => {
+    const standard = [variant.flavor, variant.weight, variant.size, variant.color].filter(Boolean);
+    const custom = Object.values(variant.attributes ?? {}).map(String).filter(Boolean);
+    return [...standard, ...custom].join(' - ');
+  };
 
   return (
     <div className="space-y-4">
