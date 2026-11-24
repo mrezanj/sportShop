@@ -151,7 +151,7 @@ class InventoryDocumentHistoryAPIView(APIView):
         get_object_or_404(InventoryDocument, pk=document_id)
         logs = InventoryDocumentLog.objects.filter(
             document_id=document_id
-        ).select_related("actor")
+        ).select_related("actor").order_by("created_at", "pk")
         return Response(InventoryDocumentLogSerializer(logs, many=True).data)
 
 
