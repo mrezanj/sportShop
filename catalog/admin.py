@@ -176,6 +176,11 @@ class ProductVariantPriceHistoryAdmin(admin.ModelAdmin):
         "created_at",
     )
 
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser or request.user.has_perm(
+            "catalog.can_manage_product_prices"
+        )
+
     def has_add_permission(self, request):
         return False
 
