@@ -55,10 +55,10 @@ def review_return_request(*, request_id, actor, decision, note=""):
         raise ReturnRequestError("این درخواست قبلاً بررسی شده است.")
     if decision not in {"approved", "rejected"}:
         raise ReturnRequestError("تصمیم بررسی نامعتبر است.")
+    old_status = request.status
     request.status = decision
     request.reviewed_by = actor
     request.staff_note = note
-    old_status = request.status
     request.save(update_fields=["status", "reviewed_by", "staff_note", "updated_at"])
     ReturnRequestHistory.objects.create(
         return_request=request, old_status=old_status, new_status=decision,
@@ -72,10 +72,10 @@ def mark_return_received(*, request_id, actor, note=""):
     request = ReturnRequest.objects.select_for_update().get(pk=request_id)
     if request.status != "approved":
         raise ReturnRequestError("فقط درخواست تأییدشده قابل ثبت به‌عنوان کالای دریافت‌شده است.")
+    old_status = request.status
     request.status = "received"
     request.reviewed_by = actor
     request.staff_note = note
-    old_status = request.status
     request.save(update_fields=["status", "reviewed_by", "staff_note", "updated_at"])
     ReturnRequestHistory.objects.create(
         return_request=request, old_status=old_status, new_status="received",
