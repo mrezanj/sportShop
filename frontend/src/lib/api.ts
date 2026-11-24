@@ -512,6 +512,9 @@ export interface InventorySummary {
   pending_review_count: number;
   pending_approval_count: number;
   can_manage_threshold: boolean;
+  can_create_document: boolean;
+  can_review_document: boolean;
+  can_approve_document: boolean;
 }
 
 export interface InventoryStockRow {
@@ -543,6 +546,8 @@ export interface InventoryDocumentRow {
 
 export interface InventoryDocumentItem {
   id: number;
+  variant_id: number;
+  batch_id: number | null;
   sku: string;
   product_name: string;
   batch_number: string | null;
@@ -632,4 +637,62 @@ export function fetchInventoryDocumentDetail(token: string, documentId: number) 
 
 export function fetchInventoryDocumentHistory(token: string, documentId: number) {
   return inventoryRequest<InventoryDocumentLog[]>(`documents/${documentId}/history/`, token);
+}
+
+
+export interface CreateInventoryDocumentPayload {
+  document_number: string;
+  document_type: string;
+  reference?: string;
+  reason?: string;
+  notes?: string;
+}
+
+export interface AddInventoryDocumentItemPayload {
+  variant: number;
+  quantity: number;
+  direction: 'inbound' | 'outbound';
+  batch?: number | null;
+  new_batch_number?: string;
+  new_batch_expiration_date?: string | null;
+  unit_cost?: number | null;
+  reason?: string;
+}
+
+export async function createInventoryDocument(token: string, payload: CreateInventoryDocumentPayload) {
+  return inventoryRequest<{ id: number; document_number: string; document_type: string; status: string }>(
+    'documents/create/', token, { method: 'POST', body: JSON.stringify(payload) }
+  );
+}
+
+export async function addInventoryDocumentItem(token: string, documentId: number, payload: AddInventoryDocumentItemPayload) {
+  return inventoryRequest<{ id: number; document_id: number; variant_id: number; quantity: number; direction: string; batch_id: number | null }>(
+    `documents/${documentId}/items/`, token, { method: 'POST', body: JSON.stringify(payload) }
+  );
+}
+
+export async function removeInventoryDocumentItem(token: string, documentId: number, itemId: number) {
+  return inventoryRequest<void>(
+    `documents/${documentId}/items/${itemId}/`, token, { method: 'DELETE' }
+  );
+}
+
+async function inventoryDocumentAction(token: string, documentId: number, action: 'submit' | 'review' | 'approve' | 'reject', note = '') {
+  return inventoryRequest<{ id: number; document_number: string; status: string }>(
+    `documents/${documentId}/${action}/`, token,
+    { method: 'POST', body: JSON.stringify({ note }) }
+  );
+}
+
+export function submitInventoryDocument(token: string, documentId: number) {
+  return inventoryDocumentAction(token, documentId, 'submit');
+}
+export function reviewInventoryDocument(token: string, documentId: number, note = '') {
+  return inventoryDocumentAction(token, documentId, 'review', note);
+}
+export function approveInventoryDocument(token: string, documentId: number, note = '') {
+  return inventoryDocumentAction(token, documentId, 'approve', note);
+}
+export function rejectInventoryDocument(token: string, documentId: number, note: string) {
+  return inventoryDocumentAction(token, documentId, 'reject', note);
 }
