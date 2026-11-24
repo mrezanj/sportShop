@@ -319,9 +319,9 @@ class DiscountCampaignManagementAPITests(APITestCase):
 
 
 
-class DiscountRedemptionLifecycleTests(DiscountCalculationTests):
+class DiscountRedemptionLifecycleTests(TestCase):
     def setUp(self):
-        super().setUp()
+        DiscountCalculationTests.setUp(self)
         from orders.models import Order
 
         self.order = Order.objects.create(
