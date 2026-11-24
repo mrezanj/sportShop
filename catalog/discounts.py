@@ -99,9 +99,7 @@ def calculate_discounts(*, user, variants, quantities, discount_code="", now=Non
             Q(ends_at__gt=now),
             Q(code__isnull=True) | Q(code="") | Q(code=code),
         )
-    queryset = queryset.select_related("product", "category", "brand").order_by(
-        "-priority", "id"
-    )
+    queryset = queryset.order_by("-priority", "id")
     if lock:
         queryset = queryset.select_for_update()
 
@@ -117,13 +115,15 @@ def calculate_discounts(*, user, variants, quantities, discount_code="", now=Non
     for campaign in campaigns:
         if campaign.code and campaign.code != code:
             continue
-        if campaign.usage_count >= campaign.max_uses if campaign.max_uses else False:
+        if campaign.max_uses is not None and campaign.usage_count >= campaign.max_uses:
             if campaign.code == code:
                 raise ValidationError({"discount_code": "ظرفیت استفاده از این کد تکمیل شده است."})
             continue
         if campaign.per_user_limit is not None:
             used_by_user = DiscountRedemption.objects.filter(
-                campaign=campaign, user=user
+                campaign=campaign,
+                user=user,
+                status__in=["reserved", "consumed"],
             ).count()
             if used_by_user >= campaign.per_user_limit:
                 if campaign.code == code:
@@ -147,10 +147,14 @@ def calculate_discounts(*, user, variants, quantities, discount_code="", now=Non
             not campaign.is_stackable
             or any(not item["is_stackable"] for item in applied)
         ):
+            if campaign.code == code:
+                raise ValidationError({"discount_code": "این کد با تخفیف‌های اولویت‌دار سبد قابل ترکیب نیست."})
             continue
 
         eligible = _eligible_lines(campaign, lines)
         eligible = [line for line in eligible if line["remaining"] > ZERO]
+        if campaign.code == code and not eligible:
+            raise ValidationError({"discount_code": "این کد برای محصولات موجود در سبد خرید قابل استفاده نیست."})
         eligible_subtotal = sum((line["remaining"] for line in eligible), ZERO)
         if eligible_subtotal <= ZERO:
             continue
@@ -183,6 +187,8 @@ def calculate_discounts(*, user, variants, quantities, discount_code="", now=Non
             amount = sum(allocations.values(), ZERO)
 
         if amount <= ZERO:
+            if campaign.code == code:
+                raise ValidationError({"discount_code": "مبلغ تخفیف این کد برای سبد فعلی قابل اعمال نیست."})
             continue
         for line in lines:
             allocated = allocations.get(line["variant"].pk, ZERO)
@@ -235,7 +241,11 @@ def record_discount_redemptions(*, result, order, user, discount_code=""):
         if locked.max_uses is not None and locked.usage_count >= locked.max_uses:
             raise ValidationError({"discount_code": "ظرفیت استفاده از تخفیف هم‌زمان تکمیل شده است؛ دوباره قیمت را بررسی کنید."})
         if locked.per_user_limit is not None:
-            used = DiscountRedemption.objects.filter(campaign=locked, user=user).count()
+            used = DiscountRedemption.objects.filter(
+                campaign=locked,
+                user=user,
+                status__in=["reserved", "consumed"],
+            ).count()
             if used >= locked.per_user_limit:
                 raise ValidationError({"discount_code": "سقف استفاده شما از تخفیف تکمیل شده است."})
         locked.usage_count += 1
