@@ -33,6 +33,7 @@ export default function CheckoutPage() {
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [preview, setPreview] = useState<ShippingPreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [priceConfirmed, setPriceConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +79,7 @@ export default function CheckoutPage() {
     setSelectedMethodSlug('');
     setPreview(null);
     setPreviewError(null);
+    setPriceConfirmed(false);
 
     if (!form.province) {
       setLoadingCities(false);
@@ -273,6 +275,10 @@ export default function CheckoutPage() {
       return setError(
         previewError || 'ابتدا باید محاسبه هزینه سفارش با موفقیت انجام شود.'
       );
+    }
+
+    if (!priceConfirmed) {
+      return setError('لطفاً مبلغ نهایی و جزئیات قیمت را بررسی و تأیید کنید.');
     }
 
     setSubmitting(true);
@@ -631,6 +637,21 @@ export default function CheckoutPage() {
               </div>
             </div>
 
+            {preview?.quote_token && (
+              <label className="mt-4 flex items-start gap-2 rounded-lg border border-pink-200 bg-white p-3 text-xs leading-6 text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={priceConfirmed}
+                  onChange={(event) => setPriceConfirmed(event.target.checked)}
+                  className="mt-1 accent-pink-800"
+                />
+                <span>
+                  مبلغ نهایی، قیمت روز کالاها، مالیات و هزینه‌های ارسال و بسته‌بندی را بررسی کردم و تأیید می‌کنم.
+                  <span className="block text-gray-500">اعتبار این پیش‌نمایش ۱۰ دقیقه است؛ پس از تغییر سبد یا اطلاعات ارسال باید دوباره تأیید کنید.</span>
+                </span>
+              </label>
+            )}
+
             {error && (
               <div className="mt-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
                 {error}
@@ -646,7 +667,8 @@ export default function CheckoutPage() {
                 loadingPreview ||
                 !form.city_code ||
                 !selectedMethodSlug ||
-                !preview
+                !preview ||
+                !priceConfirmed
               }
               className="w-full mt-4 bg-pink-800 hover:bg-pink-900 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors"
             >
