@@ -316,6 +316,7 @@ def review_return(request, request_id):
     from .return_serializers import ReturnRequestSerializer
     if not request.user.has_perm("orders.can_review_return_requests"):
         return Response({"detail": "اجازه بررسی درخواست مرجوعی را ندارید."}, status=403)
+    from .models import ReturnRequest
     try:
         result = review_return_request(
             request_id=request_id,
@@ -323,13 +324,10 @@ def review_return(request, request_id):
             decision=request.data.get("decision", ""),
             note=request.data.get("note", ""),
         )
-    except Exception as exc:
-        from .models import ReturnRequest
-        if isinstance(exc, ReturnRequest.DoesNotExist):
-            return Response({"detail": "درخواست مرجوعی یافت نشد."}, status=404)
-        if isinstance(exc, ReturnRequestError):
-            return Response({"detail": str(exc)}, status=400)
-        raise
+    except ReturnRequest.DoesNotExist:
+        return Response({"detail": "درخواست مرجوعی یافت نشد."}, status=404)
+    except ReturnRequestError as exc:
+        return Response({"detail": str(exc)}, status=400)
     return Response(ReturnRequestSerializer(result).data)
 
 
@@ -340,17 +338,15 @@ def receive_return(request, request_id):
     from .return_serializers import ReturnRequestSerializer
     if not request.user.has_perm("orders.can_review_return_requests"):
         return Response({"detail": "اجازه ثبت دریافت مرجوعی را ندارید."}, status=403)
+    from .models import ReturnRequest
     try:
         result = mark_return_received(
             request_id=request_id, actor=request.user, note=request.data.get("note", "")
         )
-    except Exception as exc:
-        from .models import ReturnRequest
-        if isinstance(exc, ReturnRequest.DoesNotExist):
-            return Response({"detail": "درخواست مرجوعی یافت نشد."}, status=404)
-        if isinstance(exc, ReturnRequestError):
-            return Response({"detail": str(exc)}, status=400)
-        raise
+    except ReturnRequest.DoesNotExist:
+        return Response({"detail": "درخواست مرجوعی یافت نشد."}, status=404)
+    except ReturnRequestError as exc:
+        return Response({"detail": str(exc)}, status=400)
     return Response(ReturnRequestSerializer(result).data)
 
 
@@ -363,7 +359,7 @@ def open_discrepancy(request, order_number):
     try:
         order = Order.objects.get(order_number=order_number)
         case = open_order_discrepancy(
-            order_id=order.pk, reason=request.data.get("reason", "").strip(),
+            order_id=order.pk, reason=request.data.get("reason", ""),
             actor=request.user,
         )
     except Order.DoesNotExist:
@@ -382,7 +378,7 @@ def resolve_discrepancy(request, case_id):
         return Response({"detail": "اجازه رسیدگی به مغایرت سفارش را ندارید."}, status=403)
     try:
         case = resolve_order_discrepancy(
-            case_id=case_id, resolution=request.data.get("resolution", "").strip(),
+            case_id=case_id, resolution=request.data.get("resolution", ""),
             actor=request.user,
         )
     except OrderDiscrepancy.DoesNotExist:
