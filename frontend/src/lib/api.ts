@@ -796,3 +796,88 @@ export async function fetchProductPriceHistory(
   if (!res.ok) throw new Error(data?.detail || 'دریافت سوابق قیمت انجام نشد.');
   return data;
 }
+
+
+export type DiscountScope = 'product' | 'category' | 'brand' | 'cart';
+export type DiscountType = 'percent' | 'fixed';
+
+export interface DiscountCampaign {
+  id: number;
+  name: string;
+  code: string | null;
+  scope: DiscountScope;
+  product: number | null;
+  category: number | null;
+  brand: number | null;
+  discount_type: DiscountType;
+  value: string;
+  maximum_discount_amount: string | null;
+  minimum_order_amount: string;
+  starts_at: string;
+  ends_at: string;
+  priority: number;
+  is_stackable: boolean;
+  first_purchase_only: boolean;
+  max_uses: number | null;
+  per_user_limit: number | null;
+  usage_count: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DiscountCampaignPayload = Omit<
+  DiscountCampaign,
+  'id' | 'usage_count' | 'created_at' | 'updated_at'
+>;
+
+async function discountApiRequest<T>(
+  token: string,
+  path: string,
+  method = 'GET',
+  payload?: unknown
+): Promise<T> {
+  const res = await fetch(`${API_URL}/${path}`, {
+    method,
+    headers: {
+      Authorization: `Token ${token}`,
+      ...(payload ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(payload ? { body: JSON.stringify(payload) } : {}),
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message =
+      data?.detail ||
+      data?.code?.[0] ||
+      data?.name?.[0] ||
+      data?.value?.[0] ||
+      'عملیات مدیریت تخفیف انجام نشد.';
+    throw new Error(message);
+  }
+  return data as T;
+}
+
+export function fetchDiscountCampaigns(token: string): Promise<DiscountCampaign[]> {
+  return discountApiRequest<DiscountCampaign[]>(token, 'discounts/');
+}
+
+export function createDiscountCampaign(
+  token: string,
+  payload: DiscountCampaignPayload
+): Promise<DiscountCampaign> {
+  return discountApiRequest<DiscountCampaign>(token, 'discounts/', 'POST', payload);
+}
+
+export function updateDiscountCampaign(
+  token: string,
+  id: number,
+  payload: Partial<DiscountCampaignPayload>
+): Promise<DiscountCampaign> {
+  return discountApiRequest<DiscountCampaign>(token, `discounts/${id}/`, 'PATCH', payload);
+}
+
+export function deleteDiscountCampaign(token: string, id: number): Promise<void> {
+  return discountApiRequest<void>(token, `discounts/${id}/`, 'DELETE');
+}
