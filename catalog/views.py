@@ -1,4 +1,5 @@
 import csv
+from pathlib import Path
 from decimal import Decimal, InvalidOperation
 from io import TextIOWrapper
 
@@ -140,16 +141,44 @@ class PriceManagementMixin:
         if upload.size > 2 * 1024 * 1024:
             raise ValidationError({"file": "حداکثر حجم فایل ۲ مگابایت است."})
 
+        suffix = Path(upload.name).suffix.lower()
+        rows = []
         try:
-            wrapper = TextIOWrapper(upload.file, encoding="utf-8-sig", newline="")
-            reader = csv.DictReader(wrapper)
-            if not reader.fieldnames or not {"sku", "price"}.issubset(set(reader.fieldnames)):
-                raise ValidationError({"file": "ستون‌های sku و price الزامی هستند."})
-            rows = []
-            for index, row in enumerate(reader, start=2):
-                sku = (row.get("sku") or "").strip()
+            if suffix == ".csv":
+                wrapper = TextIOWrapper(upload.file, encoding="utf-8-sig", newline="")
+                reader = csv.DictReader(wrapper)
+                if not reader.fieldnames or not {"sku", "price"}.issubset(set(reader.fieldnames)):
+                    raise ValidationError({"file": "ستون‌های sku و price الزامی هستند."})
+                source_rows = (
+                    (index, row.get("sku"), row.get("price"))
+                    for index, row in enumerate(reader, start=2)
+                )
+            elif suffix == ".xlsx":
+                from openpyxl import load_workbook
+
+                workbook = load_workbook(upload, read_only=True, data_only=True)
+                sheet = workbook.active
+                iterator = sheet.iter_rows(values_only=True)
+                headers = next(iterator, None)
+                if not headers:
+                    raise ValidationError({"file": "فایل خالی است."})
+                normalized_headers = [str(value).strip().lower() if value is not None else "" for value in headers]
+                if "sku" not in normalized_headers or "price" not in normalized_headers:
+                    raise ValidationError({"file": "ستون‌های sku و price الزامی هستند."})
+                sku_index = normalized_headers.index("sku")
+                price_index = normalized_headers.index("price")
+                source_rows = (
+                    (index, row[sku_index] if sku_index < len(row) else None,
+                     row[price_index] if price_index < len(row) else None)
+                    for index, row in enumerate(iterator, start=2)
+                )
+            else:
+                raise ValidationError({"file": "فقط فایل‌های CSV یا XLSX پشتیبانی می‌شوند."})
+
+            for index, raw_sku, raw_price in source_rows:
+                sku = str(raw_sku or "").strip()
                 try:
-                    price = Decimal((row.get("price") or "").strip())
+                    price = Decimal(str(raw_price).strip())
                 except (InvalidOperation, AttributeError):
                     raise ValidationError({"file": f"قیمت ردیف {index} معتبر نیست."})
                 if not sku or not price.is_finite() or price <= 0:
@@ -158,7 +187,7 @@ class PriceManagementMixin:
                 if len(rows) > 5000:
                     raise ValidationError({"file": "حداکثر ۵۰۰۰ ردیف مجاز است."})
         except UnicodeDecodeError as exc:
-            raise ValidationError({"file": "فایل باید CSV با کدگذاری UTF-8 باشد."}) from exc
+            raise ValidationError({"file": "فایل CSV باید با کدگذاری UTF-8 باشد."}) from exc
 
         updated = _apply_price_updates(
             rows=rows,
