@@ -108,9 +108,9 @@ export default function ReturnsRefundsAdminPage() {
     }
   };
 
-  const reviewReturn = (item: ReturnRequest, decision: 'approve' | 'reject') => {
+  const reviewReturn = (item: ReturnRequest, decision: 'approved' | 'rejected') => {
     const note = notes[`return-${item.id}`] || '';
-    void run(`return-${item.id}`, () => api(token!, `orders/returns/${item.id}/review/`, 'POST', { decision, note }), decision === 'approve' ? 'درخواست مرجوعی تأیید شد.' : 'درخواست مرجوعی رد شد.');
+    void run(`return-${item.id}`, () => api(token!, `orders/returns/${item.id}/review/`, 'POST', { decision, note }), decision === 'approved' ? 'درخواست مرجوعی تأیید شد.' : 'درخواست مرجوعی رد شد.');
   };
 
   const receiveReturn = (item: ReturnRequest) => {
@@ -204,8 +204,8 @@ export default function ReturnsRefundsAdminPage() {
               <textarea rows={2} className={inputClass} value={notes[`return-${item.id}`] || ''} onChange={(event) => setNotes((current) => ({ ...current, [`return-${item.id}`]: event.target.value }))} placeholder="یادداشت بررسی (اختیاری)" />
               <div className="flex flex-wrap gap-2">
                 {item.status === 'requested' && <>
-                  <button disabled={!!busy} onClick={() => reviewReturn(item, 'approve')} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy === `return-${item.id}` ? 'در حال ثبت...' : 'تأیید درخواست'}</button>
-                  <button disabled={!!busy} onClick={() => reviewReturn(item, 'reject')} className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-700 disabled:opacity-50">رد درخواست</button>
+                  <button disabled={!!busy} onClick={() => reviewReturn(item, 'approved')} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy === `return-${item.id}` ? 'در حال ثبت...' : 'تأیید درخواست'}</button>
+                  <button disabled={!!busy} onClick={() => reviewReturn(item, 'rejected')} className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-700 disabled:opacity-50">رد درخواست</button>
                 </>}
                 {item.status === 'approved' && <button disabled={!!busy} onClick={() => receiveReturn(item)} className="rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">ثبت دریافت و بررسی کالا</button>}
               </div>
