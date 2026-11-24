@@ -204,3 +204,40 @@ class ReturnPermissionAPITests(TestCase):
         self.client.force_authenticate(user=self.staff)
         response = self.client.get("/api/orders/returns/")
         self.assertEqual(response.status_code, 200)
+
+
+
+class DiscrepancyPermissionAPITests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user("discrepancy-api-staff")
+        self.customer = User.objects.create_user("discrepancy-api-customer")
+        self.order = Order.objects.create(
+            user=self.customer, first_name="Test", last_name="Customer",
+            mobile="09123456789", province="tehran", city="Tehran",
+            address="Test address", subtotal=Decimal("100000"),
+            vat_amount=Decimal("10000"), total_amount=Decimal("110000"),
+            status="delivered",
+        )
+        self.client = APIClient()
+
+    def test_discrepancy_queue_requires_permission(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get("/api/orders/discrepancies/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_discrepancy_manager_can_open_and_list_cases(self):
+        permission = Permission.objects.get(
+            content_type__app_label="orders",
+            codename="can_manage_order_discrepancies",
+        )
+        self.staff.user_permissions.add(permission)
+        self.client.force_authenticate(user=self.staff)
+        opened = self.client.post(
+            f"/api/orders/{self.order.order_number}/discrepancies/",
+            {"reason": "مغایرت موجودی"}, format="json",
+        )
+        self.assertEqual(opened.status_code, 201)
+        listed = self.client.get("/api/orders/discrepancies/")
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(len(listed.data), 1)
+        self.assertEqual(listed.data[0]["status"], "open")
