@@ -582,6 +582,16 @@ class CreateOrderSerializer(serializers.Serializer):
                             "variant_id": item["variant_id"],
                             "sku": item["sku"],
                             "product_name": variants_by_id[int(item["variant_id"])].product.name_fa,
+                            "variant_label": " - ".join(filter(None, [
+                                variants_by_id[int(item["variant_id"])].flavor,
+                                variants_by_id[int(item["variant_id"])].weight,
+                                variants_by_id[int(item["variant_id"])].size,
+                                variants_by_id[int(item["variant_id"])].color,
+                                *[
+                                    f"{key}: {value}"
+                                    for key, value in variants_by_id[int(item["variant_id"])].attributes.items()
+                                ],
+                            ])),
                             "quantity": item["quantity"],
                             "unit_price": item["unit_price"],
                             "discount_amount": "0",
