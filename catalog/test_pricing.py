@@ -1,3 +1,4 @@
+from decimal import Decimal
 from io import BytesIO
 
 from django.contrib.auth.models import Permission, User
@@ -169,7 +170,7 @@ class ProductPriceManagementAPITests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["sku"], self.variant.sku)
-        self.assertEqual(response.data[0]["new_price"], "125000")
+        self.assertEqual(response.data[0]["new_price"], Decimal("125000"))
 
     def test_price_history_endpoint_requires_price_permission(self):
         self.user.user_permissions.clear()
