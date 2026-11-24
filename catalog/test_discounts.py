@@ -8,13 +8,14 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
 
-from catalog.discounts import calculate_discounts
+from catalog.discounts import calculate_discounts, record_discount_redemptions
 from catalog.models import (
     Brand,
     Category,
     DiscountCampaign,
     Product,
     ProductVariant,
+    DiscountRedemption,
 )
 
 
@@ -315,3 +316,79 @@ class DiscountCampaignManagementAPITests(APITestCase):
         data["scope"] = "cart"
         response = self.client.post(self.url, data, format="json")
         self.assertEqual(response.status_code, 400)
+
+
+
+class DiscountRedemptionLifecycleTests(DiscountCalculationTests):
+    def setUp(self):
+        super().setUp()
+        from orders.models import Order
+
+        self.order = Order.objects.create(
+            user=self.user,
+            first_name="Test",
+            last_name="Customer",
+            mobile="09123456789",
+            province="tehran",
+            city="Tehran",
+            address="Test address long enough",
+            subtotal=Decimal("100000"),
+            vat_amount=Decimal("9000"),
+            discount_amount=Decimal("10000"),
+            total_amount=Decimal("99000"),
+            status="pending",
+        )
+
+    def create_reserved_redemption(self):
+        from orders.services import release_order_discount_redemptions
+
+        campaign = self.campaign(code="LIFECYCLE", max_uses=3, per_user_limit=1)
+        result = self.calculate(code="LIFECYCLE")
+        record_discount_redemptions(
+            result=result,
+            order=self.order,
+            user=self.user,
+        )
+        campaign.refresh_from_db()
+        redemption = DiscountRedemption.objects.get(
+            campaign=campaign,
+            order=self.order,
+        )
+        self.assertEqual(campaign.usage_count, 1)
+        self.assertEqual(redemption.status, "reserved")
+        return campaign, redemption, release_order_discount_redemptions
+
+    def test_cancelled_order_releases_reserved_redemption_and_capacity(self):
+        campaign, redemption, release = self.create_reserved_redemption()
+
+        release(self.order)
+        campaign.refresh_from_db()
+        redemption.refresh_from_db()
+
+        self.assertEqual(campaign.usage_count, 0)
+        self.assertEqual(redemption.status, "released")
+
+    def test_releasing_redemption_is_idempotent(self):
+        campaign, redemption, release = self.create_reserved_redemption()
+
+        release(self.order)
+        release(self.order)
+        campaign.refresh_from_db()
+        redemption.refresh_from_db()
+
+        self.assertEqual(campaign.usage_count, 0)
+        self.assertEqual(redemption.status, "released")
+
+    def test_successful_payment_consumes_redemption_without_releasing_capacity(self):
+        from orders.services import consume_order_discount_redemptions
+
+        campaign, redemption, _ = self.create_reserved_redemption()
+        consume_order_discount_redemptions(self.order)
+        campaign.refresh_from_db()
+        redemption.refresh_from_db()
+
+        self.assertEqual(campaign.usage_count, 1)
+        self.assertEqual(redemption.status, "consumed")
+
+        with self.assertRaises(ValidationError):
+            self.calculate(code="LIFECYCLE")
