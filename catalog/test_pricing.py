@@ -3,7 +3,6 @@ from io import BytesIO
 from django.contrib.auth.models import Permission, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
-from django.test import override_settings
 from openpyxl import Workbook
 from rest_framework.test import APITestCase
 
@@ -154,6 +153,29 @@ class ProductPriceManagementAPITests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.variant.refresh_from_db()
         self.assertEqual(self.variant.price, 145000)
+
+    def test_price_history_endpoint_returns_recent_audit_entries(self):
+        self.client.post(
+            self.bulk_url,
+            {
+                "mode": "fixed",
+                "items": [{"sku": self.variant.sku, "value": "125000"}],
+            },
+            format="json",
+        )
+
+        response = self.client.get(reverse("product-price-history"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["sku"], self.variant.sku)
+        self.assertEqual(response.data[0]["new_price"], "125000")
+
+    def test_price_history_endpoint_requires_price_permission(self):
+        self.user.user_permissions.clear()
+        response = self.client.get(reverse("product-price-history"))
+
+        self.assertEqual(response.status_code, 403)
 
     def test_price_import_rejects_unknown_sku_without_partial_updates(self):
         upload = SimpleUploadedFile(
