@@ -391,7 +391,6 @@ class Order(models.Model):
         permissions = [
             ("can_manage_order_status", "Can manage order status"),
             ("can_manage_order_shipping_cost", "Can manage order shipping cost"),
-            ("can_manage_order_discrepancies", "Can manage order discrepancies"),
         ]
         constraints = [
             models.CheckConstraint(
