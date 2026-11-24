@@ -1,4 +1,6 @@
 
+from django.db.models import CharField
+from django.db.models.functions import Cast
 from rest_framework import viewsets
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.response import Response
@@ -39,6 +41,15 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ["name_fa", "name_en", "brand__name"]
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        goal = self.request.query_params.get("consumption_goal", "").strip()
+        if goal:
+            queryset = queryset.annotate(
+                consumption_goals_text=Cast("consumption_goals", output_field=CharField())
+            ).filter(consumption_goals_text__icontains=goal)
+        return queryset
 
     def get_serializer_class(self):
         if self.action == "retrieve":

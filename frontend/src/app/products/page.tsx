@@ -10,6 +10,7 @@ export default async function ProductsPage({
     category?: string;
     brand?: string;
     search?: string;
+    goal?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -19,6 +20,7 @@ export default async function ProductsPage({
       category: params.category,
       brand: params.brand,
       search: params.search,
+      consumptionGoal: params.goal,
     }),
     fetchCategories(),
   ]);
@@ -33,7 +35,7 @@ export default async function ProductsPage({
       ? `نتایج جستجو: ${params.search}`
       : 'همه محصولات';
 
-  const hasFilter = Boolean(params.category || params.brand || params.search);
+  const hasFilter = Boolean(params.category || params.brand || params.search || params.goal);
 
   return (
     <div className="min-h-screen bg-page">
@@ -75,6 +77,17 @@ export default async function ProductsPage({
       </div>
 
       <main className="container mx-auto px-4 py-10">
+        <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-pink-100 bg-white p-4">
+          {params.category && <input type="hidden" name="category" value={params.category} />}
+          {params.brand && <input type="hidden" name="brand" value={params.brand} />}
+          {params.search && <input type="hidden" name="search" value={params.search} />}
+          <label className="flex min-w-[220px] flex-1 flex-col gap-2 text-sm font-medium text-gray-700">
+            فیلتر بر اساس هدف مصرف
+            <input name="goal" defaultValue={params.goal ?? ''} placeholder="مثلاً ریکاوری یا افزایش حجم" className="rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-pink-700" />
+          </label>
+          <button type="submit" className="rounded-lg bg-pink-800 px-5 py-2.5 font-semibold text-white hover:bg-pink-900">اعمال فیلتر</button>
+          {params.goal && <Link href="/products" className="px-3 py-2.5 text-sm text-pink-700 hover:underline">پاک‌کردن هدف مصرف</Link>}
+        </form>
         {data.results.length === 0 ? (
           <div className="text-center py-20 bg-white/60 backdrop-blur-sm rounded-2xl border border-pink-100/60">
             <div className="text-5xl mb-3">🔍</div>

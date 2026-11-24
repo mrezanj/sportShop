@@ -3,6 +3,7 @@ import uuid
 from decimal import Decimal
 
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 
@@ -77,6 +78,34 @@ class Product(models.Model):
     ingredients = models.TextField(blank=True, verbose_name="مواد تشکیل‌دهنده")
     usage = models.TextField(blank=True, verbose_name="روش مصرف")
     warnings = models.TextField(blank=True, verbose_name="هشدارها")
+    contraindications = models.TextField(
+        blank=True,
+        verbose_name="موارد منع مصرف",
+    )
+    medical_advice = models.TextField(
+        blank=True,
+        verbose_name="توصیه پزشکی",
+    )
+    license_id = models.CharField(
+        max_length=150,
+        blank=True,
+        verbose_name="شناسه مجوز",
+    )
+    authenticity_code = models.CharField(
+        max_length=150,
+        blank=True,
+        verbose_name="شناسه اصالت",
+    )
+    license_details = models.TextField(
+        blank=True,
+        verbose_name="اطلاعات تکمیلی مجوز و اصالت",
+    )
+    consumption_goals = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="اهداف مصرف",
+        help_text="فهرستی از اهداف مصرف؛ مانند افزایش حجم، کاهش وزن یا سلامت عمومی.",
+    )
     requires_cold_shipping = models.BooleanField(
         default=False, verbose_name="نیاز به ارسال سرد"
     )
@@ -95,6 +124,16 @@ class Product(models.Model):
         verbose_name_plural = "محصولات"
         ordering = ["-created_at"]
 
+    def clean(self):
+        super().clean()
+        if not isinstance(self.consumption_goals, list) or any(
+            not isinstance(goal, str) or not goal.strip()
+            for goal in self.consumption_goals
+        ):
+            raise ValidationError(
+                {"consumption_goals": "اهداف مصرف باید فهرستی از متن‌های غیرخالی باشد."}
+            )
+
     def __str__(self):
         return self.name_fa
 
@@ -112,8 +151,24 @@ class ProductImage(models.Model):
         verbose_name = "عکس محصول"
         verbose_name_plural = "عکس‌های محصول"
         ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product"],
+                condition=Q(is_primary=True),
+                name="unique_primary_image_per_product",
+            ),
+        ]
 
     def save(self, *args, **kwargs):
+        # Serialize primary-image changes per product and preserve the
+        # database-level one-primary-image invariant.
+        from django.db import transaction
+
+        with transaction.atomic():
+            Product.objects.select_for_update().get(pk=self.product_id)
+            self._save_with_primary_lock(*args, **kwargs)
+
+    def _save_with_primary_lock(self, *args, **kwargs):
         # If this image is being set as primary, unset the others
         if self.is_primary:
             ProductImage.objects.filter(product=self.product, is_primary=True).exclude(
@@ -133,16 +188,21 @@ class ProductImage(models.Model):
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        product = self.product
-        was_primary = self.is_primary
-        super().delete(*args, **kwargs)
-        # If the deleted image was primary, promote another one
-        if was_primary:
-            first_remaining = ProductImage.objects.filter(product=product).first()
-            if first_remaining and not first_remaining.is_primary:
-                ProductImage.objects.filter(pk=first_remaining.pk).update(
-                    is_primary=True
-                )
+        from django.db import transaction
+
+        with transaction.atomic():
+            Product.objects.select_for_update().get(pk=self.product_id)
+            product = self.product
+            was_primary = self.is_primary
+            super().delete(*args, **kwargs)
+            if was_primary:
+                first_remaining = ProductImage.objects.filter(
+                    product=product
+                ).order_by("order", "id").first()
+                if first_remaining and not first_remaining.is_primary:
+                    ProductImage.objects.filter(pk=first_remaining.pk).update(
+                        is_primary=True
+                    )
 
     def __str__(self):
         return self.alt_text or self.product.name_fa
@@ -161,6 +221,12 @@ class ProductVariant(models.Model):
     )
     size = models.CharField(max_length=20, blank=True, verbose_name="سایز (برای پوشاک)")
     color = models.CharField(max_length=50, blank=True, verbose_name="رنگ")
+    attributes = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="ویژگی‌های سفارشی",
+        help_text="ویژگی‌های اختصاصی این تنوع به‌صورت شیء JSON؛ مثال: {\"serving_type\": \"کپسول\", \"material\": \"پلی‌استر\"}.",
+    )
     sku = models.CharField(
         max_length=100, unique=True, blank=True, verbose_name="کد انبار (SKU)"
     )
@@ -255,35 +321,57 @@ class ProductVariant(models.Model):
             parts.append(self.color)
         return " - ".join(parts)
 
+    def clean(self):
+        super().clean()
+        if not isinstance(self.attributes, dict) or any(
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, (str, int, float, bool))
+            for key, value in self.attributes.items()
+        ):
+            raise ValidationError(
+                {"attributes": "ویژگی‌های سفارشی باید شیئی با کلید متنی و مقدار ساده باشند."}
+            )
+
     def save(self, *args, **kwargs):
         # Auto-generate SKU if:
         # - empty (new variant with no manual SKU), OR
         # - starts with __TMP__ (placeholder from ProductVariantForm.clean_sku)
         if not self.sku or self.sku.startswith("__TMP__"):
-            brand_prefix = self.product.brand.name[:3].upper().replace(" ", "") or "PRD"
-            prefix = f"{brand_prefix}-{self.product.id}-"
+            from django.db import transaction
 
-            existing_skus = ProductVariant.objects.filter(
-                product=self.product
-            ).values_list("sku", flat=True)
-
-            max_num = 0
-            for s in existing_skus:
-                if s and s.startswith(prefix):
-                    try:
-                        n = int(s[len(prefix) :])
-                        max_num = max(max_num, n)
-                    except ValueError:
-                        continue
-
-            candidate = f"{prefix}{max_num + 1:03d}"
-
-            # Safety: resolve any rare collision
-            while ProductVariant.objects.filter(sku=candidate).exists():
-                candidate = (
-                    f"{prefix}{max_num + 1:03d}-" f"{uuid.uuid4().hex[:4].upper()}"
-                )
-
-            self.sku = candidate
+            with transaction.atomic():
+                Product.objects.select_for_update().get(pk=self.product_id)
+                self._generate_sku()
+                if kwargs.get("update_fields") is not None:
+                    kwargs["update_fields"] = set(kwargs["update_fields"]) | {"sku"}
+                return super().save(*args, **kwargs)
 
         super().save(*args, **kwargs)
+
+    def _generate_sku(self):
+        brand_prefix = self.product.brand.name[:3].upper().replace(" ", "") or "PRD"
+        prefix = f"{brand_prefix}-{self.product.id}-"
+
+        existing_skus = ProductVariant.objects.filter(
+            product=self.product
+        ).values_list("sku", flat=True)
+
+        max_num = 0
+        for sku in existing_skus:
+            if sku and sku.startswith(prefix):
+                try:
+                    number = int(sku[len(prefix) :])
+                    max_num = max(max_num, number)
+                except ValueError:
+                    continue
+
+        candidate = f"{prefix}{max_num + 1:03d}"
+
+        # Safety: resolve any rare collision.
+        while ProductVariant.objects.filter(sku=candidate).exists():
+            candidate = (
+                f"{prefix}{max_num + 1:03d}-{uuid.uuid4().hex[:4].upper()}"
+            )
+
+        self.sku = candidate

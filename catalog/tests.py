@@ -208,3 +208,117 @@ class ProductInventoryAPITests(TestCase):
             len(multiple_queries),
             "Query count should not grow with the number of products.",
         )
+
+
+class ProductCatalogMetadataTests(ProductInventoryAPITests):
+    def test_product_detail_exposes_scientific_and_authenticity_fields(self):
+        self.product.contraindications = "در صورت حساسیت مصرف نشود"
+        self.product.medical_advice = "پیش از مصرف با پزشک مشورت شود"
+        self.product.license_id = "LICENSE-123"
+        self.product.authenticity_code = "AUTH-456"
+        self.product.license_details = "اطلاعات تکمیلی"
+        self.product.consumption_goals = ["افزایش حجم", "ریکاوری"]
+        self.product.save()
+
+        response = self.client.get(
+            reverse("product-detail", kwargs={"slug": self.product.slug})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["contraindications"], self.product.contraindications)
+        self.assertEqual(response.data["medical_advice"], self.product.medical_advice)
+        self.assertEqual(response.data["license_id"], "LICENSE-123")
+        self.assertEqual(response.data["authenticity_code"], "AUTH-456")
+        self.assertEqual(response.data["consumption_goals"], ["افزایش حجم", "ریکاوری"])
+
+    def test_product_variant_exposes_custom_attributes(self):
+        self.variant.attributes = {
+            "serving_type": "کپسول",
+            "material": "پلی‌استر",
+        }
+        self.variant.save(update_fields=["attributes"])
+
+        response = self.client.get(
+            reverse("product-detail", kwargs={"slug": self.product.slug})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["variants"][0]["attributes"],
+            {"serving_type": "کپسول", "material": "پلی‌استر"},
+        )
+
+    def test_product_rejects_invalid_consumption_goals(self):
+        self.product.consumption_goals = "افزایش حجم"
+        with self.assertRaises(Exception):
+            self.product.full_clean()
+
+    def test_variant_rejects_invalid_custom_attributes(self):
+        self.variant.attributes = ["not", "an", "object"]
+        with self.assertRaises(Exception):
+            self.variant.full_clean()
+
+
+class ProductImagePrimaryInvariantTests(ProductInventoryAPITests):
+    def test_saving_new_primary_image_unsets_previous_primary(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from catalog.models import ProductImage
+
+        first = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("first.jpg", b"first", content_type="image/jpeg"),
+        )
+        second = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("second.jpg", b"second", content_type="image/jpeg"),
+            is_primary=True,
+        )
+
+        first.refresh_from_db()
+        self.assertFalse(first.is_primary)
+        self.assertTrue(second.is_primary)
+
+    def test_deleting_primary_image_promotes_another_image(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from catalog.models import ProductImage
+
+        first = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("first.jpg", b"first", content_type="image/jpeg"),
+        )
+        second = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("second.jpg", b"second", content_type="image/jpeg"),
+        )
+
+        first.delete()
+        second.refresh_from_db()
+        self.assertTrue(second.is_primary)
+
+
+class ProductConsumptionGoalFilterTests(ProductInventoryAPITests):
+    def test_product_list_can_filter_by_consumption_goal(self):
+        self.product.consumption_goals = ["افزایش حجم", "ریکاوری"]
+        self.product.save(update_fields=["consumption_goals"])
+
+        other = Product.objects.create(
+            name_fa="محصول بدون هدف",
+            slug="product-without-goal",
+            brand=self.brand,
+            category=self.category,
+            description="Other product",
+        )
+        ProductVariant.objects.create(product=other, price=200000, stock=0)
+
+        response = self.client.get(
+            reverse("product-list"),
+            {"consumption_goal": "ریکاوری"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.data["results"]], [self.product.id])
+
+    def test_product_list_ignores_blank_consumption_goal_filter(self):
+        response = self.client.get(reverse("product-list"), {"consumption_goal": " "})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
