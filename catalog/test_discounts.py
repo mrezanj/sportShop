@@ -379,6 +379,23 @@ class DiscountRedemptionLifecycleTests(DiscountCalculationTests):
         self.assertEqual(campaign.usage_count, 0)
         self.assertEqual(redemption.status, "released")
 
+    def test_reserved_first_purchase_offer_blocks_another_first_purchase_offer(self):
+        self.campaign(code="FIRST-RESERVED", first_purchase_only=True)
+        result = self.calculate(code="FIRST-RESERVED")
+        record_discount_redemptions(
+            result=result,
+            order=self.order,
+            user=self.user,
+        )
+
+        self.campaign(
+            name="Second first purchase campaign",
+            code="FIRST-SECOND",
+            first_purchase_only=True,
+        )
+        with self.assertRaises(ValidationError):
+            self.calculate(code="FIRST-SECOND")
+
     def test_successful_payment_consumes_redemption_without_releasing_capacity(self):
         from orders.services import consume_order_discount_redemptions
 
