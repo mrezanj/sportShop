@@ -772,3 +772,27 @@ class ReturnRequestItem(models.Model):
                 name="return_request_item_quantity_positive",
             ),
         ]
+
+
+
+class ReturnRequestHistory(models.Model):
+    return_request = models.ForeignKey(
+        ReturnRequest,
+        on_delete=models.CASCADE,
+        related_name="history",
+        verbose_name="درخواست مرجوعی",
+    )
+    old_status = models.CharField(max_length=20, blank=True, default="")
+    new_status = models.CharField(max_length=20, choices=ReturnRequest.STATUS_CHOICES)
+    changed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="return_request_status_changes",
+    )
+    note = models.TextField(blank=True)
+    created_at = JalaliDateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        verbose_name = "تاریخچه مرجوعی"
+        verbose_name_plural = "تاریخچه مرجوعی‌ها"
+
