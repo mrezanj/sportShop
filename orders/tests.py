@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from io import StringIO
+import re
 from types import SimpleNamespace
 from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
@@ -1365,7 +1366,14 @@ class ConcurrentOrderExpiryAndCancellationTests(TransactionTestCase):
             1,
         )
         self.assertIn(cancellation_status, (200, 400))
+        # Django's colorized management-command output includes ANSI escape
+        # sequences when color is enabled (notably on Windows terminals).
+        normalized_expiry_output = re.sub(
+            r"\x1b\[[0-9;]*m",
+            "",
+            expiry_output,
+        )
         self.assertIn(
-            expiry_output.strip().splitlines()[0],
+            normalized_expiry_output.strip().splitlines()[0],
             ("Expired orders: 0", "Expired orders: 1"),
         )
