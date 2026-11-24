@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Order, ReturnRequest, ReturnRequestItem, OrderItem
+from .models import Order, ReturnRequest, ReturnRequestItem, OrderItem, ReturnRequestHistory
 
 
 class ReturnRequestError(Exception):
@@ -20,6 +20,10 @@ def create_return_request(*, order_number, user, reason, items):
     if not isinstance(reason, str) or not reason.strip() or not isinstance(items, list) or not items:
         raise ReturnRequestError("علت و اقلام مرجوعی الزامی هستند.")
     request = ReturnRequest.objects.create(order=order, user=user, reason=reason.strip())
+    ReturnRequestHistory.objects.create(
+        return_request=request, old_status="", new_status="requested",
+        changed_by=user, note="ثبت درخواست توسط مشتری.",
+    )
     seen = set()
     for entry in items:
         try:
@@ -54,7 +58,12 @@ def review_return_request(*, request_id, actor, decision, note=""):
     request.status = decision
     request.reviewed_by = actor
     request.staff_note = note
+    old_status = request.status
     request.save(update_fields=["status", "reviewed_by", "staff_note", "updated_at"])
+    ReturnRequestHistory.objects.create(
+        return_request=request, old_status=old_status, new_status=decision,
+        changed_by=actor, note=note,
+    )
     return request
 
 
@@ -66,5 +75,10 @@ def mark_return_received(*, request_id, actor, note=""):
     request.status = "received"
     request.reviewed_by = actor
     request.staff_note = note
+    old_status = request.status
     request.save(update_fields=["status", "reviewed_by", "staff_note", "updated_at"])
+    ReturnRequestHistory.objects.create(
+        return_request=request, old_status=old_status, new_status="received",
+        changed_by=actor, note=note,
+    )
     return request
