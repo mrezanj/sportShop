@@ -1297,15 +1297,15 @@ def create_refund(request):
                 "provider_reference": refund.provider_reference,
                 "provider_response": refund.provider_response,
                 "idempotency_key": str(refund.idempotency_key),
-                "created_at": refund.created_at,
-                "completed_at": refund.completed_at,
+                "created_at": str(refund.created_at) if refund.created_at else None,
+                "completed_at": str(refund.completed_at) if refund.completed_at else None,
                 "history": [
                     {
                         "old_status": entry.old_status,
                         "new_status": entry.new_status,
                         "provider_reference": entry.provider_reference,
                         "note": entry.note,
-                        "created_at": entry.created_at,
+                        "created_at": str(entry.created_at) if entry.created_at else None,
                     }
                     for entry in refund.history.all()
                 ],
@@ -1353,5 +1353,5 @@ def transition_refund(request, refund_id):
         "id": refund.pk, "amount": refund.amount, "status": refund.status,
         "provider_reference": refund.provider_reference,
         "provider_response": refund.provider_response,
-        "completed_at": refund.completed_at,
+        "completed_at": str(refund.completed_at) if refund.completed_at else None,
     })
