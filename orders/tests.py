@@ -235,6 +235,21 @@ class CreateOrderReservationTests(TestCase):
         with self.assertRaises(ValidationError):
             preview.is_valid(raise_exception=True)
 
+    def test_order_rejects_discount_changed_after_quote(self):
+        campaign = self.create_discount_campaign()
+        serializer = self.make_serializer(
+            [{"variant_id": self.variant.id, "quantity": 1}],
+            discount_code="SAVE10",
+        )
+        serializer.is_valid(raise_exception=True)
+        campaign.is_active = False
+        campaign.save(update_fields=["is_active", "updated_at"])
+
+        with self.assertRaises(ValidationError):
+            serializer.save()
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(DiscountRedemption.objects.count(), 0)
+
     def test_cancelling_unpaid_order_releases_discount_usage(self):
         campaign = self.create_discount_campaign()
         order = self.create_order(
