@@ -259,6 +259,7 @@ export interface ShippingMethod {
 
 export interface CreateOrderPayload {
   items: { variant_id: number; quantity: number }[];
+  quote_token: string;
   shipping_method_slug: string;
   province: string;
   city_code: string;
@@ -277,6 +278,7 @@ export interface CreateOrderResponse {
   subtotal: number;
   vat_amount: number;
   shipping_cost: number;
+  discount_amount?: number;
 }
 
 export async function fetchProvinces(): Promise<Province[]> {
