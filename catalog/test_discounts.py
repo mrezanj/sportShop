@@ -143,6 +143,20 @@ class DiscountCalculationTests(TestCase):
         self.assertEqual(by_id[self.variant.pk]["discount_amount"], 10000)
         self.assertEqual(by_id[self.second_variant.pk]["discount_amount"], 20000)
 
+    def test_minimum_order_and_maximum_discount_limits_are_enforced(self):
+        self.campaign(
+            code="CAPPED",
+            value=Decimal("50"),
+            maximum_discount_amount=Decimal("5000"),
+            minimum_order_amount=Decimal("150000"),
+        )
+        with self.assertRaises(ValidationError):
+            self.calculate(code="CAPPED")
+
+        result = self.calculate({self.variant.pk: 2}, code="CAPPED")
+        self.assertEqual(result["discount_amount"], 5000)
+        self.assertEqual(result["discounted_subtotal"], 195000)
+
     def test_stackable_campaigns_apply_in_priority_order(self):
         self.campaign(
             name="Product discount",
