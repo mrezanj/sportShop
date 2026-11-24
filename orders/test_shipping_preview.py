@@ -111,6 +111,11 @@ class ShippingPreviewAPITests(
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["success"])
+        self.assertTrue(response.data["quote_token"])
+        self.assertEqual(response.data["quote_expires_in"], 600)
+        self.assertEqual(response.data["items"][0]["variant_id"], self.variant.id)
+        self.assertEqual(response.data["items"][0]["unit_price"], 100000)
+        self.assertEqual(response.data["items"][0]["line_subtotal"], 200000)
 
         self.assertEqual(response.data["subtotal"], 200000)
         self.assertEqual(response.data["vat_amount"], 20000)
