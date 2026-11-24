@@ -9,6 +9,7 @@ export interface ShippingPreviewPayload {
   shipping_method_slug: string;
   province: string;
   city_code: string;
+  discount_code?: string;
 }
 
 export interface ShippingPreviewResponse {
@@ -24,6 +25,15 @@ export interface ShippingPreviewResponse {
     line_subtotal: number;
   }[];
   subtotal: number;
+  discount_amount: number;
+  discounted_subtotal: number;
+  discounts: {
+    campaign_id: number;
+    name: string;
+    code: string;
+    scope: 'product' | 'category' | 'brand' | 'cart';
+    discount_amount: number;
+  }[];
   vat_amount: number;
   shipping_cost: number;
   packaging_cost: number;
