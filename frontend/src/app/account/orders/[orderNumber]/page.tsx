@@ -287,6 +287,14 @@ function OrderDetailContent() {
                     : `${order.shipping_cost.toLocaleString('fa-IR')} تومان`}
                 </span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">هزینه بسته‌بندی</span>
+                <span className="font-medium text-gray-900">
+                  {order.packaging_cost === 0
+                    ? 'رایگان'
+                    : `${order.packaging_cost.toLocaleString('fa-IR')} تومان`}
+                </span>
+              </div>
               <div className="border-t pt-2 flex justify-between">
                 <span className="font-bold text-gray-900">مبلغ نهایی</span>
                 <span className="font-bold text-pink-900">
