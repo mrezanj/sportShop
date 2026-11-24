@@ -174,6 +174,7 @@ class PriceManagementMixin:
 
         suffix = Path(upload.name).suffix.lower()
         rows = []
+        workbook = None
         try:
             if suffix == ".csv":
                 wrapper = TextIOWrapper(upload.file, encoding="utf-8-sig", newline="")
@@ -217,8 +218,15 @@ class PriceManagementMixin:
                 rows.append({"sku": sku, "value": str(price)})
                 if len(rows) > 5000:
                     raise ValidationError({"file": "حداکثر ۵۰۰۰ ردیف مجاز است."})
+        except ValidationError:
+            raise
         except UnicodeDecodeError as exc:
             raise ValidationError({"file": "فایل CSV باید با کدگذاری UTF-8 باشد."}) from exc
+        except Exception as exc:
+            raise ValidationError({"file": "فایل قابل خواندن نیست یا ساختار آن معتبر نیست."}) from exc
+        finally:
+            if workbook is not None:
+                workbook.close()
 
         updated = _apply_price_updates(
             rows=rows,
