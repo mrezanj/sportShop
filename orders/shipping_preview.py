@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from catalog.models import ProductVariant
+from catalog.discounts import calculate_discounts
 from inventory.services import get_variants_inventory
 from locations.models import City
 
@@ -28,6 +29,7 @@ class ShippingPreviewSerializer(serializers.Serializer):
     shipping_method_slug = serializers.SlugField()
     province = serializers.CharField(max_length=30)
     city_code = serializers.CharField(max_length=10)
+    discount_code = serializers.CharField(max_length=40, allow_blank=True, required=False, default="")
 
     def validate(self, data):
         if not data["items"]:
@@ -126,18 +128,23 @@ class ShippingPreviewSerializer(serializers.Serializer):
         for variant_id, quantity in quantities.items():
             variant = variants_by_id[variant_id]
             subtotal += variant.price * quantity
+            shipping_items.append({"variant": variant, "quantity": quantity})
 
-            shipping_items.append({
-                "variant": variant,
-                "quantity": quantity,
-            })
+        discount_result = calculate_discounts(
+            user=self.context["request"].user,
+            variants=variants,
+            quantities=quantities,
+            discount_code=data.get("discount_code", ""),
+        )
+        discount_amount = Decimal(discount_result["discount_amount"])
+        discounted_subtotal = Decimal(discount_result["discounted_subtotal"])
 
         try:
             shipping_result = calculate_shipping(
                 method=method,
                 province=data["province"],
                 city=city,
-                subtotal=subtotal,
+                subtotal=discounted_subtotal,
                 items=shipping_items,
             )
         except ShippingCalculationError as exc:
@@ -148,17 +155,14 @@ class ShippingPreviewSerializer(serializers.Serializer):
         vat_rate = getattr(settings, "VAT_RATE", 0.10)
 
         vat_amount = (
-            subtotal * Decimal(str(vat_rate))
+            discounted_subtotal * Decimal(str(vat_rate))
         ).quantize(Decimal("1"))
 
         shipping_cost = shipping_result["shipping_cost"]
         packaging_cost = shipping_result["packaging_cost"]
 
         total_amount = (
-            subtotal
-            + vat_amount
-            + shipping_cost
-            + packaging_cost
+            discounted_subtotal + vat_amount + shipping_cost + packaging_cost
         )
 
         quote_payload = {
@@ -173,6 +177,11 @@ class ShippingPreviewSerializer(serializers.Serializer):
             "city_code": city.code,
             "shipping_method_slug": method.slug,
             "subtotal": int(subtotal),
+            "discount_code": data.get("discount_code", "").strip().upper(),
+            "discount_amount": int(discount_amount),
+            "discounted_subtotal": int(discounted_subtotal),
+            "discounts": discount_result["discounts"],
+            "discount_lines": discount_result["lines"],
             "vat_amount": int(vat_amount),
             "shipping_cost": int(shipping_cost),
             "packaging_cost": int(packaging_cost),
@@ -204,12 +213,24 @@ class ShippingPreviewSerializer(serializers.Serializer):
                     "product_name": variants_by_id[variant_id].product.name_fa,
                     "quantity": quantity,
                     "unit_price": int(variants_by_id[variant_id].price),
-                    "line_subtotal": int(variants_by_id[variant_id].price * quantity),
+                    "discount_amount": next(
+                        item["discount_amount"]
+                        for item in discount_result["lines"]
+                        if item["variant_id"] == variant_id
+                    ),
+                    "line_subtotal": next(
+                        item["line_subtotal"]
+                        for item in discount_result["lines"]
+                        if item["variant_id"] == variant_id
+                    ),
                 }
                 for variant_id, quantity in sorted(quantities.items())
             ],
             "quote_expires_in": 600,
             "subtotal": int(subtotal),
+            "discount_amount": int(discount_amount),
+            "discounted_subtotal": int(discounted_subtotal),
+            "discounts": discount_result["discounts"],
             "vat_amount": int(vat_amount),
             "shipping_cost": int(shipping_cost),
             "packaging_cost": int(packaging_cost),

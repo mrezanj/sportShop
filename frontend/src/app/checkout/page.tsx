@@ -35,6 +35,8 @@ export default function CheckoutPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [priceConfirmed, setPriceConfirmed] = useState(false);
   const [quoteRefreshKey, setQuoteRefreshKey] = useState(0);
+  const [discountCodeInput, setDiscountCodeInput] = useState('');
+  const [discountCode, setDiscountCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -179,6 +181,7 @@ export default function CheckoutPage() {
         shipping_method_slug: selectedMethodSlug,
         province: form.province,
         city_code: form.city_code,
+        discount_code: discountCode,
       },
       token
     )
@@ -211,6 +214,7 @@ export default function CheckoutPage() {
     form.province,
     form.city_code,
     selectedMethodSlug,
+    discountCode,
     quoteRefreshKey,
   ]);
 
@@ -313,7 +317,7 @@ export default function CheckoutPage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'خطای نامشخص';
       setError(message);
-      if (message.includes('پیش‌نمایش') || message.includes('قیمت') || message.includes('مبلغ نهایی')) {
+      if (message.includes('پیش‌نمایش') || message.includes('قیمت') || message.includes('مبلغ نهایی') || message.includes('تخفیف') || message.includes('ظرفیت')) {
         setPriceConfirmed(false);
         setQuoteRefreshKey((current) => current + 1);
       }
@@ -558,6 +562,54 @@ export default function CheckoutPage() {
           <aside className="bg-pink-50 rounded-xl p-6 h-fit sticky top-24">
             <h2 className="font-bold text-pink-900 mb-4">خلاصه سفارش</h2>
 
+            <div className="mb-4 rounded-xl border border-pink-200 bg-white p-3">
+              <label htmlFor="discount-code" className="mb-2 block text-sm font-bold text-gray-800">
+                کد تخفیف
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="discount-code"
+                  value={discountCodeInput}
+                  onChange={(event) => setDiscountCodeInput(event.target.value.toUpperCase())}
+                  placeholder="کد تخفیف را وارد کنید"
+                  maxLength={40}
+                  dir="ltr"
+                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                />
+                <button
+                  type="button"
+                  disabled={loadingPreview || !discountCodeInput.trim()}
+                  onClick={() => {
+                    setDiscountCode(discountCodeInput.trim().toUpperCase());
+                    setPriceConfirmed(false);
+                    setError(null);
+                  }}
+                  className="rounded-lg bg-pink-800 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  اعمال
+                </button>
+                {discountCode && (
+                  <button
+                    type="button"
+                    disabled={loadingPreview}
+                    onClick={() => {
+                      setDiscountCode('');
+                      setDiscountCodeInput('');
+                      setPriceConfirmed(false);
+                    }}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 disabled:opacity-50"
+                  >
+                    حذف
+                  </button>
+                )}
+              </div>
+              {discountCode && (
+                <p className="mt-2 text-xs text-gray-600" dir="ltr">
+                  {discountCode}
+                </p>
+              )}
+            </div>
+
             <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
               {items.map((i) => (
                 <div
@@ -588,6 +640,21 @@ export default function CheckoutPage() {
                   {preview ? formatPrice(preview.subtotal) : '—'}
                 </span>
               </div>
+
+              {preview && preview.discount_amount > 0 && (
+                <div className="space-y-1 rounded-lg bg-green-50 p-3 text-sm">
+                  <div className="flex justify-between font-bold text-green-800">
+                    <span>تخفیف</span>
+                    <span>−{formatPrice(preview.discount_amount)} تومان</span>
+                  </div>
+                  {preview.discounts.map((discount) => (
+                    <div key={discount.campaign_id} className="flex justify-between gap-2 text-xs text-green-800">
+                      <span>{discount.name}</span>
+                      <span className="whitespace-nowrap">−{formatPrice(discount.discount_amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="flex justify-between">
                 <span className="text-gray-700">مالیات</span>

@@ -74,6 +74,49 @@ def release_active_reservations(reservations, now=None):
         reservation.save(update_fields=["status", "released_at"])
 
 
+
+
+def release_order_discount_redemptions(order):
+    from catalog.models import DiscountCampaign, DiscountRedemption
+
+    campaign_ids = list(
+        DiscountRedemption.objects.filter(
+            order=order,
+            status="reserved",
+        ).values_list("campaign_id", flat=True)
+    )
+    locked_campaigns = (
+        DiscountCampaign.objects.select_for_update()
+        .filter(pk__in=campaign_ids)
+        .order_by("-priority", "id")
+    )
+    campaigns = {
+        campaign.pk: campaign
+        for campaign in locked_campaigns
+    }
+    redemptions = list(
+        DiscountRedemption.objects.select_for_update()
+        .filter(order=order, status="reserved")
+        .order_by("campaign_id")
+    )
+    for redemption in redemptions:
+        campaign = campaigns[redemption.campaign_id]
+        campaign.usage_count = max(campaign.usage_count - 1, 0)
+        campaign.save(update_fields=["usage_count", "updated_at"])
+        redemption.status = "released"
+        redemption.save(update_fields=["status"])
+
+
+@transaction.atomic
+def consume_order_discount_redemptions(order):
+    from catalog.models import DiscountRedemption
+
+    DiscountRedemption.objects.select_for_update().filter(
+        order=order,
+        status="reserved",
+    ).update(status="consumed")
+
+
 @transaction.atomic
 def cancel_locked_order(
     order,
@@ -85,6 +128,7 @@ def cancel_locked_order(
     now = now or timezone.now()
 
     release_active_reservations(reservations, now)
+    release_order_discount_redemptions(order)
 
     return transition_order_status(
         order=order,

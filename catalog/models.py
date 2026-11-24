@@ -1,5 +1,7 @@
 
 import uuid
+
+from django.conf import settings
 from decimal import Decimal
 
 from django.core.validators import MinValueValidator
@@ -446,3 +448,185 @@ class ProductVariantPriceHistory(models.Model):
 
     def __str__(self):
         return f"{self.sku}: {self.old_price or '—'} → {self.new_price}"
+
+
+
+class DiscountCampaign(models.Model):
+    SCOPE_CHOICES = [
+        ("product", "محصول"),
+        ("category", "دسته‌بندی"),
+        ("brand", "برند"),
+        ("cart", "سبد خرید"),
+    ]
+    DISCOUNT_TYPE_CHOICES = [
+        ("percent", "درصدی"),
+        ("fixed", "مبلغ ثابت"),
+    ]
+
+    name = models.CharField(max_length=160, verbose_name="نام کمپین")
+    code = models.CharField(
+        max_length=40,
+        unique=True,
+        null=True,
+        blank=True,
+        verbose_name="کد تخفیف",
+        help_text="خالی باشد، تخفیف خودکار است؛ کدها بدون حساسیت به بزرگی حروف بررسی می‌شوند.",
+    )
+    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, verbose_name="دامنه")
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="discount_campaigns", verbose_name="محصول",
+    )
+    category = models.ForeignKey(
+        Category, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="discount_campaigns", verbose_name="دسته‌بندی",
+    )
+    brand = models.ForeignKey(
+        Brand, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="discount_campaigns", verbose_name="برند",
+    )
+    discount_type = models.CharField(
+        max_length=10, choices=DISCOUNT_TYPE_CHOICES, verbose_name="نوع تخفیف",
+    )
+    value = models.DecimalField(
+        max_digits=12, decimal_places=0,
+        validators=[MinValueValidator(Decimal("1"))],
+        verbose_name="مقدار تخفیف",
+        help_text="برای درصد عددی بین ۱ تا ۱۰۰ و برای مبلغ، تومان وارد شود.",
+    )
+    maximum_discount_amount = models.DecimalField(
+        max_digits=12, decimal_places=0, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("1"))],
+        verbose_name="سقف مبلغ تخفیف (تومان)",
+    )
+    minimum_order_amount = models.DecimalField(
+        max_digits=12, decimal_places=0, default=0,
+        validators=[MinValueValidator(Decimal("0"))],
+        verbose_name="حداقل مبلغ کالاها (تومان)",
+    )
+    starts_at = models.DateTimeField(verbose_name="شروع کمپین")
+    ends_at = models.DateTimeField(verbose_name="پایان کمپین")
+    priority = models.PositiveIntegerField(default=100, verbose_name="اولویت")
+    is_stackable = models.BooleanField(default=False, verbose_name="قابل ترکیب با تخفیف دیگر")
+    first_purchase_only = models.BooleanField(default=False, verbose_name="ویژه اولین خرید")
+    max_uses = models.PositiveIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1)],
+        verbose_name="حداکثر دفعات استفاده کل",
+    )
+    per_user_limit = models.PositiveIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1)],
+        verbose_name="حداکثر استفاده هر مشتری",
+    )
+    usage_count = models.PositiveIntegerField(default=0, editable=False, verbose_name="تعداد استفاده")
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "کمپین تخفیف"
+        verbose_name_plural = "کمپین‌های تخفیف"
+        ordering = ["-priority", "-created_at"]
+        indexes = [
+            models.Index(fields=["is_active", "starts_at", "ends_at"], name="discount_active_window_idx"),
+            models.Index(fields=["scope", "priority"], name="discount_scope_priority_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(condition=Q(value__gt=0), name="discount_value_positive"),
+            models.CheckConstraint(condition=Q(minimum_order_amount__gte=0), name="discount_min_order_nonnegative"),
+            models.CheckConstraint(
+                condition=Q(discount_type="fixed") | Q(value__lte=100),
+                name="discount_percent_max_100",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(scope="product", product__isnull=False, category__isnull=True, brand__isnull=True)
+                    | Q(scope="category", product__isnull=True, category__isnull=False, brand__isnull=True)
+                    | Q(scope="brand", product__isnull=True, category__isnull=True, brand__isnull=False)
+                    | Q(scope="cart", product__isnull=True, category__isnull=True, brand__isnull=True)
+                ),
+                name="discount_scope_target_consistent",
+            ),
+            models.CheckConstraint(
+                condition=Q(ends_at__gt=models.F("starts_at")),
+                name="discount_campaign_valid_window",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        targets = {
+            "product": self.product_id,
+            "category": self.category_id,
+            "brand": self.brand_id,
+        }
+        expected = self.scope if self.scope in targets else None
+        if expected and not targets[expected]:
+            raise ValidationError({expected: "برای این دامنه، هدف تخفیف الزامی است."})
+        for scope, target_id in targets.items():
+            if scope != expected and target_id:
+                raise ValidationError({scope: "هدف انتخاب‌شده با دامنه تخفیف سازگار نیست."})
+        if self.scope == "cart" and any(targets.values()):
+            raise ValidationError("تخفیف سبد خرید نباید هدف محصول، دسته یا برند داشته باشد.")
+        if self.discount_type == "percent" and self.value > 100:
+            raise ValidationError({"value": "درصد تخفیف نمی‌تواند بیشتر از ۱۰۰ باشد."})
+        if self.ends_at and self.starts_at and self.ends_at <= self.starts_at:
+            raise ValidationError({"ends_at": "پایان کمپین باید بعد از شروع آن باشد."})
+        if self.code is not None:
+            self.code = self.code.strip().upper() or None
+
+    def save(self, *args, **kwargs):
+        if self.code is not None:
+            self.code = self.code.strip().upper() or None
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class DiscountRedemption(models.Model):
+    campaign = models.ForeignKey(
+        DiscountCampaign, on_delete=models.PROTECT,
+        related_name="redemptions", verbose_name="کمپین",
+    )
+    order = models.ForeignKey(
+        "orders.Order", on_delete=models.PROTECT,
+        related_name="discount_redemptions", verbose_name="سفارش",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="discount_redemptions", verbose_name="مشتری",
+    )
+    discount_amount = models.DecimalField(
+        max_digits=12, decimal_places=0,
+        validators=[MinValueValidator(Decimal("0"))],
+        verbose_name="مبلغ تخفیف استفاده‌شده",
+    )
+    code_used = models.CharField(max_length=40, blank=True, verbose_name="کد استفاده‌شده")
+    status = models.CharField(
+        max_length=12,
+        choices=[
+            ("reserved", "رزروشده"),
+            ("consumed", "مصرف‌شده"),
+            ("released", "آزادشده"),
+        ],
+        default="reserved",
+        verbose_name="وضعیت مصرف",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "استفاده از تخفیف"
+        verbose_name_plural = "استفاده‌های تخفیف"
+        constraints = [
+            models.UniqueConstraint(fields=["campaign", "order"], name="unique_discount_per_order"),
+            models.CheckConstraint(
+                condition=Q(discount_amount__gte=0),
+                name="discount_redemption_amount_nonnegative",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["campaign", "user"], name="discount_redemption_user_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.campaign} - {self.order}"

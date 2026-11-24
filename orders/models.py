@@ -492,7 +492,14 @@ class OrderItem(models.Model):
     image_url = models.CharField(max_length=500, blank=True)
     price = models.DecimalField(max_digits=12, decimal_places=0, verbose_name="قیمت واحد")
     quantity = models.PositiveIntegerField(verbose_name="تعداد")
-    subtotal = models.DecimalField(max_digits=12, decimal_places=0, verbose_name="جمع")
+    subtotal = models.DecimalField(max_digits=12, decimal_places=0, verbose_name="جمع قبل از تخفیف")
+    discount_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name="تخفیف قلم سفارش",
+    )
 
     shipping_weight_grams = models.PositiveIntegerField(default=0, verbose_name="وزن ارسال واحد (گرم)")
     shipping_length_cm = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, verbose_name="طول ارسال (سانتی‌متر)")
@@ -515,6 +522,13 @@ class OrderItem(models.Model):
             models.CheckConstraint(
                 condition=models.Q(special_packaging_cost__gte=0),
                 name="order_item_packaging_cost_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(discount_amount__gte=0)
+                    & models.Q(discount_amount__lte=models.F("subtotal"))
+                ),
+                name="order_item_discount_within_subtotal",
             ),
         ]
 

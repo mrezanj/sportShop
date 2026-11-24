@@ -195,10 +195,22 @@ function OrderDetailContent() {
                       {item.quantity.toLocaleString('fa-IR')} ×{' '}
                       {item.price.toLocaleString('fa-IR')} تومان
                     </span>
-                    <span className="font-bold text-pink-900">
+                    <span className="font-medium text-gray-900">
                       {item.subtotal.toLocaleString('fa-IR')} تومان
                     </span>
                   </div>
+                  {item.discount_amount > 0 && (
+                    <div className="mt-1 flex justify-between text-xs text-green-700">
+                      <span>تخفیف این قلم</span>
+                      <span>−{item.discount_amount.toLocaleString('fa-IR')} تومان</span>
+                    </div>
+                  )}
+                  {item.discount_amount > 0 && (
+                    <div className="mt-1 flex justify-between text-sm font-bold text-pink-900">
+                      <span>جمع پس از تخفیف</span>
+                      <span>{item.final_subtotal.toLocaleString('fa-IR')} تومان</span>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -249,6 +261,12 @@ function OrderDetailContent() {
                   {order.subtotal.toLocaleString('fa-IR')} تومان
                 </span>
               </div>
+              {order.discount_amount > 0 && (
+                <div className="flex justify-between text-green-700">
+                  <span>تخفیف کل</span>
+                  <span>−{order.discount_amount.toLocaleString('fa-IR')} تومان</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-600">مالیات</span>
                 <span className="font-medium text-gray-900">
@@ -267,6 +285,14 @@ function OrderDetailContent() {
                   {order.shipping_cost === 0
                     ? 'رایگان'
                     : `${order.shipping_cost.toLocaleString('fa-IR')} تومان`}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">هزینه بسته‌بندی</span>
+                <span className="font-medium text-gray-900">
+                  {order.packaging_cost === 0
+                    ? 'رایگان'
+                    : `${order.packaging_cost.toLocaleString('fa-IR')} تومان`}
                 </span>
               </div>
               <div className="border-t pt-2 flex justify-between">

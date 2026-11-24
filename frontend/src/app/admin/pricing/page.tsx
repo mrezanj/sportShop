@@ -130,7 +130,10 @@ export default function PricingAdminPage() {
             <h1 className="text-3xl font-bold text-pink-950">قیمت‌گذاری محصولات</h1>
             <p className="mt-2 text-sm text-gray-600">تغییر قیمت SKU، ورود گروهی و مشاهده سابقه تغییرات</p>
           </div>
-          <a href="/admin/inventory" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900">داشبورد انبار</a>
+          <div className="flex flex-wrap gap-2">
+            <a href="/admin/discounts" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900">مدیریت تخفیف‌ها</a>
+            <a href="/admin/inventory" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900">داشبورد انبار</a>
+          </div>
         </header>
 
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
