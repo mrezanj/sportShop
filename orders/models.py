@@ -795,4 +795,3 @@ class ReturnRequestHistory(models.Model):
         ordering = ["created_at", "id"]
         verbose_name = "تاریخچه مرجوعی"
         verbose_name_plural = "تاریخچه مرجوعی‌ها"
-
