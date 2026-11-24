@@ -533,7 +533,6 @@ class CreateOrderReservationTests(TestCase):
 
 
 
-class CheckoutPriceQuoteTests(CreateOrderReservationTests):
     def test_order_persists_immutable_price_snapshot(self):
         order = self.create_order([
             {"variant_id": self.variant.id, "quantity": 2},
@@ -559,13 +558,41 @@ class CheckoutPriceQuoteTests(CreateOrderReservationTests):
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(StockReservation.objects.count(), 0)
 
+    def test_tampered_quote_is_rejected(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        payload = dict(serializer.initial_data)
+        payload["quote_token"] = payload["quote_token"][:-1] + (
+            "a" if payload["quote_token"][-1] != "a" else "b"
+        )
+        tampered = CreateOrderSerializer(
+            data=payload,
+            context={"request": SimpleNamespace(user=self.user)},
+        )
+
+        self.assertFalse(tampered.is_valid())
+        self.assertIn("quote_token", tampered.errors)
+
+    def test_shipping_rate_change_after_preview_requires_new_quote(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        self.shipping_rate.cost = Decimal("60000")
+        self.shipping_rate.save(update_fields=["cost"])
+
+        serializer.is_valid(raise_exception=True)
+        with self.assertRaises(ValidationError) as raised:
+            serializer.save()
+
+        self.assertIn("price_changed", raised.exception.detail)
+        self.assertEqual(Order.objects.count(), 0)
+
     def test_quote_cannot_be_reused_by_another_user(self):
         serializer = self.make_serializer([
             {"variant_id": self.variant.id, "quantity": 1},
         ])
         serializer.is_valid(raise_exception=True)
-        data = dict(serializer.validated_data)
-        data["quote_token"] = serializer.initial_data["quote_token"]
         other_user = User.objects.create_user(
             username="other-quote-user",
             password="test-password",
