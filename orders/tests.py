@@ -1346,8 +1346,17 @@ class ConcurrentOrderExpiryAndCancellationTests(TransactionTestCase):
         self.reservation.refresh_from_db()
 
         self.assertEqual(self.order.status, "cancelled")
-        self.assertEqual(self.reservation.status, "released")
+        # Whichever operation obtains the order lock first may close the
+        # reservation as released (manual cancellation) or expired (expiry
+        # command). Both are terminal states and must retain one timestamp.
+        self.assertIn(self.reservation.status, ("released", "expired"))
         self.assertIsNotNone(self.reservation.released_at)
+        self.assertFalse(
+            StockReservation.objects.filter(
+                order_id=order_id,
+                status="active",
+            ).exists()
+        )
         self.assertEqual(
             OrderStatusHistory.objects.filter(
                 order_id=order_id,
