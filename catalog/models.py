@@ -534,6 +534,19 @@ class DiscountCampaign(models.Model):
             models.CheckConstraint(condition=Q(value__gt=0), name="discount_value_positive"),
             models.CheckConstraint(condition=Q(minimum_order_amount__gte=0), name="discount_min_order_nonnegative"),
             models.CheckConstraint(
+                condition=Q(discount_type="fixed") | Q(value__lte=100),
+                name="discount_percent_max_100",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(scope="product", product__isnull=False, category__isnull=True, brand__isnull=True)
+                    | Q(scope="category", product__isnull=True, category__isnull=False, brand__isnull=True)
+                    | Q(scope="brand", product__isnull=True, category__isnull=True, brand__isnull=False)
+                    | Q(scope="cart", product__isnull=True, category__isnull=True, brand__isnull=True)
+                ),
+                name="discount_scope_target_consistent",
+            ),
+            models.CheckConstraint(
                 condition=Q(ends_at__gt=models.F("starts_at")),
                 name="discount_campaign_valid_window",
             ),
@@ -606,6 +619,10 @@ class DiscountRedemption(models.Model):
         verbose_name_plural = "استفاده‌های تخفیف"
         constraints = [
             models.UniqueConstraint(fields=["campaign", "order"], name="unique_discount_per_order"),
+            models.CheckConstraint(
+                condition=Q(discount_amount__gte=0),
+                name="discount_redemption_amount_nonnegative",
+            ),
         ]
         indexes = [
             models.Index(fields=["campaign", "user"], name="discount_redemption_user_idx"),
