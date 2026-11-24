@@ -34,6 +34,7 @@ export default function CheckoutPage() {
   const [preview, setPreview] = useState<ShippingPreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [priceConfirmed, setPriceConfirmed] = useState(false);
+  const [quoteRefreshKey, setQuoteRefreshKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -153,6 +154,7 @@ export default function CheckoutPage() {
 
     setPreview(null);
     setPreviewError(null);
+    setPriceConfirmed(false);
 
     if (
       !token ||
@@ -208,6 +210,7 @@ export default function CheckoutPage() {
     form.province,
     form.city_code,
     selectedMethodSlug,
+    quoteRefreshKey,
   ]);
 
   const selectedMethod = shippingMethods.find(
@@ -307,7 +310,12 @@ export default function CheckoutPage() {
       // Keep the cart until payment succeeds.
       router.push(`/checkout/payment?order=${response.order_number}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'خطای نامشخص');
+      const message = err instanceof Error ? err.message : 'خطای نامشخص';
+      setError(message);
+      if (message.includes('پیش‌نمایش') || message.includes('قیمت') || message.includes('مبلغ نهایی')) {
+        setPriceConfirmed(false);
+        setQuoteRefreshKey((current) => current + 1);
+      }
       setSubmitting(false);
     }
   };
