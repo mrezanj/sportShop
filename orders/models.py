@@ -1,4 +1,6 @@
 
+import uuid
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -570,3 +572,31 @@ class StockReservation(models.Model):
 
     def __str__(self):
         return f"{self.order.order_number} - {self.variant} - {self.quantity}"
+
+
+
+class CheckoutPriceQuote(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="checkout_price_quotes",
+    )
+    payload = models.JSONField(verbose_name="جزئیات قیمت تأییدشده")
+    expires_at = models.DateTimeField(verbose_name="زمان انقضای پیش‌نمایش")
+    consumed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان استفاده",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "پیش‌نمایش قیمت تسویه"
+        verbose_name_plural = "پیش‌نمایش‌های قیمت تسویه"
+        indexes = [
+            models.Index(fields=["user", "expires_at"], name="checkout_quote_user_exp_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.id}"
