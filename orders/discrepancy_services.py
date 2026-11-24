@@ -33,8 +33,9 @@ def open_order_discrepancy(*, order_id, reason, actor):
 
 @transaction.atomic
 def resolve_order_discrepancy(*, case_id, resolution, actor):
-    case = OrderDiscrepancy.objects.select_for_update().select_related("order").get(pk=case_id)
-    order = Order.objects.select_for_update().get(pk=case.order_id)
+    order_id = OrderDiscrepancy.objects.values_list("order_id", flat=True).get(pk=case_id)
+    order = Order.objects.select_for_update().get(pk=order_id)
+    case = OrderDiscrepancy.objects.select_for_update().get(pk=case_id, order_id=order_id)
     if not isinstance(resolution, str) or not resolution.strip():
         raise DiscrepancyError("شرح نتیجه رسیدگی الزامی است.")
     if case.status != "open" or order.status != "discrepancy":
