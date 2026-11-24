@@ -213,7 +213,16 @@ class ShippingPreviewSerializer(serializers.Serializer):
                     "product_name": variants_by_id[variant_id].product.name_fa,
                     "quantity": quantity,
                     "unit_price": int(variants_by_id[variant_id].price),
-                    "line_subtotal": int(variants_by_id[variant_id].price * quantity),
+                    "discount_amount": next(
+                        item["discount_amount"]
+                        for item in discount_result["lines"]
+                        if item["variant_id"] == variant_id
+                    ),
+                    "line_subtotal": next(
+                        item["line_subtotal"]
+                        for item in discount_result["lines"]
+                        if item["variant_id"] == variant_id
+                    ),
                 }
                 for variant_id, quantity in sorted(quantities.items())
             ],
