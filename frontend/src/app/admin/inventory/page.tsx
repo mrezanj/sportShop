@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   fetchInventoryDocumentDetail,
@@ -136,7 +136,7 @@ export default function InventoryDashboardPage() {
     }
   };
 
-  const canManageThreshold = useMemo(() => !!user?.is_staff, [user]);
+  const canManageThreshold = summary?.can_manage_threshold ?? false;
 
   if (authLoading || loading && !summary && !error) {
     return <div className="min-h-[60vh] grid place-items-center text-pink-900">در حال بارگذاری داشبورد انبار...</div>;
