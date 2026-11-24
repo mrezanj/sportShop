@@ -19,6 +19,14 @@ class ProductVariantInline(admin.StackedInline):
     model = ProductVariant
     form = ProductVariantForm
     extra = 1
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if not request.user.is_superuser and not request.user.has_perm(
+            "catalog.can_manage_product_prices"
+        ):
+            readonly.append("price")
+        return readonly
     fieldsets = (
         (
             "مشخصات تنوع محصول",
@@ -78,6 +86,40 @@ class ProductAdmin(JalaliDateModelAdmin):
     search_fields = ["name_fa", "name_en", "brand__name"]
     prepopulated_fields = {"slug": ("name_en",)}
     inlines = [ProductImageInline, ProductVariantInline]
+
+    def save_formset(self, request, form, formset, change):
+        if formset.model is ProductVariant:
+            price_changes = []
+            for variant_form in formset.forms:
+                if not variant_form.has_changed() or variant_form.cleaned_data.get("DELETE"):
+                    continue
+                if "price" not in variant_form.changed_data:
+                    continue
+                instance = variant_form.instance
+                old_price = (
+                    ProductVariant.objects.filter(pk=instance.pk)
+                    .values_list("price", flat=True)
+                    .first()
+                    if instance.pk else None
+                )
+                new_price = variant_form.cleaned_data.get("price")
+                if old_price != new_price:
+                    price_changes.append((instance, old_price, new_price))
+            super().save_formset(request, form, formset, change)
+            for instance, old_price, new_price in price_changes:
+                ProductVariantPriceHistory.objects.create(
+                    variant=instance,
+                    sku=instance.sku,
+                    product_name=instance.product.name_fa,
+                    old_price=old_price,
+                    new_price=new_price,
+                    change_type="manual",
+                    changed_by=request.user,
+                    note="تغییر قیمت از فرم مدیریت محصول",
+                )
+            return
+        super().save_formset(request, form, formset, change)
+
     fieldsets = (
         (
             "اطلاعات اصلی",
