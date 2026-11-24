@@ -1343,6 +1343,7 @@ def transition_refund(request, refund_id):
             decision=request.data.get("decision", ""),
             provider_reference=request.data.get("provider_reference", ""),
             provider_response=request.data.get("provider_response", {}),
+            note=request.data.get("note", ""),
         )
     except Refund.DoesNotExist:
         return Response({"detail": "بازپرداخت یافت نشد."}, status=404)
