@@ -43,12 +43,14 @@ export async function fetchProducts(params?: {
   category?: string;
   brand?: string;
   page?: number;
+  consumptionGoal?: string;
 }): Promise<PaginatedResponse<Product>> {
   const url = new URL(`${API_URL}/products/`);
   if (params?.search) url.searchParams.set('search', params.search);
   if (params?.category) url.searchParams.set('category__slug', params.category);
   if (params?.brand) url.searchParams.set('brand__slug', params.brand);
   if (params?.page) url.searchParams.set('page', String(params.page));
+  if (params?.consumptionGoal) url.searchParams.set('consumption_goal', params.consumptionGoal);
 
   const res = await fetch(url.toString(), { cache: 'no-store' });
   if (!res.ok) throw new Error('Failed to fetch products');
