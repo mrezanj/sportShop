@@ -18,6 +18,11 @@ urlpatterns = [
     ),
     path("my/", views.my_orders, name="my-orders"),
     path("", views.create_order, name="create-order"),
+    path("returns/", views.return_requests, name="return-requests"),
+    path("returns/<int:request_id>/review/", views.review_return, name="review-return"),
+    path("returns/<int:request_id>/received/", views.receive_return, name="receive-return"),
+    path("<str:order_number>/discrepancies/", views.open_discrepancy, name="open-discrepancy"),
+    path("discrepancies/<int:case_id>/resolve/", views.resolve_discrepancy, name="resolve-discrepancy"),
     path("<str:order_number>/", views.order_detail, name="order-detail"),
     path(
         "<str:order_number>/cancel/",
