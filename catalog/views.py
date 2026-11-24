@@ -30,7 +30,6 @@ from io import TextIOWrapper
 import csv
 
 from django.db import transaction
-from django.db.models import F
 from django.http import JsonResponse
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser
@@ -112,7 +111,7 @@ class PriceManagementMixin:
         return Response({"success": True, "updated_count": len(updated), "items": updated})
 
     @action(detail=False, methods=["post"], url_path="import-prices",
-            permission_classes=[IsAdminUser], parser_classes=[])
+            permission_classes=[IsAdminUser])
     def import_prices(self, request):
         _price_permission(request.user)
         upload = request.FILES.get("file")
