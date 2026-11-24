@@ -24,6 +24,16 @@ class Migration(migrations.Migration):
                 default="pending", max_length=20, verbose_name="وضعیت",
             ),
         ),
+        migrations.AlterField(
+            model_name="orderstatushistory",
+            name="old_status",
+            field=models.CharField(blank=True, choices=[("pending", "در انتظار پرداخت"), ("paid", "پرداخت شده"), ("processing", "در حال پردازش"), ("shipped", "ارسال شده"), ("delivered", "تحویل شده"), ("cancelled", "لغو شده"), ("discrepancy", "دارای مغایرت")], default="", max_length=20, verbose_name="وضعیت قبلی"),
+        ),
+        migrations.AlterField(
+            model_name="orderstatushistory",
+            name="new_status",
+            field=models.CharField(choices=[("pending", "در انتظار پرداخت"), ("paid", "پرداخت شده"), ("processing", "در حال پردازش"), ("shipped", "ارسال شده"), ("delivered", "تحویل شده"), ("cancelled", "لغو شده"), ("discrepancy", "دارای مغایرت")], max_length=20, verbose_name="وضعیت جدید"),
+        ),
         migrations.CreateModel(
             name="OrderDiscrepancy",
             fields=[
