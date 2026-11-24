@@ -12,6 +12,7 @@ class ReturnRequestItemSerializer(serializers.ModelSerializer):
 
 
 class ReturnRequestSerializer(serializers.ModelSerializer):
+    order_id = serializers.IntegerField(read_only=True)
     items = ReturnRequestItemSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
 
