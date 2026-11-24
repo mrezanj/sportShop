@@ -317,7 +317,7 @@ export default function CheckoutPage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'خطای نامشخص';
       setError(message);
-      if (message.includes('پیش‌نمایش') || message.includes('قیمت') || message.includes('مبلغ نهایی')) {
+      if (message.includes('پیش‌نمایش') || message.includes('قیمت') || message.includes('مبلغ نهایی') || message.includes('تخفیف') || message.includes('ظرفیت')) {
         setPriceConfirmed(false);
         setQuoteRefreshKey((current) => current + 1);
       }
