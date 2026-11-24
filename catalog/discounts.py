@@ -238,7 +238,7 @@ def calculate_discounts(*, user, variants, quantities, discount_code="", now=Non
 
 
 @transaction.atomic
-def record_discount_redemptions(*, result, order, user, discount_code=""):
+def record_discount_redemptions(*, result, order, user):
     for campaign in result.get("_campaigns", []):
         locked = DiscountCampaign.objects.select_for_update().get(pk=campaign.pk)
         if locked.max_uses is not None and locked.usage_count >= locked.max_uses:
