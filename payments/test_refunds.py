@@ -2,7 +2,10 @@ from decimal import Decimal
 from uuid import uuid4
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from concurrent.futures import ThreadPoolExecutor
+
+from django.db import close_old_connections
+from django.test import TestCase, TransactionTestCase
 from django.contrib.auth.models import Permission
 from rest_framework.test import APIClient
 
@@ -153,3 +156,57 @@ class RefundPermissionAPITests(TestCase):
         response = self.client.get("/api/payments/refunds/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, [])
+
+
+
+class RefundConcurrencyTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        self.user = User.objects.create_user("refund-concurrency-customer")
+        self.staff = User.objects.create_user("refund-concurrency-staff")
+        self.order = Order.objects.create(
+            user=self.user, first_name="Test", last_name="Customer",
+            mobile="09123456789", province="tehran", city="Tehran",
+            address="Test address", subtotal=Decimal("100000"),
+            vat_amount=Decimal("10000"), total_amount=Decimal("110000"),
+            status="delivered",
+        )
+        self.payment = Payment.objects.create(
+            order=self.order, gateway="mock", amount=Decimal("110000"),
+            status="success", ref_id="CONCURRENT-CAPTURE",
+        )
+        self.return_request = ReturnRequest.objects.create(
+            order=self.order, user=self.user, reason="مرجوعی", status="received",
+        )
+        self.request_id = self.return_request.pk
+        self.staff_id = self.staff.pk
+
+    def test_concurrent_refund_reservations_cannot_exceed_captured_amount(self):
+        def reserve(amount):
+            close_old_connections()
+            try:
+                actor = User.objects.get(pk=self.staff_id)
+                try:
+                    create_refund(
+                        return_request_id=self.request_id,
+                        amount=Decimal(amount),
+                        actor=actor,
+                        idempotency_key=uuid4(),
+                    )
+                    return "created"
+                except RefundError:
+                    return "rejected"
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(reserve, ["70000", "50000"]))
+
+        self.assertCountEqual(results, ["created", "rejected"])
+        reserved_total = sum(
+            Refund.objects.exclude(status__in=["failed", "rejected", "succeeded"])
+            .values_list("amount", flat=True),
+            Decimal("0"),
+        )
+        self.assertLessEqual(reserved_total, self.payment.amount)
