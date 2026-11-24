@@ -181,3 +181,31 @@ class Refund(models.Model):
 
     def __str__(self):
         return f"{self.return_request.order.order_number} - {self.amount} - {self.status}"
+
+
+
+class RefundHistory(models.Model):
+    refund = models.ForeignKey(
+        Refund,
+        on_delete=models.CASCADE,
+        related_name="history",
+        verbose_name="بازپرداخت",
+    )
+    old_status = models.CharField(max_length=20, blank=True, default="")
+    new_status = models.CharField(max_length=20, choices=Refund.STATUS_CHOICES)
+    changed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="refund_status_changes",
+    )
+    provider_reference = models.CharField(max_length=200, blank=True)
+    provider_response = models.JSONField(default=dict, blank=True)
+    note = models.TextField(blank=True)
+    created_at = JalaliDateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        verbose_name = "تاریخچه بازپرداخت"
+        verbose_name_plural = "تاریخچه بازپرداخت‌ها"
