@@ -15,6 +15,14 @@ export interface ShippingPreviewResponse {
   success: boolean;
   quote_token: string;
   quote_expires_in: number;
+  items: {
+    variant_id: number;
+    sku: string;
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    line_subtotal: number;
+  }[];
   subtotal: number;
   vat_amount: number;
   shipping_cost: number;
