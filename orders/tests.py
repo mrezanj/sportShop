@@ -10,7 +10,7 @@ from orders.admin import OrderAdmin
 from django.contrib.auth.models import User, Permission
 from users.models import Profile
 from django.core.management import call_command
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -624,6 +624,19 @@ class CreateOrderReservationTests(TestCase):
 
         self.assertFalse(tampered.is_valid())
         self.assertIn("quote_token", tampered.errors)
+
+    def test_tax_rate_change_after_preview_requires_new_quote(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        serializer.is_valid(raise_exception=True)
+
+        with override_settings(VAT_RATE=0.11):
+            with self.assertRaises(ValidationError) as raised:
+                serializer.save()
+
+        self.assertIn("price_changed", raised.exception.detail)
+        self.assertEqual(Order.objects.count(), 0)
 
     def test_shipping_rate_change_after_preview_requires_new_quote(self):
         serializer = self.make_serializer([
