@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from rest_framework.test import APIClient
 
 from .models import Order, OrderDiscrepancy, OrderItem, OrderStatusHistory
 from .discrepancy_services import (
@@ -152,3 +153,45 @@ class ReturnRequestTests(TestCase):
             review_return_request(
                 request_id=request.pk, actor=self.staff, decision="approved"
             )
+
+
+
+class ReturnPermissionAPITests(TestCase):
+    def setUp(self):
+        self.customer = User.objects.create_user("return-api-customer")
+        self.other = User.objects.create_user("return-api-other")
+        self.staff = User.objects.create_user("return-api-staff")
+        self.order = Order.objects.create(
+            user=self.customer, first_name="Test", last_name="Customer",
+            mobile="09123456789", province="tehran", city="Tehran",
+            address="Test address", subtotal=Decimal("100000"),
+            vat_amount=Decimal("10000"), total_amount=Decimal("110000"),
+            status="paid",
+        )
+        self.client = APIClient()
+
+    def test_customer_cannot_create_return_for_another_users_order(self):
+        self.client.force_authenticate(user=self.other)
+        response = self.client.post("/api/orders/returns/", {
+            "order_number": self.order.order_number,
+            "reason": "مرجوعی",
+            "items": [{"order_item_id": 999, "quantity": 1}],
+        }, format="json")
+        self.assertEqual(response.status_code, 404)
+
+    def test_return_review_endpoint_requires_explicit_permission(self):
+        self.client.force_authenticate(user=self.customer)
+        response = self.client.post("/api/orders/returns/999/review/", {
+            "decision": "approved",
+        }, format="json")
+        self.assertEqual(response.status_code, 403)
+
+    def test_staff_permission_can_list_all_return_requests(self):
+        permission = __import__("django.contrib.auth.models", fromlist=["Permission"]).Permission.objects.get(
+            content_type__app_label="orders",
+            codename="can_review_return_requests",
+        )
+        self.staff.user_permissions.add(permission)
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get("/api/orders/returns/")
+        self.assertEqual(response.status_code, 200)
