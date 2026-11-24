@@ -155,6 +155,7 @@ export default function CheckoutPage() {
     setPreview(null);
     setPreviewError(null);
     setPriceConfirmed(false);
+    setError(null);
 
     if (
       !token ||
