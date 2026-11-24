@@ -3,6 +3,8 @@ from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.contrib.auth.models import Permission
+from rest_framework.test import APIClient
 
 from orders.models import Order, ReturnRequest
 from payments.models import Payment, Refund
@@ -119,3 +121,35 @@ class RefundWorkflowTests(TestCase):
         self.return_request.refresh_from_db()
         self.assertEqual(self.return_request.status, "closed")
         self.assertEqual(list(self.return_request.history.values_list("new_status", flat=True)), ["closed"])
+
+
+
+class RefundPermissionAPITests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("refund-api-user")
+        self.client = APIClient()
+
+    def test_refund_queue_requires_explicit_permission(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/payments/refunds/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_refund_creation_requires_explicit_permission(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post("/api/payments/refunds/", {
+            "return_request_id": 1,
+            "amount": 1000,
+            "idempotency_key": str(uuid4()),
+        }, format="json")
+        self.assertEqual(response.status_code, 403)
+
+    def test_refund_permission_grants_access_to_queue(self):
+        permission = Permission.objects.get(
+            content_type__app_label="payments",
+            codename="can_manage_refunds",
+        )
+        self.user.user_permissions.add(permission)
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/payments/refunds/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, [])
