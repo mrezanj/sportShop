@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { createReturnRequest, fetchOrderDetail, type OrderDetail, type ReturnRequestRecord } from '@/lib/api';
+import { createReturnRequest, fetchOrderDetail, fetchReturnRequests, type OrderDetail, type ReturnRequestRecord } from '@/lib/api';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -56,7 +56,15 @@ function OrderDetailContent() {
     if (!token || !orderNumber) return;
 
     fetchOrderDetail(orderNumber, token)
-      .then(setOrder)
+      .then(async (result) => {
+        setOrder(result);
+        try {
+          const requests = await fetchReturnRequests(token);
+          setReturnRequest(requests.find((item) => item.order_id === result.id) ?? null);
+        } catch {
+          // The order remains usable if return history cannot be loaded.
+        }
+      })
       .catch(() => setError('سفارش یافت نشد.'))
       .finally(() => setLoading(false));
   }, [token, orderNumber]);
