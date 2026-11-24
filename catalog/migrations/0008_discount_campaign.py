@@ -24,7 +24,7 @@ class Migration(migrations.Migration):
                 ("scope", models.CharField(choices=[("product", "محصول"), ("category", "دسته‌بندی"), ("brand", "برند"), ("cart", "سبد خرید")], max_length=20, verbose_name="دامنه")),
                 ("discount_type", models.CharField(choices=[("percent", "درصدی"), ("fixed", "مبلغ ثابت")], max_length=10, verbose_name="نوع تخفیف")),
                 ("value", models.DecimalField(decimal_places=0, max_digits=12, validators=[django.core.validators.MinValueValidator(Decimal("1"))], verbose_name="مقدار تخفیف", help_text="برای درصد عددی بین ۱ تا ۱۰۰ و برای مبلغ، تومان وارد شود.")),
-                ("maximum_discount_amount", models.DecimalField(blank=True, decimal_places=0, max_digits=12, null=True, validators=[django.core.validators.MinValueValidator(1)], verbose_name="سقف مبلغ تخفیف (تومان)")),
+                ("maximum_discount_amount", models.DecimalField(blank=True, decimal_places=0, max_digits=12, null=True, validators=[django.core.validators.MinValueValidator(Decimal("1"))], verbose_name="سقف مبلغ تخفیف (تومان)")),
                 ("minimum_order_amount", models.DecimalField(decimal_places=0, default=0, max_digits=12, validators=[django.core.validators.MinValueValidator(Decimal("0"))], verbose_name="حداقل مبلغ کالاها (تومان)")),
                 ("starts_at", models.DateTimeField(verbose_name="شروع کمپین")),
                 ("ends_at", models.DateTimeField(verbose_name="پایان کمپین")),
@@ -51,7 +51,7 @@ class Migration(migrations.Migration):
             name="DiscountRedemption",
             fields=[
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("discount_amount", models.DecimalField(decimal_places=0, max_digits=12, validators=[django.core.validators.MinValueValidator(0)], verbose_name="مبلغ تخفیف استفاده‌شده")),
+                ("discount_amount", models.DecimalField(decimal_places=0, max_digits=12, validators=[django.core.validators.MinValueValidator(Decimal("0"))], verbose_name="مبلغ تخفیف استفاده‌شده")),
                 ("code_used", models.CharField(blank=True, max_length=40, verbose_name="کد استفاده‌شده")),
                 ("status", models.CharField(choices=[("reserved", "رزروشده"), ("consumed", "مصرف‌شده"), ("released", "آزادشده")], default="reserved", max_length=12, verbose_name="وضعیت مصرف")),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
