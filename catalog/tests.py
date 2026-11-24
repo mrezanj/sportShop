@@ -294,3 +294,32 @@ class ProductImagePrimaryInvariantTests(ProductInventoryAPITests):
         first.delete()
         second.refresh_from_db()
         self.assertTrue(second.is_primary)
+
+
+class ProductConsumptionGoalFilterTests(ProductInventoryAPITests):
+    def test_product_list_can_filter_by_consumption_goal(self):
+        self.product.consumption_goals = ["افزایش حجم", "ریکاوری"]
+        self.product.save(update_fields=["consumption_goals"])
+
+        other = Product.objects.create(
+            name_fa="محصول بدون هدف",
+            slug="product-without-goal",
+            brand=self.brand,
+            category=self.category,
+            description="Other product",
+        )
+        ProductVariant.objects.create(product=other, price=200000, stock=0)
+
+        response = self.client.get(
+            reverse("product-list"),
+            {"consumption_goal": "ریکاوری"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.data["results"]], [self.product.id])
+
+    def test_product_list_ignores_blank_consumption_goal_filter(self):
+        response = self.client.get(reverse("product-list"), {"consumption_goal": " "})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+
