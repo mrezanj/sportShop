@@ -1,9 +1,12 @@
 from datetime import timedelta
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from django.db import close_old_connections
 from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.contrib.auth.models import Permission
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
@@ -3011,3 +3014,111 @@ class InventoryDocumentAPITests(TestCase):
                 )
 
                 self.assertEqual(response.status_code, 404)
+
+
+class InventoryConcurrentApprovalTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        InventoryDocumentWorkflowTests.setUp(self)
+
+        today = timezone.localdate()
+        self.batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="CONCURRENT-APPROVAL-SEED",
+            expiration_date=today + timedelta(days=30),
+            created_by=self.creator,
+        )
+        inbound = create_inventory_document(
+            user=self.creator,
+            document_number="CONCURRENT-APPROVAL-IN",
+            document_type="inbound",
+        )
+        add_inventory_document_item(
+            user=self.creator,
+            document_id=inbound.id,
+            variant=self.variant,
+            quantity=10,
+            direction="inbound",
+            batch=self.batch,
+        )
+        submit_inventory_document(user=self.creator, document_id=inbound.id)
+        review_inventory_document(user=self.reviewer, document_id=inbound.id)
+        approve_inventory_document(user=self.approver, document_id=inbound.id)
+
+        self.outbound_documents = []
+        for suffix in ("A", "B"):
+            document = create_inventory_document(
+                user=self.creator,
+                document_number=f"CONCURRENT-APPROVAL-OUT-{suffix}",
+                document_type="outbound",
+            )
+            add_inventory_document_item(
+                user=self.creator,
+                document_id=document.id,
+                variant=self.variant,
+                quantity=6,
+                direction="outbound",
+            )
+            submit_inventory_document(
+                user=self.creator,
+                document_id=document.id,
+            )
+            review_inventory_document(
+                user=self.reviewer,
+                document_id=document.id,
+            )
+            self.outbound_documents.append(document)
+
+    @skipUnlessDBFeature("has_select_for_update")
+    def test_concurrent_outbound_approvals_cannot_oversell_same_sku(self):
+        from django.core.exceptions import ValidationError
+
+        barrier = Barrier(2)
+
+        def approve(document_id):
+            close_old_connections()
+            try:
+                approver = User.objects.get(pk=self.approver.pk)
+                barrier.wait(timeout=10)
+                try:
+                    approve_inventory_document(
+                        user=approver,
+                        document_id=document_id,
+                    )
+                    return "approved"
+                except ValidationError:
+                    return "rejected"
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(approve, document.id)
+                for document in self.outbound_documents
+            ]
+            outcomes = [future.result(timeout=30) for future in futures]
+
+        self.assertCountEqual(outcomes, ["approved", "rejected"])
+
+        for document in self.outbound_documents:
+            document.refresh_from_db()
+
+        self.assertEqual(
+            sum(doc.status == "approved" for doc in self.outbound_documents),
+            1,
+        )
+        self.assertEqual(
+            sum(
+                InventoryMovement.objects.filter(
+                    document=doc,
+                    movement_type="outbound",
+                ).aggregate(total=Sum("quantity_delta"))["total"] or 0
+                for doc in self.outbound_documents
+            ),
+            -6,
+        )
+        inventory = get_variant_inventory(self.variant)
+        self.assertEqual(inventory["physical"], 4)
+        self.assertEqual(inventory["reserved"], 0)
+        self.assertEqual(inventory["available"], 4)
