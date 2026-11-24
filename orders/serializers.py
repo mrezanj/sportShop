@@ -534,7 +534,7 @@ class CreateOrderSerializer(serializers.Serializer):
                     method=method,
                     province=validated_data["province"],
                     city=city,
-                    subtotal=subtotal,
+                    subtotal=discounted_subtotal,
                     items=shipping_items,
                 )
             except ShippingCalculationError as exc:
