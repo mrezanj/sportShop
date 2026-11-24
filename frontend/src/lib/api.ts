@@ -6,6 +6,7 @@ export interface Brand {
   name: string;
   slug: string;
   logo: string | null;
+  description?: string;
 }
 
 export interface Category {
@@ -27,6 +28,7 @@ export interface Product {
   min_price: number | null;
   requires_cold_shipping: boolean;
   minimum_age: number | null;
+  consumption_goals?: string[];
 }
 
 export interface PaginatedResponse<T> {
@@ -68,6 +70,7 @@ export interface ProductVariant {
   servings: number | null;
   size: string;
   color: string;
+  attributes: Record<string, string | number | boolean>;
   sku: string;
   price: number;
   stock: number;
@@ -85,12 +88,24 @@ export interface ProductDetail {
   ingredients: string;
   usage: string;
   warnings: string;
+  contraindications: string;
+  medical_advice: string;
+  license_id: string;
+  authenticity_code: string;
+  license_details: string;
+  consumption_goals: string[];
   requires_cold_shipping: boolean;
   minimum_age: number | null;
   images: ProductImage[];
   variants: ProductVariant[];
   created_at: string;
   updated_at: string;
+}
+
+export async function fetchBrandBySlug(slug: string): Promise<Brand> {
+  const res = await fetch(`${API_URL}/brands/${slug}/`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('Brand not found');
+  return res.json();
 }
 
 export async function fetchProductBySlug(slug: string): Promise<ProductDetail> {
