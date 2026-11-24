@@ -287,6 +287,7 @@ def checkout(request):
             "total_amount": int(order.total_amount),
             "subtotal": int(order.subtotal),
             "vat_amount": int(order.vat_amount),
+            "discount_amount": int(order.discount_amount),
             "shipping_cost": int(order.shipping_cost),
         },
         status=status.HTTP_201_CREATED,
