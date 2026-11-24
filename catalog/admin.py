@@ -214,7 +214,7 @@ class DiscountCampaignAdmin(JalaliDateModelAdmin):
         return self._allowed(request)
 
     def has_delete_permission(self, request, obj=None):
-        return self._allowed(request) and (obj is None or obj.usage_count == 0)
+        return False
 
     list_display = (
         "name", "scope", "discount_type", "value", "code",
