@@ -292,7 +292,8 @@ def return_requests(request):
     from .return_serializers import ReturnRequestSerializer
 
     if request.method == "GET":
-        queryset = ReturnRequest.objects.filter(user=request.user).prefetch_related("items")
+        queryset = ReturnRequest.objects.all() if request.user.has_perm("orders.can_review_return_requests") else ReturnRequest.objects.filter(user=request.user)
+        queryset = queryset.prefetch_related("items")
         return Response(ReturnRequestSerializer(queryset, many=True).data)
 
     try:
@@ -386,3 +387,30 @@ def resolve_discrepancy(request, case_id):
     except DiscrepancyError as exc:
         return Response({"detail": str(exc)}, status=400)
     return Response({"id": case.pk, "status": case.status, "order_status": case.order.status})
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def discrepancies_list(request):
+    from .models import OrderDiscrepancy
+    if not request.user.has_perm("orders.can_manage_order_discrepancies"):
+        return Response({"detail": "اجازه مشاهده پرونده‌های مغایرت را ندارید."}, status=403)
+    queryset = OrderDiscrepancy.objects.select_related(
+        "order", "opened_by", "resolved_by"
+    ).order_by("-created_at")
+    return Response([
+        {
+            "id": case.pk,
+            "order_number": case.order.order_number,
+            "status": case.status,
+            "reason": case.reason,
+            "resolution": case.resolution,
+            "previous_order_status": case.previous_order_status,
+            "opened_by": case.opened_by_id,
+            "resolved_by": case.resolved_by_id,
+            "created_at": case.created_at,
+            "resolved_at": case.resolved_at,
+        }
+        for case in queryset
+    ])
