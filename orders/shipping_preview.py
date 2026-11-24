@@ -1,4 +1,5 @@
 
+from datetime import timedelta
 from decimal import Decimal
 from django.core import signing
 from django.utils import timezone
@@ -181,7 +182,7 @@ class ShippingPreviewSerializer(serializers.Serializer):
         quote_record = CheckoutPriceQuote.objects.create(
             user=self.context["request"].user,
             payload=quote_payload,
-            expires_at=timezone.now() + timezone.timedelta(minutes=10),
+            expires_at=timezone.now() + timedelta(minutes=10),
         )
         quote_token = signing.dumps(
             {
