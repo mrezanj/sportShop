@@ -1271,3 +1271,54 @@ def mock_payment_page(request, payment_id):
         "payments/mock_payment.html",
         {"payment": payment, "order": order},
     )
+
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_refund(request):
+    from .refund_services import create_refund, RefundError
+    from orders.models import ReturnRequest
+    if not request.user.has_perm("payments.can_manage_refunds"):
+        return Response({"detail": "اجازه ثبت بازپرداخت را ندارید."}, status=403)
+    try:
+        refund = create_refund(
+            return_request_id=request.data.get("return_request_id"),
+            amount=request.data.get("amount"),
+            actor=request.user,
+        )
+    except ReturnRequest.DoesNotExist:
+        return Response({"detail": "درخواست مرجوعی یافت نشد."}, status=404)
+    except (RefundError, TypeError, ValueError) as exc:
+        return Response({"detail": str(exc)}, status=400)
+    return Response({
+        "id": refund.pk, "amount": refund.amount, "status": refund.status,
+        "idempotency_key": str(refund.idempotency_key),
+    }, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def transition_refund(request, refund_id):
+    from .refund_services import transition_refund as apply_transition, RefundError
+    from .models import Refund
+    if not request.user.has_perm("payments.can_manage_refunds"):
+        return Response({"detail": "اجازه مدیریت بازپرداخت را ندارید."}, status=403)
+    try:
+        refund = apply_transition(
+            refund_id=refund_id,
+            actor=request.user,
+            decision=request.data.get("decision", ""),
+            provider_reference=request.data.get("provider_reference", ""),
+            provider_response=request.data.get("provider_response", {}),
+        )
+    except Refund.DoesNotExist:
+        return Response({"detail": "بازپرداخت یافت نشد."}, status=404)
+    except RefundError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    return Response({
+        "id": refund.pk, "amount": refund.amount, "status": refund.status,
+        "provider_reference": refund.provider_reference,
+        "provider_response": refund.provider_response,
+        "completed_at": refund.completed_at,
+    })
