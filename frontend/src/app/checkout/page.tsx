@@ -269,7 +269,7 @@ export default function CheckoutPage() {
       return setError('ابتدا وارد حساب کاربری شوید.');
     }
 
-    if (loadingPreview || !preview) {
+    if (loadingPreview || !preview?.quote_token) {
       return setError(
         previewError || 'ابتدا باید محاسبه هزینه سفارش با موفقیت انجام شود.'
       );
@@ -284,6 +284,7 @@ export default function CheckoutPage() {
             variant_id: i.variantId,
             quantity: i.quantity,
           })),
+          quote_token: preview.quote_token,
           shipping_method_slug: selectedMethodSlug,
           province: form.province,
           city_code: form.city_code,
