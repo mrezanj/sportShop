@@ -30,6 +30,7 @@ class OrderItemInline(admin.TabularInline):
         "price",
         "quantity",
         "subtotal",
+        "discount_amount",
     ]
     can_delete = False
 
