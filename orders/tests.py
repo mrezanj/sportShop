@@ -474,6 +474,7 @@ class CreateOrderReservationTests(TestCase):
             product=restricted_product,
             price=Decimal("150000"),
             stock=5,
+            shipping_weight_grams=1000,
         )
 
         batch = InventoryBatch.objects.create(
