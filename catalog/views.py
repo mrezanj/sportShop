@@ -54,8 +54,10 @@ def _apply_price_updates(rows, mode, user, note, change_type):
             raise ValidationError({"items": f"مقدار قیمت برای {sku} نامعتبر است."})
         if not value.is_finite() or value <= 0:
             raise ValidationError({"items": f"قیمت یا درصد برای {sku} باید مثبت باشد."})
-        if mode != "fixed" and value > 100:
-            raise ValidationError({"items": "درصد تغییر قیمت نمی‌تواند بیشتر از ۱۰۰ باشد."})
+        if mode == "decrease_percent" and value > 100:
+            raise ValidationError({"items": "درصد کاهش قیمت نمی‌تواند بیشتر از ۱۰۰ باشد."})
+        if mode == "fixed" and value > Decimal("999999999999"):
+            raise ValidationError({"items": f"قیمت SKU {sku} از محدوده مجاز بیشتر است."})
         normalized[sku] = value
 
     updated = []
@@ -82,6 +84,8 @@ def _apply_price_updates(rows, mode, user, note, change_type):
                 new_price = (old_price * (Decimal("1") - value / 100)).quantize(Decimal("1"))
             if new_price < 1:
                 raise ValidationError({"price": f"قیمت SKU {variant.sku} نمی‌تواند کمتر از ۱ باشد."})
+            if new_price > Decimal("999999999999"):
+                raise ValidationError({"price": f"قیمت SKU {variant.sku} از محدوده مجاز بیشتر است."})
             if new_price == old_price:
                 continue
             variant.price = new_price
