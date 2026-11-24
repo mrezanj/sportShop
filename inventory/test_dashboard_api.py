@@ -169,3 +169,19 @@ class InventoryDashboardAPITests(TestCase):
         manager_summary = self.client.get("/api/inventory/summary/")
         self.assertEqual(manager_summary.status_code, 200)
         self.assertTrue(manager_summary.data["can_manage_threshold"])
+
+    def test_summary_reports_document_workflow_permissions(self):
+        creator_permission = Permission.objects.get(codename="can_create_inventory_document")
+        reviewer_permission = Permission.objects.get(codename="can_review_inventory_document")
+        self.user.user_permissions.add(creator_permission, reviewer_permission)
+
+        self.client.force_authenticate(self.user)
+        creator_summary = self.client.get("/api/inventory/summary/")
+        self.assertEqual(creator_summary.status_code, 200)
+        self.assertTrue(creator_summary.data["can_create_document"])
+        self.assertTrue(creator_summary.data["can_review_document"])
+        self.assertFalse(creator_summary.data["can_approve_document"])
+
+        self.client.force_authenticate(self.manager)
+        manager_summary = self.client.get("/api/inventory/summary/")
+        self.assertTrue(manager_summary.data["can_approve_document"])
