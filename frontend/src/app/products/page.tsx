@@ -10,6 +10,7 @@ export default async function ProductsPage({
     category?: string;
     brand?: string;
     search?: string;
+    goal?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -19,6 +20,7 @@ export default async function ProductsPage({
       category: params.category,
       brand: params.brand,
       search: params.search,
+      consumptionGoal: params.goal,
     }),
     fetchCategories(),
   ]);
@@ -33,7 +35,7 @@ export default async function ProductsPage({
       ? `نتایج جستجو: ${params.search}`
       : 'همه محصولات';
 
-  const hasFilter = Boolean(params.category || params.brand || params.search);
+  const hasFilter = Boolean(params.category || params.brand || params.search || params.goal);
 
   return (
     <div className="min-h-screen bg-page">
