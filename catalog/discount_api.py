@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers, viewsets
 from rest_framework.permissions import BasePermission
 
@@ -36,7 +37,12 @@ class DiscountCampaignSerializer(serializers.ModelSerializer):
         campaign = self.instance or DiscountCampaign()
         for field, value in attrs.items():
             setattr(campaign, field, value)
-        campaign.clean()
+        try:
+            campaign.clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(
+                getattr(exc, "message_dict", None) or exc.messages
+            ) from exc
         return attrs
 
 
