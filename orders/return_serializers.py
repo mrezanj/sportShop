@@ -4,7 +4,7 @@ from .models import ReturnRequest, ReturnRequestItem
 
 
 class ReturnRequestItemSerializer(serializers.ModelSerializer):
-    order_item_id = serializers.IntegerField(source="order_item_id", read_only=True)
+    order_item_id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = ReturnRequestItem
