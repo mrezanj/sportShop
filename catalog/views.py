@@ -46,7 +46,9 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = super().get_queryset()
         goal = self.request.query_params.get("consumption_goal", "").strip()
         if goal:
-            queryset = queryset.annotate(\n                consumption_goals_text=Cast("consumption_goals", output_field=CharField())\n            ).filter(consumption_goals_text__icontains=goal)
+            queryset = queryset.annotate(
+                consumption_goals_text=Cast("consumption_goals", output_field=CharField())
+            ).filter(consumption_goals_text__icontains=goal)
         return queryset
 
     def get_serializer_class(self):
