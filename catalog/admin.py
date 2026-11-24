@@ -195,6 +195,27 @@ class ProductVariantPriceHistoryAdmin(admin.ModelAdmin):
 
 @admin.register(DiscountCampaign)
 class DiscountCampaignAdmin(JalaliDateModelAdmin):
+    def _allowed(self, request):
+        return request.user.is_superuser or (
+            request.user.is_staff
+            and request.user.has_perm("catalog.can_manage_product_prices")
+        )
+
+    def has_module_permission(self, request):
+        return self._allowed(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._allowed(request)
+
+    def has_add_permission(self, request):
+        return self._allowed(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._allowed(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return self._allowed(request) and (obj is None or obj.usage_count == 0)
+
     list_display = (
         "name", "scope", "discount_type", "value", "code",
         "starts_at", "ends_at", "priority", "usage_count", "is_active",
@@ -225,6 +246,14 @@ class DiscountCampaignAdmin(JalaliDateModelAdmin):
 
 @admin.register(DiscountRedemption)
 class DiscountRedemptionAdmin(admin.ModelAdmin):
+    def has_module_permission(self, request):
+        return request.user.is_superuser or (
+            request.user.is_staff
+            and request.user.has_perm("catalog.can_manage_product_prices")
+        )
+
+    def has_view_permission(self, request, obj=None):
+        return self.has_module_permission(request)
     list_display = ("campaign", "order", "user", "discount_amount", "code_used", "status", "created_at")
     list_filter = ("campaign", "created_at")
     search_fields = ("campaign__name", "code_used", "order__order_number", "user__username")
