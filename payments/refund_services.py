@@ -4,7 +4,7 @@ from uuid import UUID
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Payment, Refund
+from .models import Payment, Refund, RefundHistory
 from orders.models import ReturnRequest
 
 
@@ -66,15 +66,21 @@ def create_refund(*, return_request_id, amount, actor, idempotency_key=None):
     )
     if successful + reserved + amount > payment.amount:
         raise RefundError("مجموع بازپرداخت‌ها نمی‌تواند از مبلغ پرداخت موفق بیشتر باشد.")
-    return Refund.objects.create(
+    refund = Refund.objects.create(
         return_request=request, payment=payment, amount=amount,
         requested_by=actor, idempotency_key=key,
     )
+    RefundHistory.objects.create(
+        refund=refund, old_status="", new_status="requested",
+        changed_by=actor, note="ایجاد درخواست بازپرداخت.",
+    )
+    return refund
 
 @transaction.atomic
 def transition_refund(*, refund_id, actor, decision, provider_reference="", provider_response=None):
     refund = Refund.objects.select_for_update().select_related("payment").get(pk=refund_id)
     response = provider_response or {}
+    old_status = refund.status
     target_status = {
         "approve": "approved", "processing": "processing",
         "succeeded": "succeeded", "failed": "failed", "reject": "rejected",
@@ -103,13 +109,26 @@ def transition_refund(*, refund_id, actor, decision, provider_reference="", prov
         "status", "processed_by", "provider_reference", "provider_response",
         "completed_at", "updated_at",
     ])
+    RefundHistory.objects.create(
+        refund=refund, old_status=old_status, new_status=refund.status,
+        changed_by=actor, provider_reference=provider_reference,
+        provider_response=response, note=f"تغییر وضعیت بازپرداخت به {refund.status}.",
+    )
     if refund.status == "succeeded":
-        from orders.models import ReturnRequest
+        from orders.models import ReturnRequest, ReturnRequestHistory
         other_pending = Refund.objects.filter(
             return_request=refund.return_request
         ).exclude(status__in=["succeeded", "failed", "rejected"]).exists()
         if not other_pending:
-            ReturnRequest.objects.filter(
-                pk=refund.return_request_id, status="received"
-            ).update(status="closed")
+            return_request = ReturnRequest.objects.select_for_update().get(
+                pk=refund.return_request_id
+            )
+            if return_request.status == "received":
+                return_request.status = "closed"
+                return_request.save(update_fields=["status", "updated_at"])
+                ReturnRequestHistory.objects.create(
+                    return_request=return_request, old_status="received",
+                    new_status="closed", changed_by=actor,
+                    note="تکمیل فرآیند بازپرداخت.",
+                )
     return refund
