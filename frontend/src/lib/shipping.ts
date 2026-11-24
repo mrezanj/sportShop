@@ -13,6 +13,8 @@ export interface ShippingPreviewPayload {
 
 export interface ShippingPreviewResponse {
   success: boolean;
+  quote_token: string;
+  quote_expires_in: number;
   subtotal: number;
   vat_amount: number;
   shipping_cost: number;
