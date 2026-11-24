@@ -1,5 +1,7 @@
 
 from decimal import Decimal
+from django.core import signing
+from django.utils import timezone
 
 from django.conf import settings
 from rest_framework import serializers
@@ -158,7 +160,33 @@ class ShippingPreviewSerializer(serializers.Serializer):
             + packaging_cost
         )
 
+        quote_payload = {
+            "user_id": self.context["request"].user.pk,
+            "items": [
+                {"variant_id": variant_id, "quantity": quantity,
+                 "sku": variants_by_id[variant_id].sku,
+                 "unit_price": str(variants_by_id[variant_id].price)}
+                for variant_id, quantity in sorted(quantities.items())
+            ],
+            "province": data["province"],
+            "city_code": city.code,
+            "shipping_method_slug": method.slug,
+            "subtotal": int(subtotal),
+            "vat_amount": int(vat_amount),
+            "shipping_cost": int(shipping_cost),
+            "packaging_cost": int(packaging_cost),
+            "total_amount": int(total_amount),
+            "issued_at": int(timezone.now().timestamp()),
+        }
+        quote_token = signing.dumps(
+            quote_payload,
+            salt="orders.checkout-price-quote",
+            compress=True,
+        )
+
         data["_result"] = {
+            "quote_token": quote_token,
+            "quote_expires_in": 600,
             "subtotal": int(subtotal),
             "vat_amount": int(vat_amount),
             "shipping_cost": int(shipping_cost),
@@ -201,7 +229,10 @@ class ShippingPreviewSerializer(serializers.Serializer):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def shipping_preview(request):
-    serializer = ShippingPreviewSerializer(data=request.data)
+    serializer = ShippingPreviewSerializer(
+        data=request.data,
+        context={"request": request},
+    )
     serializer.is_valid(raise_exception=True)
 
     return Response({
