@@ -523,6 +523,13 @@ class OrderItem(models.Model):
                 condition=models.Q(special_packaging_cost__gte=0),
                 name="order_item_packaging_cost_nonnegative",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(discount_amount__gte=0)
+                    & models.Q(discount_amount__lte=models.F("subtotal"))
+                ),
+                name="order_item_discount_within_subtotal",
+            ),
         ]
 
     def __str__(self):
