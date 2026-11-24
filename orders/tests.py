@@ -531,6 +531,54 @@ class CreateOrderReservationTests(TestCase):
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(StockReservation.objects.count(), 0)
 
+
+
+class CheckoutPriceQuoteTests(CreateOrderReservationTests):
+    def test_order_persists_immutable_price_snapshot(self):
+        order = self.create_order([
+            {"variant_id": self.variant.id, "quantity": 2},
+        ])
+
+        self.assertEqual(order.pricing_snapshot["subtotal"], "200000")
+        self.assertEqual(order.pricing_snapshot["items"][0]["sku"], self.variant.sku)
+        self.assertEqual(order.pricing_snapshot["items"][0]["unit_price"], "100000")
+        self.assertEqual(order.discount_amount, Decimal("0"))
+
+    def test_price_change_after_preview_requires_new_confirmation(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 2},
+        ])
+        self.variant.price = Decimal("125000")
+        self.variant.save(update_fields=["price"])
+
+        serializer.is_valid(raise_exception=True)
+        with self.assertRaises(ValidationError) as raised:
+            serializer.save()
+
+        self.assertIn("price_changed", raised.exception.detail)
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(StockReservation.objects.count(), 0)
+
+    def test_quote_cannot_be_reused_by_another_user(self):
+        serializer = self.make_serializer([
+            {"variant_id": self.variant.id, "quantity": 1},
+        ])
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        data["quote_token"] = serializer.initial_data["quote_token"]
+        other_user = User.objects.create_user(
+            username="other-quote-user",
+            password="test-password",
+        )
+        other_serializer = CreateOrderSerializer(
+            data={**serializer.initial_data},
+            context={"request": SimpleNamespace(user=other_user)},
+        )
+
+        self.assertFalse(other_serializer.is_valid())
+        self.assertIn("quote_token", other_serializer.errors)
+
+
 class CancelOrderTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
