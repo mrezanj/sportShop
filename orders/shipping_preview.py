@@ -177,6 +177,8 @@ class ShippingPreviewSerializer(serializers.Serializer):
             "shipping_cost": int(shipping_cost),
             "packaging_cost": int(packaging_cost),
             "total_amount": int(total_amount),
+            "vat_rate": str(vat_rate),
+            "shipping_snapshot": shipping_result["snapshot"],
             "issued_at": int(timezone.now().timestamp()),
         }
         quote_record = CheckoutPriceQuote.objects.create(
