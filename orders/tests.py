@@ -214,6 +214,27 @@ class CreateOrderReservationTests(TestCase):
         campaign.refresh_from_db()
         self.assertEqual(campaign.usage_count, 1)
 
+    def test_reserved_redemption_enforces_per_user_and_global_limits(self):
+        self.create_discount_campaign(max_uses=5, per_user_limit=1)
+        self.create_order(
+            [{"variant_id": self.variant.id, "quantity": 1}],
+            discount_code="SAVE10",
+        )
+
+        request = SimpleNamespace(user=self.user)
+        preview = ShippingPreviewSerializer(
+            data={
+                "items": [{"variant_id": self.variant.id, "quantity": 1}],
+                "shipping_method_slug": self.shipping_method.slug,
+                "province": "tehran",
+                "city_code": self.city.code,
+                "discount_code": "SAVE10",
+            },
+            context={"request": request},
+        )
+        with self.assertRaises(ValidationError):
+            preview.is_valid(raise_exception=True)
+
     def test_cancelling_unpaid_order_releases_discount_usage(self):
         campaign = self.create_discount_campaign()
         order = self.create_order(
