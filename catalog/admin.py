@@ -7,6 +7,8 @@ from .forms import ProductVariantForm
 from .models import (
     Brand, Category, Product, ProductImage, ProductVariant,
     ProductVariantPriceHistory,
+    DiscountCampaign,
+    DiscountRedemption,
 )
 
 
@@ -180,6 +182,53 @@ class ProductVariantPriceHistoryAdmin(admin.ModelAdmin):
         return request.user.is_superuser or request.user.has_perm(
             "catalog.can_manage_product_prices"
         )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(DiscountCampaign)
+class DiscountCampaignAdmin(JalaliDateModelAdmin):
+    list_display = (
+        "name", "scope", "discount_type", "value", "code",
+        "starts_at", "ends_at", "priority", "usage_count", "is_active",
+    )
+    list_filter = ("scope", "discount_type", "is_active", "first_purchase_only", "is_stackable")
+    search_fields = ("name", "code")
+    readonly_fields = ("usage_count", "created_at", "updated_at")
+    fieldsets = (
+        ("تعریف تخفیف", {
+            "fields": ("name", "scope", "product", "category", "brand",
+                       "discount_type", "value", "maximum_discount_amount",
+                       "minimum_order_amount", "code")
+        }),
+        ("زمان‌بندی و ترکیب", {
+            "fields": ("starts_at", "ends_at", "priority", "is_stackable",
+                       "first_purchase_only", "is_active")
+        }),
+        ("محدودیت استفاده", {
+            "fields": ("max_uses", "per_user_limit", "usage_count")
+        }),
+        ("سوابق", {"fields": ("created_at", "updated_at")}),
+    )
+
+    def save_model(self, request, obj, form, change):
+        obj.full_clean()
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(DiscountRedemption)
+class DiscountRedemptionAdmin(admin.ModelAdmin):
+    list_display = ("campaign", "order", "user", "discount_amount", "code_used", "created_at")
+    list_filter = ("campaign", "created_at")
+    search_fields = ("campaign__name", "code_used", "order__order_number", "user__username")
+    readonly_fields = ("campaign", "order", "user", "discount_amount", "code_used", "created_at")
 
     def has_add_permission(self, request):
         return False
