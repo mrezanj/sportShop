@@ -400,6 +400,10 @@ class Order(models.Model):
                 condition=models.Q(packaging_cost__gte=0),
                 name="order_packaging_cost_nonnegative",
             ),
+            models.CheckConstraint(
+                condition=models.Q(discount_amount__gte=0),
+                name="order_discount_nonnegative",
+            ),
         ]
 
     def __str__(self):
