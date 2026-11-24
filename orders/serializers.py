@@ -530,6 +530,17 @@ class CreateOrderSerializer(serializers.Serializer):
                     subtotal + shipping_cost + packaging_cost + vat_amount
                 ),
             }
+            if (
+                price_quote.get("vat_rate") != str(vat_rate)
+                or price_quote.get("shipping_snapshot") != shipping_snapshot
+            ):
+                raise serializers.ValidationError({
+                    "price_changed": (
+                        "مالیات یا شرایط ارسال تغییر کرده است؛ پیش‌نمایش جدید را "
+                        "بررسی و دوباره تأیید کنید."
+                    )
+                })
+
             for field, current_value in quoted_totals.items():
                 if price_quote.get(field) != current_value:
                     raise serializers.ValidationError({
