@@ -36,9 +36,9 @@ class CatalogImportAPITests(TestCase):
     def test_import_creates_product_variant_and_price_history(self):
         content = (
             "product_slug,name_fa,brand_slug,category_slug,description,price,sku,"
-            "flavor,weight,attributes,consumption_goals\n"
+            "flavor,weight,consumption_goals\\n"
             "imported-whey,پروتئین وی,import-brand,import-category,توضیحات,125000,"
-            "WHEY-001,شکلات,۲ کیلو,{\"serving_type\":\"پودر\"},[\"ریکاوری\"]\n"
+            "WHEY-001,شکلات,۲ کیلو,[ریکاوری]\\n"
         )
         response = self.client.post(
             reverse("product-import-catalog"),
