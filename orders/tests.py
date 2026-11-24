@@ -32,6 +32,7 @@ from orders.models import (
     StockReservation,
 )
 from orders.serializers import CreateOrderSerializer
+from orders.shipping_preview import ShippingPreviewSerializer
 from locations.testing import get_test_tehran_city
 from payments.models import Payment
 from orders.services import (
@@ -137,6 +138,18 @@ class CreateOrderReservationTests(TestCase):
         }
 
         request = SimpleNamespace(user=self.user)
+        preview_data = {
+            "items": items,
+            "shipping_method_slug": data["shipping_method_slug"],
+            "province": data["province"],
+            "city_code": data["city_code"],
+        }
+        preview = ShippingPreviewSerializer(
+            data=preview_data,
+            context={"request": request},
+        )
+        preview.is_valid(raise_exception=True)
+        data["quote_token"] = preview.validated_data["_result"]["quote_token"]
 
         return CreateOrderSerializer(
             data=data,
