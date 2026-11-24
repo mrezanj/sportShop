@@ -47,7 +47,7 @@ def create_return_request(*, order_number, user, reason, items):
             raise ReturnRequestError("قلم سفارش یافت نشد یا تعداد درخواستی بیش از خرید است.")
         already_requested = ReturnRequestItem.objects.filter(
             order_item=item,
-            return_request__status__in=["requested", "approved", "received"],
+            return_request__status__in=["requested", "approved", "received", "closed"],
         ).values_list("quantity", flat=True)
         if quantity + sum(already_requested) > item.quantity:
             raise ReturnRequestError("تعداد مرجوعی از تعداد خریداری‌شده بیشتر است.")
