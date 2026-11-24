@@ -320,6 +320,10 @@ class DiscountCampaignManagementAPITests(APITestCase):
 
 
 class DiscountRedemptionLifecycleTests(TestCase):
+    # Reuse the calculation fixture helpers without inheriting its test methods.
+    campaign = DiscountCalculationTests.campaign
+    calculate = DiscountCalculationTests.calculate
+
     def setUp(self):
         DiscountCalculationTests.setUp(self)
         from orders.models import Order
