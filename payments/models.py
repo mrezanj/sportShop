@@ -110,3 +110,74 @@ class MockGatewayTransaction(models.Model):
 
     def __str__(self):
         return f"{self.authority} - {self.status}"
+
+
+class Refund(models.Model):
+    STATUS_CHOICES = [
+        ("requested", "درخواست‌شده"),
+        ("approved", "تأییدشده"),
+        ("processing", "در حال انجام"),
+        ("succeeded", "انجام‌شده"),
+        ("failed", "ناموفق"),
+        ("rejected", "ردشده"),
+    ]
+
+    return_request = models.ForeignKey(
+        "orders.ReturnRequest",
+        on_delete=models.PROTECT,
+        related_name="refunds",
+        verbose_name="درخواست مرجوعی",
+    )
+    payment = models.ForeignKey(
+        Payment,
+        on_delete=models.PROTECT,
+        related_name="refunds",
+        verbose_name="پرداخت مبنا",
+    )
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
+        verbose_name="مبلغ بازپرداخت (تومان)",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="requested",
+        verbose_name="وضعیت",
+    )
+    idempotency_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    provider_reference = models.CharField(max_length=200, blank=True, verbose_name="شناسه پیگیری ارائه‌دهنده")
+    provider_response = models.JSONField(default=dict, blank=True, verbose_name="پاسخ ارائه‌دهنده")
+    requested_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="requested_refunds",
+    )
+    processed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="processed_refunds",
+    )
+    created_at = JalaliDateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "بازپرداخت"
+        verbose_name_plural = "بازپرداخت‌ها"
+        ordering = ["-created_at", "-id"]
+        permissions = [
+            ("can_manage_refunds", "Can manage refunds"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name="refund_amount_positive",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.return_request.order.order_number} - {self.amount} - {self.status}"
