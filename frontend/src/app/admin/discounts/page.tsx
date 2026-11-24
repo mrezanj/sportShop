@@ -219,7 +219,11 @@ export default function DiscountsAdminPage() {
             {form.scope !== 'cart' && (
               <label className="space-y-1 text-sm font-medium">
                 شناسه {form.scope === 'product' ? 'محصول' : form.scope === 'category' ? 'دسته‌بندی' : 'برند'}
-                <input required type="number" min="1" className={inputClass} value={form.scope === 'product' ? form.product : form.scope === 'category' ? form.category : form.brand} onChange={(e) => change(form.scope, e.target.value)} />
+                <input required type="number" min="1" className={inputClass} value={form.scope === 'product' ? form.product : form.scope === 'category' ? form.category : form.brand} onChange={(e) => {
+                  if (form.scope === 'product') change('product', e.target.value);
+                  else if (form.scope === 'category') change('category', e.target.value);
+                  else if (form.scope === 'brand') change('brand', e.target.value);
+                }} />
                 <span className="block text-xs font-normal text-gray-500">شناسه عددی رکورد در کاتالوگ</span>
               </label>
             )}
