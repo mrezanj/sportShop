@@ -225,10 +225,10 @@ class DiscountCampaignAdmin(JalaliDateModelAdmin):
 
 @admin.register(DiscountRedemption)
 class DiscountRedemptionAdmin(admin.ModelAdmin):
-    list_display = ("campaign", "order", "user", "discount_amount", "code_used", "created_at")
+    list_display = ("campaign", "order", "user", "discount_amount", "code_used", "status", "created_at")
     list_filter = ("campaign", "created_at")
     search_fields = ("campaign__name", "code_used", "order__order_number", "user__username")
-    readonly_fields = ("campaign", "order", "user", "discount_amount", "code_used", "created_at")
+    readonly_fields = ("campaign", "order", "user", "discount_amount", "code_used", "status", "created_at")
 
     def has_add_permission(self, request):
         return False
