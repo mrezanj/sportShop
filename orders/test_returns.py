@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -187,7 +187,7 @@ class ReturnPermissionAPITests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_staff_permission_can_list_all_return_requests(self):
-        permission = __import__("django.contrib.auth.models", fromlist=["Permission"]).Permission.objects.get(
+        permission = Permission.objects.get(
             content_type__app_label="orders",
             codename="can_review_return_requests",
         )
