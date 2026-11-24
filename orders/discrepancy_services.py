@@ -11,6 +11,8 @@ class DiscrepancyError(Exception):
 @transaction.atomic
 def open_order_discrepancy(*, order_id, reason, actor):
     order = Order.objects.select_for_update().get(pk=order_id)
+    if not isinstance(reason, str) or not reason.strip():
+        raise DiscrepancyError("شرح مغایرت الزامی است.")
     if order.status in ("pending", "cancelled", "discrepancy"):
         raise DiscrepancyError("برای وضعیت فعلی سفارش امکان ثبت مغایرت وجود ندارد.")
     if OrderDiscrepancy.objects.filter(order=order, status="open").exists():
@@ -33,6 +35,8 @@ def open_order_discrepancy(*, order_id, reason, actor):
 def resolve_order_discrepancy(*, case_id, resolution, actor):
     case = OrderDiscrepancy.objects.select_for_update().select_related("order").get(pk=case_id)
     order = Order.objects.select_for_update().get(pk=case.order_id)
+    if not isinstance(resolution, str) or not resolution.strip():
+        raise DiscrepancyError("شرح نتیجه رسیدگی الزامی است.")
     if case.status != "open" or order.status != "discrepancy":
         raise DiscrepancyError("پرونده مغایرت باز و قابل رسیدگی نیست.")
     restored = case.previous_order_status
