@@ -133,6 +133,7 @@ export default function PricingAdminPage() {
           <div className="flex flex-wrap gap-2">
             <a href="/admin/discounts" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900">مدیریت تخفیف‌ها</a>
             <a href="/admin/inventory" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900">داشبورد انبار</a>
+            <a href="/admin/returns-refunds" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900">مرجوعی و بازپرداخت</a>
           </div>
         </header>
 
