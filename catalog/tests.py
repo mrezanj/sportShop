@@ -322,4 +322,3 @@ class ProductConsumptionGoalFilterTests(ProductInventoryAPITests):
         response = self.client.get(reverse("product-list"), {"consumption_goal": " "})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["count"], 1)
-
