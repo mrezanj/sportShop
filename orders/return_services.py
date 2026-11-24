@@ -17,7 +17,7 @@ def create_return_request(*, order_number, user, reason, items):
         order=order, status__in=["requested", "approved", "received"]
     ).exists():
         raise ReturnRequestError("برای این سفارش درخواست مرجوعی فعال وجود دارد.")
-    if not reason.strip() or not items:
+    if not isinstance(reason, str) or not reason.strip() or not isinstance(items, list) or not items:
         raise ReturnRequestError("علت و اقلام مرجوعی الزامی هستند.")
     request = ReturnRequest.objects.create(order=order, user=user, reason=reason.strip())
     seen = set()
