@@ -62,7 +62,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="productvariant",
             name="attributes",
-            field=models.JSONField(blank=True, default=dict, verbose_name="ویژگی‌های سفارشی", help_text="ویژگی‌های اختصاصی این تنوع به‌صورت شیء JSON."),
+            field=models.JSONField(blank=True, default=dict, verbose_name="ویژگی‌های سفارشی", help_text="ویژگی‌های اختصاصی این تنوع به‌صورت شیء JSON؛ مثال: {\"serving_type\": \"کپسول\", \"material\": \"پلی‌استر\"}."),
         ),
         migrations.RunPython(keep_one_primary_image, migrations.RunPython.noop),
         migrations.AddConstraint(
