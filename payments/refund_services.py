@@ -78,7 +78,9 @@ def create_refund(*, return_request_id, amount, actor, idempotency_key=None):
 
 @transaction.atomic
 def transition_refund(*, refund_id, actor, decision, provider_reference="", provider_response=None):
-    refund = Refund.objects.select_for_update().select_related("payment").get(pk=refund_id)
+    return_request_id = Refund.objects.values_list("return_request_id", flat=True).get(pk=refund_id)
+    return_request = ReturnRequest.objects.select_for_update().get(pk=return_request_id)
+    refund = Refund.objects.select_for_update().get(pk=refund_id, return_request_id=return_request_id)
     if not isinstance(provider_reference, str):
         provider_reference = ""
     response = provider_response if isinstance(provider_response, dict) else {}
@@ -119,14 +121,11 @@ def transition_refund(*, refund_id, actor, decision, provider_reference="", prov
         provider_response=response, note=f"تغییر وضعیت بازپرداخت به {refund.status}.",
     )
     if refund.status == "succeeded":
-        from orders.models import ReturnRequest, ReturnRequestHistory
+        from orders.models import ReturnRequestHistory
         other_pending = Refund.objects.filter(
             return_request=refund.return_request
         ).exclude(status__in=["succeeded", "failed", "rejected"]).exists()
         if not other_pending:
-            return_request = ReturnRequest.objects.select_for_update().get(
-                pk=refund.return_request_id
-            )
             if return_request.status == "received":
                 return_request.status = "closed"
                 return_request.save(update_fields=["status", "updated_at"])
