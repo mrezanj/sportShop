@@ -589,6 +589,16 @@ class DiscountRedemption(models.Model):
         verbose_name="مبلغ تخفیف استفاده‌شده",
     )
     code_used = models.CharField(max_length=40, blank=True, verbose_name="کد استفاده‌شده")
+    status = models.CharField(
+        max_length=12,
+        choices=[
+            ("reserved", "رزروشده"),
+            ("consumed", "مصرف‌شده"),
+            ("released", "آزادشده"),
+        ],
+        default="reserved",
+        verbose_name="وضعیت مصرف",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
