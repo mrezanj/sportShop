@@ -263,5 +263,5 @@ def record_discount_redemptions(*, result, order, user, discount_code=""):
             order=order,
             user=user,
             discount_amount=amount,
-            code_used=discount_code.strip().upper() if discount_code else "",
+            code_used=locked.code or "",
         )
