@@ -1,17 +1,21 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from io import StringIO
+import re
 from types import SimpleNamespace
 from unittest.mock import patch
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from orders.admin import OrderAdmin
 from django.contrib.auth.models import User, Permission
 from users.models import Profile
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-from rest_framework.test import APITestCase
+from rest_framework.test import APITestCase, APIClient
+from django.db import close_old_connections
 from inventory.models import (
     InventoryBatch,
     InventoryDocument,
@@ -1288,4 +1292,88 @@ class OrderAdminStatusActionTests(TestCase):
         self.assertEqual(
             OrderStatusHistory.objects.filter(order=self.order).count(),
             0,
+        )
+
+
+class ConcurrentOrderExpiryAndCancellationTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        ExpireOrdersCommandTests.setUp(self)
+        self.order, self.reservation = (
+            ExpireOrdersCommandTests.create_order_with_reservation(
+                self,
+                timedelta(minutes=-5),
+            )
+        )
+
+    def test_expiry_and_manual_cancellation_release_reservation_once(self):
+        barrier = Barrier(2)
+        order_id = self.order.pk
+        order_number = self.order.order_number
+        user_id = self.user.pk
+
+        def run_expiry():
+            close_old_connections()
+            try:
+                barrier.wait(timeout=10)
+                output = StringIO()
+                call_command("expire_orders", stdout=output)
+                return output.getvalue()
+            finally:
+                close_old_connections()
+
+        def run_manual_cancellation():
+            close_old_connections()
+            try:
+                client = APIClient()
+                user = User.objects.get(pk=user_id)
+                client.force_authenticate(user=user)
+                barrier.wait(timeout=10)
+                response = client.post(
+                    reverse("cancel-order", args=[order_number]),
+                )
+                return response.status_code
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            expiry_future = executor.submit(run_expiry)
+            cancellation_future = executor.submit(run_manual_cancellation)
+            expiry_output = expiry_future.result(timeout=30)
+            cancellation_status = cancellation_future.result(timeout=30)
+
+        self.order.refresh_from_db()
+        self.reservation.refresh_from_db()
+
+        self.assertEqual(self.order.status, "cancelled")
+        # Whichever operation obtains the order lock first may close the
+        # reservation as released (manual cancellation) or expired (expiry
+        # command). Both are terminal states and must retain one timestamp.
+        self.assertIn(self.reservation.status, ("released", "expired"))
+        self.assertIsNotNone(self.reservation.released_at)
+        self.assertFalse(
+            StockReservation.objects.filter(
+                order_id=order_id,
+                status="active",
+            ).exists()
+        )
+        self.assertEqual(
+            OrderStatusHistory.objects.filter(
+                order_id=order_id,
+                new_status="cancelled",
+            ).count(),
+            1,
+        )
+        self.assertIn(cancellation_status, (200, 400))
+        # Django's colorized management-command output includes ANSI escape
+        # sequences when color is enabled (notably on Windows terminals).
+        normalized_expiry_output = re.sub(
+            r"\x1b\[[0-9;]*m",
+            "",
+            expiry_output,
+        )
+        self.assertIn(
+            normalized_expiry_output.strip().splitlines()[0],
+            ("Expired orders: 0", "Expired orders: 1"),
         )
