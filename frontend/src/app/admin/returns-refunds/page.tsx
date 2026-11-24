@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -42,10 +42,10 @@ const refundLabels: Record<string, string> = {
 const discrepancyLabels: Record<string, string> = { open: 'در حال بررسی', resolved: 'رسیدگی‌شده' };
 
 async function api<T>(token: string, path: string, method = 'GET', payload?: unknown): Promise<T> {
-  const response = await fetch(\`\${API_URL}/\${path}\`, {
+  const response = await fetch(`${API_URL}/${path}`, {
     method,
     headers: {
-      Authorization: \`Token \${token}\`,
+      Authorization: `Token ${token}`,
       ...(payload !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
     ...(payload !== undefined ? { body: JSON.stringify(payload) } : {}),
@@ -109,13 +109,13 @@ export default function ReturnsRefundsAdminPage() {
   };
 
   const reviewReturn = (item: ReturnRequest, decision: 'approve' | 'reject') => {
-    const note = notes[\`return-\${item.id}\`] || '';
-    void run(\`return-\${item.id}\`, () => api(token!, \`orders/returns/\${item.id}/review/\`, 'POST', { decision, note }), decision === 'approve' ? 'درخواست مرجوعی تأیید شد.' : 'درخواست مرجوعی رد شد.');
+    const note = notes[`return-${item.id}`] || '';
+    void run(`return-${item.id}`, () => api(token!, `orders/returns/${item.id}/review/`, 'POST', { decision, note }), decision === 'approve' ? 'درخواست مرجوعی تأیید شد.' : 'درخواست مرجوعی رد شد.');
   };
 
   const receiveReturn = (item: ReturnRequest) => {
-    const note = notes[\`return-\${item.id}\`] || '';
-    void run(\`receive-\${item.id}\`, () => api(token!, \`orders/returns/\${item.id}/received/\`, 'POST', { note }), 'دریافت و بررسی کالای مرجوعی ثبت شد.');
+    const note = notes[`return-${item.id}`] || '';
+    void run(`receive-${item.id}`, () => api(token!, `orders/returns/${item.id}/received/`, 'POST', { note }), 'دریافت و بررسی کالای مرجوعی ثبت شد.');
   };
 
   const createRefund = (item: ReturnRequest) => {
@@ -125,7 +125,7 @@ export default function ReturnsRefundsAdminPage() {
       setTab('refunds');
       return;
     }
-    void run(\`create-refund-\${item.id}\`, () => api(token!, 'payments/refunds/', 'POST', {
+    void run(`create-refund-${item.id}`, () => api(token!, 'payments/refunds/', 'POST', {
       return_request_id: item.id, amount, idempotency_key: crypto.randomUUID(),
     }), 'درخواست بازپرداخت ایجاد شد. این مرحله هنوز وجهی را به مشتری منتقل نمی‌کند.');
   };
@@ -137,19 +137,19 @@ export default function ReturnsRefundsAdminPage() {
       try { evidence = JSON.parse(rawEvidence) as Record<string, unknown>; }
       catch { setErrors((current) => ({ ...current, refunds: 'مستند ارائه‌دهنده باید JSON معتبر باشد.' })); return; }
     }
-    const note = notes[\`refund-\${item.id}\`] || '';
-    void run(\`refund-\${item.id}\`, () => api(token!, \`payments/refunds/\${item.id}/transition/\`, 'POST', {
+    const note = notes[`refund-${item.id}`] || '';
+    void run(`refund-${item.id}`, () => api(token!, `payments/refunds/${item.id}/transition/`, 'POST', {
       decision, provider_reference: providerRefs[item.id] || '', provider_response: evidence, note,
     }), 'وضعیت بازپرداخت به‌روزرسانی شد.');
   };
 
   const resolveDiscrepancy = (item: Discrepancy) => {
-    const resolution = notes[\`case-\${item.id}\`] || '';
+    const resolution = notes[`case-${item.id}`] || '';
     if (!resolution.trim()) {
       setErrors((current) => ({ ...current, discrepancies: 'شرح نتیجه رسیدگی الزامی است.' }));
       return;
     }
-    void run(\`case-\${item.id}\`, () => api(token!, \`orders/discrepancies/\${item.id}/resolve/\`, 'POST', { resolution }), 'مغایرت رسیدگی و وضعیت قبلی سفارش بازیابی شد.');
+    void run(`case-${item.id}`, () => api(token!, `orders/discrepancies/${item.id}/resolve/`, 'POST', { resolution }), 'مغایرت رسیدگی و وضعیت قبلی سفارش بازیابی شد.');
   };
 
   if (authLoading) return <main className="grid min-h-[60vh] place-items-center">در حال بررسی دسترسی...</main>;
@@ -186,7 +186,7 @@ export default function ReturnsRefundsAdminPage() {
 
         {notice && <div role="status" className="rounded-xl border border-pink-200 bg-white p-3 text-sm text-pink-900">{notice}</div>}
         <div className="flex flex-wrap gap-2 border-b border-pink-100 pb-3">
-          {tabs.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={\`rounded-xl px-4 py-2.5 text-sm font-bold \${tab === item.id ? 'bg-pink-800 text-white' : 'border border-pink-100 bg-white text-pink-900'}\`}>{item.label} <span className="mr-1 opacity-75">({number(item.count)})</span></button>)}
+          {tabs.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={`rounded-xl px-4 py-2.5 text-sm font-bold ${tab === item.id ? 'bg-pink-800 text-white' : 'border border-pink-100 bg-white text-pink-900'}`}>{item.label} <span className="mr-1 opacity-75">({number(item.count)})</span></button>)}
         </div>
 
         {errors[tab] && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{errors[tab]}</div>}
@@ -201,10 +201,10 @@ export default function ReturnsRefundsAdminPage() {
             <div className="mt-3 flex flex-wrap gap-2">{item.items.map((row) => <span key={row.order_item_id} className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-700">قلم سفارش #{number(row.order_item_id)} · تعداد {number(row.quantity)}</span>)}</div>
             {item.staff_note && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">یادداشت قبلی: {item.staff_note}</p>}
             {['requested', 'approved'].includes(item.status) && <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
-              <textarea rows={2} className={inputClass} value={notes[\`return-\${item.id}\`] || ''} onChange={(event) => setNotes((current) => ({ ...current, [\`return-\${item.id}\`]: event.target.value }))} placeholder="یادداشت بررسی (اختیاری)" />
+              <textarea rows={2} className={inputClass} value={notes[`return-${item.id}`] || ''} onChange={(event) => setNotes((current) => ({ ...current, [`return-${item.id}`]: event.target.value }))} placeholder="یادداشت بررسی (اختیاری)" />
               <div className="flex flex-wrap gap-2">
                 {item.status === 'requested' && <>
-                  <button disabled={!!busy} onClick={() => reviewReturn(item, 'approve')} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy === \`return-\${item.id}\` ? 'در حال ثبت...' : 'تأیید درخواست'}</button>
+                  <button disabled={!!busy} onClick={() => reviewReturn(item, 'approve')} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy === `return-${item.id}` ? 'در حال ثبت...' : 'تأیید درخواست'}</button>
                   <button disabled={!!busy} onClick={() => reviewReturn(item, 'reject')} className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-700 disabled:opacity-50">رد درخواست</button>
                 </>}
                 {item.status === 'approved' && <button disabled={!!busy} onClick={() => receiveReturn(item)} className="rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">ثبت دریافت و بررسی کالا</button>}
@@ -225,7 +225,7 @@ export default function ReturnsRefundsAdminPage() {
             {item.provider_reference && <p className="mt-3 text-sm text-gray-700">شناسه پیگیری: <span dir="ltr" className="font-mono">{item.provider_reference}</span></p>}
             {item.history?.length > 0 && <details className="mt-3 text-sm"><summary className="cursor-pointer font-bold text-pink-900">تاریخچه وضعیت‌ها ({number(item.history.length)})</summary><div className="mt-2 space-y-2 border-r-2 border-pink-100 pr-3">{item.history.map((entry, index) => <div key={index}><p>{refundLabels[entry.old_status] || '—'} ← {refundLabels[entry.new_status] || entry.new_status}</p><p className="text-xs text-gray-500">{date(entry.created_at)} · {entry.note}</p></div>)}</div></details>}
             {!['succeeded', 'failed', 'rejected'].includes(item.status) && <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
-              <textarea rows={2} className={inputClass} value={notes[\`refund-\${item.id}\`] || ''} onChange={(event) => setNotes((current) => ({ ...current, [\`refund-\${item.id}\`]: event.target.value }))} placeholder="یادداشت اقدام" />
+              <textarea rows={2} className={inputClass} value={notes[`refund-${item.id}`] || ''} onChange={(event) => setNotes((current) => ({ ...current, [`refund-${item.id}`]: event.target.value }))} placeholder="یادداشت اقدام" />
               {['approved', 'processing'].includes(item.status) && <>
                 <input className={inputClass} value={providerRefs[item.id] || ''} onChange={(event) => setProviderRefs((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="شناسه پیگیری ارائه‌دهنده (برای موفقیت الزامی)" />
                 <textarea rows={3} className={inputClass} value={providerEvidence[item.id] || ''} onChange={(event) => setProviderEvidence((current) => ({ ...current, [item.id]: event.target.value }))} placeholder='مستند پاسخ ارائه‌دهنده به صورت JSON؛ نمونه: {"status":"paid","reference":"..."}' dir="ltr" />
@@ -251,7 +251,7 @@ export default function ReturnsRefundsAdminPage() {
             <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-bold">پرونده #{number(item.id)} · سفارش {item.order_number}</h2><p className="mt-1 text-xs text-gray-500">ثبت: {date(item.created_at)} · وضعیت قبلی سفارش: {item.previous_order_status}</p></div><Status status={item.status} label={discrepancyLabels[item.status] || item.status} /></div>
             <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-gray-700">{item.reason}</p>
             {item.resolution && <p className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">نتیجه: {item.resolution}</p>}
-            {item.status === 'open' && <div className="mt-4 space-y-2 border-t border-gray-100 pt-4"><textarea rows={2} className={inputClass} value={notes[\`case-\${item.id}\`] || ''} onChange={(event) => setNotes((current) => ({ ...current, [\`case-\${item.id}\`]: event.target.value }))} placeholder="شرح نتیجه رسیدگی؛ الزامی" /><button disabled={!!busy} onClick={() => resolveDiscrepancy(item)} className="rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">ثبت نتیجه و رفع توقف سفارش</button></div>}
+            {item.status === 'open' && <div className="mt-4 space-y-2 border-t border-gray-100 pt-4"><textarea rows={2} className={inputClass} value={notes[`case-${item.id}`] || ''} onChange={(event) => setNotes((current) => ({ ...current, [`case-${item.id}`]: event.target.value }))} placeholder="شرح نتیجه رسیدگی؛ الزامی" /><button disabled={!!busy} onClick={() => resolveDiscrepancy(item)} className="rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">ثبت نتیجه و رفع توقف سفارش</button></div>}
           </article>)}
           {!discrepancies.length && !errors.discrepancies && <Empty text="پرونده مغایرتی ثبت نشده است." />}
         </section>}
@@ -265,7 +265,7 @@ function Metric({ label, value }: { label: string; value: number }) {
 }
 function Status({ status, label }: { status: string; label: string }) {
   const color = status === 'succeeded' || status === 'resolved' || status === 'received' ? 'bg-emerald-50 text-emerald-800' : status === 'failed' || status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800';
-  return <span className={\`inline-flex rounded-full px-3 py-1 text-xs font-bold \${color}\`}>{label}</span>;
+  return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${color}`}>{label}</span>;
 }
 function Empty({ text }: { text: string }) {
   return <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500">{text}</div>;
