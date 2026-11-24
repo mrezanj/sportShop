@@ -85,11 +85,14 @@ def release_order_discount_redemptions(order):
             status="reserved",
         ).values_list("campaign_id", flat=True)
     )
-    campaigns = {
-        campaign.pk: campaign
-        for campaign in DiscountCampaign.objects.select_for_update()
+    locked_campaigns = (
+        DiscountCampaign.objects.select_for_update()
         .filter(pk__in=campaign_ids)
         .order_by("-priority", "id")
+    )
+    campaigns = {
+        campaign.pk: campaign
+        for campaign in locked_campaigns
     }
     redemptions = list(
         DiscountRedemption.objects.select_for_update()
