@@ -77,6 +77,34 @@ class Product(models.Model):
     ingredients = models.TextField(blank=True, verbose_name="مواد تشکیل‌دهنده")
     usage = models.TextField(blank=True, verbose_name="روش مصرف")
     warnings = models.TextField(blank=True, verbose_name="هشدارها")
+    contraindications = models.TextField(
+        blank=True,
+        verbose_name="موارد منع مصرف",
+    )
+    medical_advice = models.TextField(
+        blank=True,
+        verbose_name="توصیه پزشکی",
+    )
+    license_id = models.CharField(
+        max_length=150,
+        blank=True,
+        verbose_name="شناسه مجوز",
+    )
+    authenticity_code = models.CharField(
+        max_length=150,
+        blank=True,
+        verbose_name="شناسه اصالت",
+    )
+    license_details = models.TextField(
+        blank=True,
+        verbose_name="اطلاعات تکمیلی مجوز و اصالت",
+    )
+    consumption_goals = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="اهداف مصرف",
+        help_text="فهرستی از اهداف مصرف؛ مانند افزایش حجم، کاهش وزن یا سلامت عمومی.",
+    )
     requires_cold_shipping = models.BooleanField(
         default=False, verbose_name="نیاز به ارسال سرد"
     )
@@ -114,6 +142,15 @@ class ProductImage(models.Model):
         ordering = ["order"]
 
     def save(self, *args, **kwargs):
+        # Serialize primary-image changes per product and preserve the
+        # database-level one-primary-image invariant.
+        from django.db import transaction
+
+        with transaction.atomic():
+            Product.objects.select_for_update().get(pk=self.product_id)
+            self._save_with_primary_lock(*args, **kwargs)
+
+    def _save_with_primary_lock(self, *args, **kwargs):
         # If this image is being set as primary, unset the others
         if self.is_primary:
             ProductImage.objects.filter(product=self.product, is_primary=True).exclude(
@@ -161,6 +198,12 @@ class ProductVariant(models.Model):
     )
     size = models.CharField(max_length=20, blank=True, verbose_name="سایز (برای پوشاک)")
     color = models.CharField(max_length=50, blank=True, verbose_name="رنگ")
+    attributes = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="ویژگی‌های سفارشی",
+        help_text="ویژگی‌های اختصاصی این تنوع به‌صورت شیء JSON؛ مثال: {\"serving_type\": \"کپسول\", \"material\": \"پلی‌استر\"}.",
+    )
     sku = models.CharField(
         max_length=100, unique=True, blank=True, verbose_name="کد انبار (SKU)"
     )
@@ -243,6 +286,16 @@ class ProductVariant(models.Model):
             ),
         ]
 
+    def clean(self):
+        super().clean()
+        if not isinstance(self.consumption_goals, list) or any(
+            not isinstance(goal, str) or not goal.strip()
+            for goal in self.consumption_goals
+        ):
+            raise models.ValidationError(
+                {"consumption_goals": "اهداف مصرف باید فهرستی از متن‌های غیرخالی باشد."}
+            )
+
     def __str__(self):
         parts = [self.product.name_fa]
         if self.flavor:
@@ -255,11 +308,33 @@ class ProductVariant(models.Model):
             parts.append(self.color)
         return " - ".join(parts)
 
+    def clean(self):
+        super().clean()
+        if not isinstance(self.attributes, dict) or any(
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, (str, int, float, bool))
+            for key, value in self.attributes.items()
+        ):
+            raise models.ValidationError(
+                {"attributes": "ویژگی‌های سفارشی باید شیئی با کلید متنی و مقدار ساده باشند."}
+            )
+
     def save(self, *args, **kwargs):
         # Auto-generate SKU if:
         # - empty (new variant with no manual SKU), OR
         # - starts with __TMP__ (placeholder from ProductVariantForm.clean_sku)
         if not self.sku or self.sku.startswith("__TMP__"):
+            from django.db import transaction
+
+            with transaction.atomic():
+                Product.objects.select_for_update().get(pk=self.product_id)
+                self._generate_sku()
+                return super().save(*args, **kwargs)
+
+        super().save(*args, **kwargs)
+
+    def _generate_sku(self):
             brand_prefix = self.product.brand.name[:3].upper().replace(" ", "") or "PRD"
             prefix = f"{brand_prefix}-{self.product.id}-"
 
@@ -285,5 +360,3 @@ class ProductVariant(models.Model):
                 )
 
             self.sku = candidate
-
-        super().save(*args, **kwargs)
