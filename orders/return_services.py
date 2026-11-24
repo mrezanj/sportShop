@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -27,9 +29,16 @@ def create_return_request(*, order_number, user, reason, items):
     seen = set()
     for entry in items:
         try:
-            item_id, quantity = int(entry["order_item_id"]), int(entry["quantity"])
-        except (KeyError, TypeError, ValueError):
-            raise ReturnRequestError("قلم یا تعداد مرجوعی نامعتبر است.")
+            raw_item_id = entry["order_item_id"]
+            raw_quantity = entry["quantity"]
+            if isinstance(raw_item_id, bool) or isinstance(raw_quantity, bool):
+                raise ValueError
+            item_id = int(raw_item_id)
+            quantity = int(raw_quantity)
+            if Decimal(str(raw_item_id)) != item_id or Decimal(str(raw_quantity)) != quantity:
+                raise ValueError
+        except (KeyError, TypeError, ValueError, InvalidOperation):
+            raise ReturnRequestError("قلم یا تعداد مرجوعی باید عدد صحیح معتبر باشد.")
         if item_id in seen or quantity <= 0:
             raise ReturnRequestError("اقلام تکراری یا تعداد نامعتبر است.")
         seen.add(item_id)
