@@ -79,7 +79,9 @@ def create_refund(*, return_request_id, amount, actor, idempotency_key=None):
 @transaction.atomic
 def transition_refund(*, refund_id, actor, decision, provider_reference="", provider_response=None):
     refund = Refund.objects.select_for_update().select_related("payment").get(pk=refund_id)
-    response = provider_response or {}
+    if not isinstance(provider_reference, str):
+        provider_reference = ""
+    response = provider_response if isinstance(provider_response, dict) else {}
     old_status = refund.status
     target_status = {
         "approve": "approved", "processing": "processing",
@@ -96,6 +98,8 @@ def transition_refund(*, refund_id, actor, decision, provider_reference="", prov
     elif decision in {"succeeded", "failed"} and refund.status in {"approved", "processing"}:
         if decision == "succeeded" and not provider_reference.strip():
             raise RefundError("برای ثبت بازپرداخت موفق، شناسه پیگیری ارائه‌دهنده الزامی است.")
+        if decision == "succeeded" and not response:
+            raise RefundError("پاسخ یا مستند نتیجه بازپرداخت ارائه‌دهنده الزامی است.")
         refund.status = decision
         refund.completed_at = timezone.now()
     elif decision == "reject" and refund.status == "requested":
