@@ -355,6 +355,8 @@ def import_catalog_file(upload, user):
             variant.price = row["price"]
             if row["sku"]:
                 variant.sku = row["sku"]
+            elif not variant.sku:
+                variant._generate_sku()
             for field, value in row["variant_fields"].items():
                 setattr(variant, field, value)
             try:
