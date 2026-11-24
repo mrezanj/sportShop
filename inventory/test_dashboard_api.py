@@ -6,7 +6,14 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from catalog.models import Brand, Category, Product, ProductVariant
-from .models import InventoryBatch, InventoryDocument, InventoryDocumentItem, InventoryDocumentLog, InventoryStockThreshold
+from .models import (
+    InventoryBatch,
+    InventoryDocument,
+    InventoryDocumentItem,
+    InventoryDocumentLog,
+    InventoryMovement,
+    InventoryStockThreshold,
+)
 
 
 class InventoryDashboardAPITests(TestCase):
@@ -248,6 +255,9 @@ class InventoryDashboardAPITests(TestCase):
         )
         self.assertEqual(submitted.status_code, 200)
         self.assertEqual(submitted.data["status"], "pending_review")
+        self.assertFalse(
+            InventoryMovement.objects.filter(document_id=document_id).exists()
+        )
 
         self.client.force_authenticate(accountant)
         reviewed = self.client.post(
@@ -257,6 +267,9 @@ class InventoryDashboardAPITests(TestCase):
         )
         self.assertEqual(reviewed.status_code, 200)
         self.assertEqual(reviewed.data["status"], "pending_approval")
+        self.assertFalse(
+            InventoryMovement.objects.filter(document_id=document_id).exists()
+        )
 
         self.client.force_authenticate(self.manager)
         approved = self.client.post(
@@ -266,10 +279,9 @@ class InventoryDashboardAPITests(TestCase):
         )
         self.assertEqual(approved.status_code, 200)
         self.assertEqual(approved.data["status"], "approved")
-        self.assertEqual(
-            InventoryDocument.objects.get(pk=document_id).items.first().movements.count(),
-            1,
-        )
+        movements = InventoryMovement.objects.filter(document_id=document_id)
+        self.assertEqual(movements.count(), 1)
+        self.assertEqual(movements.first().quantity_delta, 7)
         self.assertEqual(
             InventoryDocumentLog.objects.filter(document_id=document_id).count(),
             4,
