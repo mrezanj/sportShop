@@ -113,6 +113,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "packaging_is_free",
             "subtotal",
             "vat_amount",
+            "discount_amount",
             "total_amount",
             "tracking_code",
             "notes",
