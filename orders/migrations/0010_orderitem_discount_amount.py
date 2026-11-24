@@ -1,4 +1,5 @@
 from django.db import migrations, models
+from decimal import Decimal
 import django.core.validators
 
 
@@ -16,7 +17,7 @@ class Migration(migrations.Migration):
                 decimal_places=0,
                 default=0,
                 max_digits=12,
-                validators=[django.core.validators.MinValueValidator(0)],
+                validators=[django.core.validators.MinValueValidator(Decimal("0"))],
                 verbose_name="تخفیف قلم سفارش",
             ),
         ),
