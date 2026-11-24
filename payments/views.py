@@ -1286,6 +1286,7 @@ def create_refund(request):
             return_request_id=request.data.get("return_request_id"),
             amount=request.data.get("amount"),
             actor=request.user,
+            idempotency_key=request.data.get("idempotency_key"),
         )
     except ReturnRequest.DoesNotExist:
         return Response({"detail": "درخواست مرجوعی یافت نشد."}, status=404)
