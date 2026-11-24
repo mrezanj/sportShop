@@ -282,7 +282,216 @@ class InventoryDashboardAPITests(TestCase):
         movements = InventoryMovement.objects.filter(document_id=document_id)
         self.assertEqual(movements.count(), 1)
         self.assertEqual(movements.first().quantity_delta, 7)
+
+        duplicate = self.client.post(
+            f"/api/inventory/documents/{document_id}/approve/",
+            {"note": "Duplicate approval attempt"},
+            format="json",
+        )
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertEqual(
+            InventoryMovement.objects.filter(document_id=document_id).count(),
+            1,
+        )
         self.assertEqual(
             InventoryDocumentLog.objects.filter(document_id=document_id).count(),
             4,
+        )
+
+    def _create_pending_approval_purchase(self, document_number):
+        creator_permission = Permission.objects.get(
+            codename="can_create_inventory_document"
+        )
+        reviewer_permission = Permission.objects.get(
+            codename="can_review_inventory_document"
+        )
+        self.user.user_permissions.add(creator_permission)
+        accountant = User.objects.create_user(
+            username=f"accountant_{document_number.lower().replace('-', '_')}",
+            password="test-pass",
+        )
+        accountant.user_permissions.add(reviewer_permission)
+
+        self.client.force_authenticate(self.user)
+        created = self.client.post(
+            "/api/inventory/documents/create/",
+            {
+                "document_number": document_number,
+                "document_type": "purchase",
+                "reason": "Workflow security test",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201)
+        document_id = created.data["id"]
+
+        added = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 3,
+                "direction": "inbound",
+                "new_batch_number": f"{document_number}-BATCH",
+            },
+            format="json",
+        )
+        self.assertEqual(added.status_code, 201)
+
+        submitted = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(submitted.status_code, 200)
+
+        self.client.force_authenticate(accountant)
+        reviewed = self.client.post(
+            f"/api/inventory/documents/{document_id}/review/",
+            {"note": "Reviewed"},
+            format="json",
+        )
+        self.assertEqual(reviewed.status_code, 200)
+        return document_id, accountant
+
+    def test_creator_cannot_review_own_document(self):
+        creator_permission = Permission.objects.get(
+            codename="can_create_inventory_document"
+        )
+        self.user.user_permissions.add(creator_permission)
+        self.client.force_authenticate(self.user)
+        created = self.client.post(
+            "/api/inventory/documents/create/",
+            {
+                "document_number": "DASH-CREATOR-REVIEW",
+                "document_type": "purchase",
+                "reason": "Creator separation test",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201)
+        document_id = created.data["id"]
+        added = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 2,
+                "direction": "inbound",
+                "new_batch_number": "DASH-CREATOR-REVIEW-BATCH",
+            },
+            format="json",
+        )
+        self.assertEqual(added.status_code, 201)
+        submitted = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(submitted.status_code, 200)
+
+        review = self.client.post(
+            f"/api/inventory/documents/{document_id}/review/",
+            {"note": "Self review attempt"},
+            format="json",
+        )
+        self.assertEqual(review.status_code, 403)
+        self.assertEqual(
+            InventoryDocument.objects.get(pk=document_id).status,
+            "pending_review",
+        )
+        self.assertFalse(
+            InventoryMovement.objects.filter(document_id=document_id).exists()
+        )
+
+    def test_reviewer_cannot_approve_document_they_reviewed(self):
+        document_id, accountant = self._create_pending_approval_purchase(
+            "DASH-REVIEWER-APPROVE"
+        )
+        self.client.force_authenticate(accountant)
+        denied = self.client.post(
+            f"/api/inventory/documents/{document_id}/approve/",
+            {"note": "Self approval attempt"},
+            format="json",
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(
+            InventoryDocument.objects.get(pk=document_id).status,
+            "pending_approval",
+        )
+        self.assertFalse(
+            InventoryMovement.objects.filter(document_id=document_id).exists()
+        )
+
+        self.manager.user_permissions.add(
+            Permission.objects.get(codename="can_approve_inventory_document")
+        )
+        self.client.force_authenticate(self.manager)
+        approved = self.client.post(
+            f"/api/inventory/documents/{document_id}/approve/",
+            {"note": "Independent manager approval"},
+            format="json",
+        )
+        self.assertEqual(approved.status_code, 200)
+        self.assertEqual(
+            InventoryMovement.objects.filter(document_id=document_id).count(),
+            1,
+        )
+
+    def test_rejected_document_does_not_change_inventory(self):
+        creator_permission = Permission.objects.get(
+            codename="can_create_inventory_document"
+        )
+        reviewer_permission = Permission.objects.get(
+            codename="can_review_inventory_document"
+        )
+        self.user.user_permissions.add(creator_permission)
+        accountant = User.objects.create_user(
+            username="accountant_reject_test",
+            password="test-pass",
+        )
+        accountant.user_permissions.add(reviewer_permission)
+
+        self.client.force_authenticate(self.user)
+        created = self.client.post(
+            "/api/inventory/documents/create/",
+            {
+                "document_number": "DASH-REJECT-NO-STOCK",
+                "document_type": "purchase",
+                "reason": "Rejection test",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201)
+        document_id = created.data["id"]
+        added = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 4,
+                "direction": "inbound",
+                "new_batch_number": "DASH-REJECT-NO-STOCK-BATCH",
+            },
+            format="json",
+        )
+        self.assertEqual(added.status_code, 201)
+        submitted = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(submitted.status_code, 200)
+
+        self.client.force_authenticate(accountant)
+        rejected = self.client.post(
+            f"/api/inventory/documents/{document_id}/reject/",
+            {"note": "Invoice mismatch"},
+            format="json",
+        )
+        self.assertEqual(rejected.status_code, 200)
+        self.assertEqual(rejected.data["status"], "rejected")
+        self.assertFalse(
+            InventoryMovement.objects.filter(document_id=document_id).exists()
+        )
+        self.assertEqual(
+            InventoryMovement.objects.filter(batch__variant=self.variant).count(),
+            0,
         )
