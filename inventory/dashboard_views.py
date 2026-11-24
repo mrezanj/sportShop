@@ -64,6 +64,33 @@ def _inventory_snapshot(variants):
 class InventoryDocumentListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def post(self, request):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from rest_framework.exceptions import NotFound
+        from . import document_services
+        from .serializers import InventoryDocumentCreateSerializer
+
+        serializer = InventoryDocumentCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            document = document_services.create_inventory_document(
+                user=request.user,
+                **serializer.validated_data,
+            )
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(str(exc))
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.messages)
+        return Response(
+            {
+                "id": document.id,
+                "document_number": document.document_number,
+                "document_type": document.document_type,
+                "status": document.status,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
     def get(self, request):
         _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
         queryset = InventoryDocument.objects.select_related(
