@@ -91,10 +91,10 @@ class Migration(migrations.Migration):
             model_name="discountcampaign",
             constraint=models.CheckConstraint(
                 condition=(
-                    models.Q(("scope", "product"), ("product__isnull", False), ("category__isnull", True), ("brand__isnull", True))
-                    | models.Q(("scope", "category"), ("product__isnull", True), ("category__isnull", False), ("brand__isnull", True))
-                    | models.Q(("scope", "brand"), ("product__isnull", True), ("category__isnull", True), ("brand__isnull", False))
-                    | models.Q(("scope", "cart"), ("product__isnull", True), ("category__isnull", True), ("brand__isnull", True))
+                    models.Q(("brand__isnull", True), ("category__isnull", True), ("product__isnull", False), ("scope", "product"))
+                    | models.Q(("brand__isnull", True), ("category__isnull", False), ("product__isnull", True), ("scope", "category"))
+                    | models.Q(("brand__isnull", False), ("category__isnull", True), ("product__isnull", True), ("scope", "brand"))
+                    | models.Q(("brand__isnull", True), ("category__isnull", True), ("product__isnull", True), ("scope", "cart"))
                 ),
                 name="discount_scope_target_consistent",
             ),
