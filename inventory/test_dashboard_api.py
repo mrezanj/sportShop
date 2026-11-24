@@ -185,3 +185,23 @@ class InventoryDashboardAPITests(TestCase):
         self.client.force_authenticate(self.manager)
         manager_summary = self.client.get("/api/inventory/summary/")
         self.assertTrue(manager_summary.data["can_approve_document"])
+
+    def test_draft_item_can_only_be_removed_by_creator_with_permission(self):
+        creator_permission = Permission.objects.get(codename="can_create_inventory_document")
+        self.user.user_permissions.add(creator_permission)
+        self.client.force_authenticate(self.user)
+        response = self.client.delete(
+            f"/api/inventory/documents/{self.document.id}/items/{self.item.id}/"
+        )
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(InventoryDocumentItem.objects.filter(pk=self.item.id).exists())
+
+    def test_draft_item_removal_is_denied_to_non_creator(self):
+        creator_permission = Permission.objects.get(codename="can_create_inventory_document")
+        self.manager.user_permissions.add(creator_permission)
+        self.client.force_authenticate(self.manager)
+        response = self.client.delete(
+            f"/api/inventory/documents/{self.document.id}/items/{self.item.id}/"
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(InventoryDocumentItem.objects.filter(pk=self.item.id).exists())
