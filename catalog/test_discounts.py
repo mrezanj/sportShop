@@ -2,7 +2,6 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import Permission, User
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -194,7 +193,7 @@ class DiscountCalculationTests(TestCase):
     def test_first_purchase_campaign_rejects_customer_with_paid_order(self):
         from orders.models import Order
 
-        campaign = self.campaign(
+        self.campaign(
             code="FIRSTBUY",
             first_purchase_only=True,
         )
