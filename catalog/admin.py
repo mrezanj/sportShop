@@ -4,7 +4,10 @@ from django.contrib import admin
 from jalali_suite.admin import JalaliDateModelAdmin
 
 from .forms import ProductVariantForm
-from .models import Brand, Category, Product, ProductImage, ProductVariant
+from .models import (
+    Brand, Category, Product, ProductImage, ProductVariant,
+    ProductVariantPriceHistory,
+)
 
 
 class ProductImageInline(admin.TabularInline):
@@ -103,3 +106,39 @@ class ProductAdmin(JalaliDateModelAdmin):
             {"fields": ("requires_cold_shipping", "minimum_age", "is_active")},
         ),
     )
+
+
+
+@admin.register(ProductVariantPriceHistory)
+class ProductVariantPriceHistoryAdmin(admin.ModelAdmin):
+    list_display = (
+        "sku",
+        "product_name",
+        "old_price",
+        "new_price",
+        "change_type",
+        "changed_by",
+        "created_at",
+    )
+    list_filter = ("change_type", "created_at")
+    search_fields = ("sku", "product_name", "note", "changed_by__username")
+    readonly_fields = (
+        "variant",
+        "sku",
+        "product_name",
+        "old_price",
+        "new_price",
+        "change_type",
+        "changed_by",
+        "note",
+        "created_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
