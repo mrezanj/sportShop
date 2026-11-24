@@ -45,6 +45,7 @@ class DiscountCampaignViewSet(viewsets.ModelViewSet):
         "product", "category", "brand"
     ).all()
     serializer_class = DiscountCampaignSerializer
+    pagination_class = None
     permission_classes = [CanManageDiscounts]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
