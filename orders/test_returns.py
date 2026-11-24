@@ -136,6 +136,7 @@ class ReturnRequestTests(TestCase):
         request.refresh_from_db()
         self.assertEqual(request.status, "received")
         self.assertEqual(request.reviewed_by, self.staff)
+        self.assertEqual(list(request.history.values_list("new_status", flat=True)), ["requested", "approved", "received"])
 
     def test_return_request_cannot_be_reviewed_twice(self):
         request = create_return_request(
