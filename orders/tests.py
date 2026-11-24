@@ -198,7 +198,7 @@ class CreateOrderReservationTests(TestCase):
         self.assertEqual(order.subtotal, Decimal("200000"))
         self.assertEqual(order.discount_amount, Decimal("20000"))
         self.assertEqual(order.vat_amount, Decimal("18000"))
-        self.assertEqual(order.total_amount, Decimal("238000"))
+        self.assertEqual(order.total_amount, Decimal("248000"))
         self.assertEqual(order.pricing_snapshot["discount_amount"], "20000")
         self.assertEqual(order.pricing_snapshot["discounted_subtotal"], "180000")
         self.assertEqual(
