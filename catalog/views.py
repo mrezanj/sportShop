@@ -40,6 +40,13 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        goal = self.request.query_params.get("consumption_goal", "").strip()
+        if goal:
+            queryset = queryset.filter(consumption_goals__icontains=goal)
+        return queryset
+
     def get_serializer_class(self):
         if self.action == "retrieve":
             return ProductDetailSerializer
