@@ -151,6 +151,13 @@ class ProductImage(models.Model):
         verbose_name = "عکس محصول"
         verbose_name_plural = "عکس‌های محصول"
         ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product"],
+                condition=Q(is_primary=True),
+                name="unique_primary_image_per_product",
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         # Serialize primary-image changes per product and preserve the
