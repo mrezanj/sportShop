@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.exceptions import NotFound
 from .services import get_variants_inventory
 from catalog.models import ProductVariant
-from .models import InventoryDocument
+from .models import InventoryDocument, InventoryDocumentItem
 from .models import InventoryStockThreshold
 from .permissions import CanViewInventoryReports
 from .serializers import InventoryReportSerializer
@@ -119,6 +119,27 @@ class InventoryDocumentItemCreateAPIView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class InventoryDocumentItemDeleteAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, document_id, item_id):
+        try:
+            document_services.remove_inventory_document_item(
+                user=request.user,
+                document_id=document_id,
+                item_id=item_id,
+            )
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(str(exc))
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.messages)
+        except InventoryDocument.DoesNotExist as exc:
+            raise NotFound("Inventory document not found.") from exc
+        except InventoryDocumentItem.DoesNotExist as exc:
+            raise NotFound("Inventory document item not found.") from exc
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class InventoryDocumentSubmitAPIView(APIView):

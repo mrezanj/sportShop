@@ -200,6 +200,25 @@ def add_inventory_document_item(
 
 
 @transaction.atomic
+def remove_inventory_document_item(*, user, document_id, item_id):
+    _require_permission(
+        user,
+        "inventory.can_create_inventory_document",
+    )
+    document = InventoryDocument.objects.select_for_update().get(pk=document_id)
+    if document.status != "draft":
+        raise ValidationError("Only draft documents can be edited.")
+    if document.created_by_id != user.id:
+        raise PermissionDenied("Only the document creator can edit it.")
+    item = InventoryDocumentItem.objects.select_for_update().get(
+        pk=item_id,
+        document=document,
+    )
+    item.delete()
+    return document
+
+
+@transaction.atomic
 def submit_inventory_document(*, user, document_id):
     _require_permission(
         user,
