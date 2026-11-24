@@ -555,6 +555,8 @@ export interface InventoryDocumentItem {
   batch_number: string | null;
   batch_status: string | null;
   batch_expiration_date: string | null;
+  new_batch_expiration_date: string | null;
+  new_batch_number: string;
   quantity: number;
   direction: string;
   unit_cost: number | null;
