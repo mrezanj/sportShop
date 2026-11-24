@@ -850,11 +850,14 @@ async function discountApiRequest<T>(
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    const firstFieldError = data && typeof data === 'object'
+      ? Object.values(data as Record<string, unknown>)
+          .flatMap((value) => Array.isArray(value) ? value : [value])
+          .find((value) => typeof value === 'string')
+      : undefined;
     const message =
       data?.detail ||
-      data?.code?.[0] ||
-      data?.name?.[0] ||
-      data?.value?.[0] ||
+      (typeof firstFieldError === 'string' ? firstFieldError : undefined) ||
       'عملیات مدیریت تخفیف انجام نشد.';
     throw new Error(message);
   }
