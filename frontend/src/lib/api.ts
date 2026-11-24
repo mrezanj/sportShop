@@ -719,3 +719,79 @@ export function approveInventoryDocument(token: string, documentId: number, note
 export function rejectInventoryDocument(token: string, documentId: number, note: string) {
   return inventoryDocumentAction(token, documentId, 'reject', note);
 }
+
+
+export interface ProductPriceUpdateRow {
+  sku: string;
+  value: string | number;
+}
+
+export interface ProductPriceUpdateResult {
+  success: boolean;
+  updated_count: number;
+  items: { sku: string; old_price: number; new_price: number }[];
+}
+
+export interface ProductPriceHistoryRow {
+  id: number;
+  sku: string;
+  product_name: string;
+  old_price: string | null;
+  new_price: string;
+  change_type: string;
+  changed_by__username: string | null;
+  note: string;
+  created_at: string;
+}
+
+export async function bulkUpdateProductPrices(
+  token: string,
+  payload: {
+    mode: 'fixed' | 'increase_percent' | 'decrease_percent';
+    items: ProductPriceUpdateRow[];
+    note?: string;
+  }
+): Promise<ProductPriceUpdateResult> {
+  const res = await fetch(`${API_URL}/products/bulk-price-update/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Token ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.detail || data?.sku || data?.items || 'به‌روزرسانی قیمت انجام نشد.');
+  return data;
+}
+
+export async function importProductPrices(
+  token: string,
+  file: File
+): Promise<ProductPriceUpdateResult> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_URL}/products/import-prices/`, {
+    method: 'POST',
+    headers: { Authorization: `Token ${token}` },
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.detail || data?.file || data?.sku || 'ورود قیمت انجام نشد.');
+  return data;
+}
+
+export async function fetchProductPriceHistory(
+  token: string,
+  sku = ''
+): Promise<ProductPriceHistoryRow[]> {
+  const url = new URL(`${API_URL}/products/price-history/`);
+  if (sku) url.searchParams.set('sku', sku);
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Token ${token}` },
+    cache: 'no-store',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.detail || 'دریافت سوابق قیمت انجام نشد.');
+  return data;
+}
