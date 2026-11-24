@@ -64,6 +64,7 @@ export default function VariantSelector({
       selected.weight,
       selected.size,
       selected.color,
+      ...Object.values(selected.attributes ?? {}).map(String),
     ]
       .filter(Boolean)
       .join(' - ');
