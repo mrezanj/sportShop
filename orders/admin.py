@@ -13,6 +13,9 @@ from .models import (
     ShippingRate,
     ShippingConfiguration,
     StockReservation,
+    OrderDiscrepancy,
+    ReturnRequest,
+    ReturnRequestItem,
 )
 from .services import (
     InvalidOrderStatusTransition,
@@ -383,6 +386,52 @@ class CheckoutPriceQuoteAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+
+class ReturnRequestItemInline(admin.TabularInline):
+    model = ReturnRequestItem
+    extra = 0
+    readonly_fields = ("order_item", "quantity")
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(OrderDiscrepancy)
+class OrderDiscrepancyAdmin(admin.ModelAdmin):
+    list_display = ("order", "status", "opened_by", "created_at", "resolved_by", "resolved_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("order__order_number", "reason", "resolution")
+    readonly_fields = ("order", "status", "reason", "previous_order_status", "opened_by", "created_at", "resolved_by", "resolved_at", "resolution")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.has_perm("orders.can_manage_order_discrepancies")
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ReturnRequest)
+class ReturnRequestAdmin(admin.ModelAdmin):
+    list_display = ("order", "user", "status", "created_at", "reviewed_by")
+    list_filter = ("status", "created_at")
+    search_fields = ("order__order_number", "user__username", "reason")
+    readonly_fields = ("order", "user", "reason", "status", "staff_note", "reviewed_by", "created_at", "updated_at")
+    inlines = [ReturnRequestItemInline]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.has_perm("orders.can_review_return_requests")
 
     def has_delete_permission(self, request, obj=None):
         return False
