@@ -238,15 +238,6 @@ class CreateOrderReservationTests(TestCase):
         self.assertEqual(self.variant.stock, 5)
 
     def test_active_reservations_reduce_available_stock(self):
-        self.create_order(
-            [
-                {
-                    "variant_id": self.variant.id,
-                    "quantity": 3,
-                }
-            ]
-        )
-
         serializer = self.make_serializer(
             [
                 {
@@ -255,8 +246,16 @@ class CreateOrderReservationTests(TestCase):
                 }
             ]
         )
-
         serializer.is_valid(raise_exception=True)
+
+        self.create_order(
+            [
+                {
+                    "variant_id": self.variant.id,
+                    "quantity": 3,
+                }
+            ]
+        )
 
         with self.assertRaises(ValidationError):
             serializer.save()
