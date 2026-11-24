@@ -126,6 +126,7 @@ export default function InventoryDashboardPage() {
     setNotice('');
     try {
       await updateInventoryThreshold(token, row.variant_id, value);
+      setThresholdDrafts(prev => ({ ...prev, [row.variant_id]: String(value) }));
       setNotice(`حداقل موجودی ${row.sku} ذخیره شد.`);
       await loadDashboard();
     } catch (err) {
