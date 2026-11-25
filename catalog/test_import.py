@@ -139,10 +139,10 @@ class CatalogImportAPITests(TestCase):
 
     def test_import_distinguishes_variants_by_servings_and_custom_attributes(self):
         content = (
-            "product_slug,name_fa,brand_slug,category_slug,description,price,sku,flavor,weight,servings,attributes\\n"
-            "multi-variant,محصول,import-brand,import-category,توضیح,100000,VAR-30,شکلات,۱ کیلو,30,{}\\n"
-            "multi-variant,محصول,import-brand,import-category,توضیح,110000,VAR-60,شکلات,۱ کیلو,60,{}\\n"
-            "multi-variant,محصول,import-brand,import-category,توضیح,120000,VAR-CAPS,شکلات,۱ کیلو,30,{\\"form\\":\\"کپسول\\"}\\n"
+            "product_slug,name_fa,brand_slug,category_slug,description,price,sku,flavor,weight,servings,attributes\n"
+            "multi-variant,محصول,import-brand,import-category,توضیح,100000,VAR-30,شکلات,۱ کیلو,30,{}\n"
+            "multi-variant,محصول,import-brand,import-category,توضیح,110000,VAR-60,شکلات,۱ کیلو,60,{}\n"
+            "multi-variant,محصول,import-brand,import-category,توضیح,120000,VAR-CAPS,شکلات,۱ کیلو,30,""{""form"":""کپسول""}""\n"
         )
         response = self.client.post(
             reverse("product-import-catalog"),
