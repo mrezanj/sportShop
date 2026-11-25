@@ -941,6 +941,7 @@ class StaffRoleSetupCommandTests(TestCase):
                 content_type__model__in=("otpcode", "otpfailedattempt", "otprequestlimit", "profile")
             ).exists()
         )
+        self.assertFalse(ceo.permissions.filter(codename__startswith="delete_").exists())
 
     def test_accountant_and_internal_manager_permissions_are_separated(self):
         call_command("setup_staff_roles")
