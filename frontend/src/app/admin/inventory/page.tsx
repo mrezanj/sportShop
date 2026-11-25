@@ -290,6 +290,7 @@ export default function InventoryDashboardPage() {
           <div><p className="section-label">مدیریت عملیات فروشگاه</p><h1 className="text-3xl sm:text-4xl">داشبورد انبار</h1><p className="mt-2 text-sm text-gray-500">نمای موجودی، ثبت اسناد و گردش تأیید حسابدار و مدیر داخلی</p></div>
           <div className="flex flex-wrap gap-2">
             <a href="/admin/pricing" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900 hover:bg-pink-50">مدیریت قیمت‌ها</a>
+            <a href="/admin/inventory/reports" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900 hover:bg-pink-50">گزارش موجودی و گردش‌ها</a>
             {summary?.can_create_document && <a href="/admin/inventory-import" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900 hover:bg-pink-50">ورود گروهی موجودی</a>}
             {summary?.can_create_document && <button onClick={() => setCreating(true)} className="rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-pink-900">ایجاد سند جدید</button>}
             <button onClick={() => void loadDashboard()} className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900 hover:bg-pink-50">به‌روزرسانی اطلاعات</button>
