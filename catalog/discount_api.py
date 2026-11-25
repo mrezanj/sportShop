@@ -16,7 +16,7 @@ class CanManageDiscounts(BasePermission):
             and user.is_staff
             and (
                 user.is_superuser
-                or user.has_perm("catalog.can_manage_product_prices")
+                or user.has_perm("catalog.can_manage_discount_campaigns")
             )
         )
 
