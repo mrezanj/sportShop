@@ -259,7 +259,7 @@ class DiscountCampaignManagementAPITests(APITestCase):
         )
         self.permission = Permission.objects.get(
             content_type__app_label="catalog",
-            codename="can_manage_product_prices",
+            codename="can_manage_discounts",
         )
         self.user.user_permissions.add(self.permission)
         self.client.force_authenticate(self.user)
@@ -306,7 +306,23 @@ class DiscountCampaignManagementAPITests(APITestCase):
         self.assertEqual(listing.status_code, 200)
         self.assertEqual(len(listing.data), 1)
 
-    def test_staff_without_price_permission_cannot_manage_campaigns(self):
+    def test_discount_permission_is_independent_from_price_permission(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.user.has_perm("catalog.can_manage_product_prices"))
+
+        self.user.user_permissions.clear()
+        self.user.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="catalog",
+                codename="can_manage_product_prices",
+            )
+        )
+        self.user.refresh_from_db()
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_staff_without_discount_or_price_permission_cannot_manage_campaigns(self):
         self.user.user_permissions.clear()
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
