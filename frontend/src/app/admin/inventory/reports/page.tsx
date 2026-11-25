@@ -17,11 +17,12 @@ const dateTime = (value: string) => new Date(value).toLocaleString('fa-IR');
 const inputClass = 'w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-pink-500';
 
 function PersonEntry({ label, name, role }: { label: string; name: string | null; role: string | null }) {
+  const isDocumentCreator = label === 'ثبت‌کننده سند';
   return (
-    <div className="min-w-0">
-      <div className="text-xs font-semibold text-gray-500">{label}</div>
-      <div className="mt-1 break-words font-semibold text-gray-900">{name || '—'}</div>
-      {role && <div className="mt-0.5 text-xs text-gray-500">نقش: {role}</div>}
+    <div className={`min-w-0 rounded-lg border p-3 ${isDocumentCreator ? 'border-sky-200 bg-sky-50' : 'border-amber-200 bg-amber-50'}`}>
+      <div className={`text-xs font-bold ${isDocumentCreator ? 'text-sky-800' : 'text-amber-800'}`}>{label}</div>
+      <div className="mt-1 break-words font-bold text-gray-900">{name || '—'}</div>
+      {role && <div className="mt-1 inline-flex rounded-md bg-white/80 px-2 py-1 text-xs font-medium text-gray-700">نقش: {role}</div>}
     </div>
   );
 }
@@ -96,7 +97,7 @@ export default function InventoryReportsPage() {
           <button onClick={() => changeTab('movements')} className={tab === 'movements' ? 'rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white' : 'rounded-xl border bg-white px-4 py-2.5 text-sm'}>گردش‌های دفترکل</button>
         </div>
 
-        <section className="rounded-2xl border border-pink-100 bg-white p-4 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-6">
           <div className="mb-4 grid gap-3 sm:grid-cols-3">
             <input className={inputClass} value={search} onChange={e => {setSearch(e.target.value);setPage(1);}} placeholder={tab === 'batches' ? 'جست‌وجوی SKU، کالا یا شماره بچ' : 'جست‌وجوی SKU، بچ، سند یا توضیحات'} />
             {tab === 'batches' ? (
@@ -121,20 +122,20 @@ export default function InventoryReportsPage() {
           </div>
 
           {error && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
-          <div className="mb-3 text-sm text-gray-500">تعداد نتایج: {number(currentCount)}</div>
+          <div className="mb-3 inline-flex rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">تعداد نتایج: {number(currentCount)}</div>
 
           {tab === 'batches' ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px] text-sm">
-                <thead><tr className="border-b text-right text-gray-500">
-                  <th className="p-3">SKU / کالا</th><th className="p-3">شماره بچ</th><th className="p-3">وضعیت</th><th className="p-3">انقضا</th><th className="p-3">فیزیکی</th><th className="p-3">رزرو</th><th className="p-3">قابل فروش</th><th className="p-3">افراد مرتبط</th>
+              <table className="w-full min-w-[1050px] border-separate border-spacing-0 text-sm">
+                <thead><tr className="bg-slate-200 text-right text-slate-700">
+                  <th className="border-b-2 border-slate-300 p-3 font-bold">SKU / کالا</th><th className="p-3">شماره بچ</th><th className="p-3">وضعیت</th><th className="p-3">انقضا</th><th className="p-3">فیزیکی</th><th className="p-3">رزرو</th><th className="p-3">قابل فروش</th><th className="p-3">افراد مرتبط</th>
                 </tr></thead>
                 <tbody>
-                  {(batchData?.results ?? []).map((row: InventoryBatchReportRow) => <tr key={row.id} className="border-b border-gray-50">
-                    <td className="p-3"><strong>{row.sku}</strong><span className="block text-xs text-gray-500">{row.product_name} · {row.brand_name}</span></td>
-                    <td className="p-3 font-mono">{row.batch_number}</td>
+                  {(batchData?.results ?? []).map((row: InventoryBatchReportRow) => <tr key={row.id} className="odd:bg-white even:bg-slate-100/80 transition-colors hover:bg-sky-50">
+                    <td className="border-b border-slate-200 p-3 align-top"><strong>{row.sku}</strong><span className="block text-xs text-gray-500">{row.product_name} · {row.brand_name}</span></td>
+                    <td className="border-b border-slate-200 p-3 align-top font-mono text-slate-700">{row.batch_number}</td>
                     <td className="p-3"><span className={row.is_expired ? 'text-red-700' : 'text-gray-700'}>{row.is_expired ? 'منقضی' : row.status_display}</span></td>
-                    <td className="p-3">{date(row.expiration_date)}</td><td className="p-3 tabular-nums">{number(row.physical)}</td><td className="p-3 tabular-nums">{number(row.reserved)}</td><td className="p-3 tabular-nums font-bold">{number(row.available)}</td>
+                    <td className="p-3">{date(row.expiration_date)}</td><td className="border-b border-slate-200 p-3 align-top tabular-nums">{number(row.physical)}</td><td className="p-3 tabular-nums">{number(row.reserved)}</td><td className="border-b border-slate-200 p-3 align-top tabular-nums font-bold text-slate-900">{number(row.available)}</td>
                     <td className="p-3">
                       <div className="space-y-3">
                         <PersonEntry label="ثبت‌کننده سند" name={row.document_created_by_display} role={row.document_created_by_role} />
@@ -143,21 +144,21 @@ export default function InventoryReportsPage() {
                       </div>
                     </td>
                   </tr>)}
-                  {!loading && (batchData?.results.length ?? 0) === 0 && <tr><td colSpan={8} className="p-8 text-center text-gray-500">بچی برای نمایش پیدا نشد.</td></tr>}
+                  {!loading && (batchData?.results.length ?? 0) === 0 && <tr><td colSpan={8} className="border-b border-slate-200 bg-white p-8 text-center text-gray-500">بچی برای نمایش پیدا نشد.</td></tr>}
                 </tbody>
               </table>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1250px] text-sm">
+              <table className="w-full min-w-[1250px] border-separate border-spacing-0 text-sm">
                 <thead><tr className="border-b text-right text-gray-500">
                   <th className="p-3">تاریخ</th><th className="p-3">SKU</th><th className="p-3">بچ</th><th className="p-3">نوع گردش</th><th className="p-3">تغییر تعداد</th><th className="p-3">شماره سند</th><th className="p-3">وضعیت سند</th><th className="p-3">بهای واحد (تومان)</th><th className="p-3">افراد مرتبط</th>
                 </tr></thead>
                 <tbody>
                   {(movementData?.results ?? []).map((row: InventoryMovementReportRow) => <tr key={row.id} className="border-b border-gray-50">
-                    <td className="p-3 whitespace-nowrap">{dateTime(row.created_at)}</td><td className="p-3">{row.sku}<span className="block text-xs text-gray-500">{row.product_name}</span></td><td className="p-3 font-mono">{row.batch_number}</td><td className="p-3">{row.movement_type_display}</td>
-                    <td className={'p-3 font-bold tabular-nums ' + (row.quantity_delta > 0 ? 'text-green-700' : 'text-red-700')}>{row.quantity_delta > 0 ? '+' : ''}{number(row.quantity_delta)}</td>
-                    <td className="p-3">{row.document_number}<span className="block text-xs text-gray-500">{row.document_type_display}</span></td><td className="p-3">{row.document_status_display}</td><td className="p-3 tabular-nums">{row.unit_cost === null ? '—' : number(Number(row.unit_cost))}</td>
+                    <td className="border-b border-slate-200 p-3 align-top whitespace-nowrap">{dateTime(row.created_at)}</td><td className="p-3">{row.sku}<span className="block text-xs text-gray-500">{row.product_name}</span></td><td className="p-3 font-mono">{row.batch_number}</td><td className="p-3">{row.movement_type_display}</td>
+                    <td className={'border-b border-slate-200 p-3 align-top font-bold tabular-nums ' + (row.quantity_delta > 0 ? 'text-green-700' : 'text-red-700')}>{row.quantity_delta > 0 ? '+' : ''}{number(row.quantity_delta)}</td>
+                    <td className="p-3">{row.document_number}<span className="block text-xs text-gray-500">{row.document_type_display}</span></td><td className="p-3">{row.document_status_display}</td><td className="border-b border-slate-200 p-3 align-top tabular-nums">{row.unit_cost === null ? '—' : number(Number(row.unit_cost))}</td>
                     <td className="p-3">
                       <div className="space-y-3">
                         <PersonEntry label="ثبت‌کننده سند" name={row.document_created_by_display} role={row.document_created_by_role} />
@@ -166,7 +167,7 @@ export default function InventoryReportsPage() {
                       </div>
                     </td>
                   </tr>)}
-                  {!loading && (movementData?.results.length ?? 0) === 0 && <tr><td colSpan={9} className="p-8 text-center text-gray-500">گردشی برای نمایش پیدا نشد.</td></tr>}
+                  {!loading && (movementData?.results.length ?? 0) === 0 && <tr><td colSpan={9} className="border-b border-slate-200 bg-white p-8 text-center text-gray-500">گردشی برای نمایش پیدا نشد.</td></tr>}
                 </tbody>
               </table>
             </div>
