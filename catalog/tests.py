@@ -746,3 +746,53 @@ class InventoryBatchPrivacyAPITests(TestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertIn(response.status_code, (401, 403))
+
+
+class CatalogAdminPermissionBoundaryTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="catalog-admin-auditor",
+            password="test-password",
+            is_staff=True,
+        )
+        self.variant_inline = ProductVariantInline(Product, admin.site)
+        self.discount_admin = DiscountCampaignAdmin(DiscountCampaign, admin.site)
+        self.redemption_admin = DiscountRedemptionAdmin(DiscountRedemption, admin.site)
+
+    def test_variant_price_is_readonly_without_price_permission(self):
+        request = SimpleNamespace(user=self.user)
+        self.assertIn("price", self.variant_inline.get_readonly_fields(request))
+
+    def test_variant_price_is_editable_with_dedicated_price_permission(self):
+        permission = Permission.objects.get(
+            content_type__app_label="catalog",
+            codename="can_manage_product_prices",
+        )
+        self.user.user_permissions.add(permission)
+        self.user = User.objects.get(pk=self.user.pk)
+        request = SimpleNamespace(user=self.user)
+
+        self.assertNotIn("price", self.variant_inline.get_readonly_fields(request))
+
+    def test_discount_campaign_management_requires_dedicated_permission(self):
+        request = SimpleNamespace(user=self.user)
+        self.assertFalse(self.discount_admin.has_add_permission(request))
+        self.assertFalse(self.discount_admin.has_change_permission(request))
+
+        permission = Permission.objects.get(
+            content_type__app_label="catalog",
+            codename="can_manage_discounts",
+        )
+        self.user.user_permissions.add(permission)
+        self.user = User.objects.get(pk=self.user.pk)
+        request.user = self.user
+
+        self.assertTrue(self.discount_admin.has_add_permission(request))
+        self.assertTrue(self.discount_admin.has_change_permission(request))
+        self.assertFalse(self.discount_admin.has_delete_permission(request))
+
+    def test_discount_redemptions_are_read_only(self):
+        request = SimpleNamespace(user=self.user)
+        self.assertFalse(self.redemption_admin.has_add_permission(request))
+        self.assertFalse(self.redemption_admin.has_change_permission(request))
+        self.assertFalse(self.redemption_admin.has_delete_permission(request))
