@@ -350,14 +350,20 @@ def import_catalog_file(upload, user):
                         "file": f"SKU {row['sku']} در ردیف {line} متعلق به محصول دیگری است."
                     })
             if variant is None:
-                lookup = {
-                    "product": product,
-                    "flavor": row["variant_fields"].get("flavor", ""),
-                    "weight": row["variant_fields"].get("weight", ""),
-                    "size": row["variant_fields"].get("size", ""),
-                    "color": row["variant_fields"].get("color", ""),
+                identity_fields = {
+                    "flavor": "",
+                    "weight": "",
+                    "servings": None,
+                    "size": "",
+                    "color": "",
+                    "attributes": {},
                 }
-                variant = ProductVariant.objects.select_for_update().filter(**lookup).first()
+                identity_fields.update(row["variant_fields"])
+                identity = ProductVariant(product=product, **identity_fields)
+                variant = ProductVariant.objects.select_for_update().filter(
+                    product=product,
+                    variant_fingerprint=identity.build_variant_fingerprint(),
+                ).first()
 
             is_new_variant = variant is None
             old_price = variant.price if variant else None
