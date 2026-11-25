@@ -87,7 +87,8 @@ export default function InventoryDashboardPage() {
         fetchInventoryThresholds(token),
       ]);
       const canViewDocuments = summaryData.can_create_document ||
-        summaryData.can_review_document || summaryData.can_approve_document;
+        summaryData.can_review_document || summaryData.can_approve_document ||
+        summaryData.can_view_reports;
       const docsData = canViewDocuments
         ? await fetchInventoryDocuments(token, { page, status, type, search })
         : { results: [], count: 0 };
@@ -327,7 +328,7 @@ export default function InventoryDashboardPage() {
           {thresholds.length > 30 && <p className="mt-3 text-xs text-gray-500">در این نما ۳۰ SKU نخست نمایش داده می‌شود.</p>}
         </section>
 
-        {(summary?.can_create_document || summary?.can_review_document || summary?.can_approve_document) && (
+        {(summary?.can_create_document || summary?.can_review_document || summary?.can_approve_document || summary?.can_view_reports) && (
         <section className="rounded-2xl border border-pink-100 bg-white p-4 shadow-sm sm:p-6">
           <div className="mb-4"><h2 className="text-xl">اسناد انبار</h2><p className="mt-1 text-xs text-gray-500">ایجاد پیش‌نویس، افزودن اقلام و گردش بررسی و تأیید</p></div>
           <div className="mb-4 grid gap-2 sm:grid-cols-4">
