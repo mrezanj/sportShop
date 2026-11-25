@@ -156,8 +156,24 @@ class CatalogCategoryManagementSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "slug", "parent", "is_active"]
 
     def validate_parent(self, parent):
-        if parent and self.instance and parent.pk == self.instance.pk:
-            raise serializers.ValidationError("یک دسته نمی‌تواند والد خودش باشد.")
+        if parent is None:
+            return parent
+
+        # Walk upward from the proposed parent. The edited category must never
+        # appear in that chain, otherwise the update would create a cycle.
+        current = parent
+        visited = set()
+        while current is not None:
+            if self.instance and current.pk == self.instance.pk:
+                raise serializers.ValidationError(
+                    "یک دسته نمی‌تواند والد خودش یا یکی از زیرمجموعه‌های خودش باشد."
+                )
+            if current.pk in visited:
+                raise serializers.ValidationError(
+                    "زنجیره والدهای دسته‌بندی دارای چرخه است."
+                )
+            visited.add(current.pk)
+            current = current.parent
         return parent
 
 
