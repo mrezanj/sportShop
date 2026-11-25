@@ -123,7 +123,9 @@ class PriceManagementMixin:
         permission_classes=[IsAdminUser],
     )
     def import_catalog(self, request):
+        # Catalog import includes variant prices, so both domains are required.
         _catalog_permission(request.user)
+        _price_permission(request.user)
         result = import_catalog_file(
             upload=request.FILES.get("file"),
             user=request.user,
