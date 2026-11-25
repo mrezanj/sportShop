@@ -174,13 +174,22 @@ class InventoryDashboardAPITests(TestCase):
         reviewer.user_permissions.add(
             Permission.objects.get(codename="can_review_inventory_document")
         )
+        creator_permission = Permission.objects.get(
+            codename="can_create_inventory_document"
+        )
+        self.user.user_permissions.add(creator_permission)
+        from .document_services import submit_inventory_document
+
+        submit_inventory_document(user=self.user, document_id=self.document.id)
+
         self.client.force_authenticate(reviewer)
         listing = self.client.get("/api/inventory/documents/")
         self.assertEqual(listing.status_code, 200)
-        self.assertEqual(listing.data["count"], 0)
+        self.assertEqual(listing.data["count"], 1)
+        self.assertEqual(listing.data["results"][0]["id"], self.document.id)
         self.assertEqual(
             self.client.get(f"/api/inventory/documents/{self.document.id}/").status_code,
-            404,
+            200,
         )
 
     def test_manager_has_audit_visibility_for_all_documents(self):
