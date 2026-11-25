@@ -5,6 +5,8 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from users.models import Profile
+
 from catalog.models import Brand, Category, Product, ProductVariant
 from .models import (
     InventoryBatch,
@@ -100,6 +102,150 @@ class InventoryDashboardAPITests(TestCase):
         self.assertEqual(response.data["items"][0]["quantity"], 5)
         self.assertNotIn("password", response.data)
 
+    def test_actor_display_distinguishes_customers_and_staff_roles(self):
+        customer = User.objects.create_user(
+            username="customer-display-test",
+            password="test-pass",
+        )
+        Profile.objects.create(
+            user=customer,
+            mobile="09120000001",
+        )
+        customer_document = InventoryDocument.objects.create(
+            document_number="CUSTOMER-DISPLAY-001",
+            document_type="inbound",
+            created_by=customer,
+            reason="Customer display test",
+        )
+
+        employee = User.objects.create_user(
+            username="employee-display-test",
+            password="test-pass",
+            first_name="رضا",
+            last_name="رضایی",
+            is_staff=True,
+        )
+        create_permission = Permission.objects.get(
+            codename="can_create_inventory_document"
+        )
+        review_permission = Permission.objects.get(
+            codename="can_review_inventory_document"
+        )
+        employee.user_permissions.add(
+            create_permission,
+            review_permission,
+        )
+
+        employee_document = InventoryDocument.objects.create(
+            document_number="EMPLOYEE-DISPLAY-001",
+            document_type="inbound",
+            created_by=employee,
+            reason="Employee display test",
+        )
+
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get("/api/inventory/documents/")
+        self.assertEqual(response.status_code, 200)
+
+        rows = response.data["results"]
+        customer_row = next(
+            row for row in rows if row["id"] == customer_document.id
+        )
+        employee_row = next(
+            row for row in rows if row["id"] == employee_document.id
+        )
+
+        self.assertEqual(
+            customer_row["created_by_display"],
+            "09120000001",
+        )
+        self.assertIsNone(customer_row["created_by_role"])
+        self.assertEqual(
+            customer_row["created_by_username"],
+            customer.username,
+        )
+
+        self.assertEqual(
+            employee_row["created_by_display"],
+            "رضا رضایی",
+        )
+        self.assertEqual(
+            employee_row["created_by_role"],
+            "ثبت‌کننده / حسابدار",
+        )
+        self.assertEqual(
+            employee_row["created_by_username"],
+            employee.username,
+        )
+
+        detail = self.client.get(
+            f"/api/inventory/documents/{employee_document.id}/"
+        )
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(
+            detail.data["created_by_display"],
+            "رضا رضایی",
+        )
+
+        InventoryDocumentLog.objects.create(
+            document=employee_document,
+            action="created",
+            actor=employee,
+            from_status="",
+            to_status="draft",
+        )
+
+        history = self.client.get(
+            f"/api/inventory/documents/{employee_document.id}/history/"
+        )
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(
+            history.data[0]["actor_display"],
+            "رضا رضایی",
+        )
+        self.assertEqual(
+            history.data[0]["actor_role"],
+            "ثبت‌کننده / حسابدار",
+        )
+        self.assertEqual(
+            history.data[0]["actor_username"],
+            employee.username,
+        )
+
+    def test_staff_without_name_uses_username_as_display(self):
+        employee = User.objects.create_user(
+            username="unnamed-inventory-staff",
+            password="test-pass",
+            is_staff=True,
+        )
+        employee.user_permissions.add(
+            Permission.objects.get(
+                codename="can_approve_inventory_document"
+            )
+        )
+        document = InventoryDocument.objects.create(
+            document_number="EMPLOYEE-NONAME-001",
+            document_type="inbound",
+            created_by=employee,
+            reason="Employee fallback test",
+        )
+
+        self.client.force_authenticate(self.user)
+        response = self.client.get(
+            f"/api/inventory/documents/{document.id}/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["created_by_display"],
+            employee.username,
+        )
+        self.assertEqual(
+            response.data["created_by_role"],
+            "مدیر",
+        )
+
     def test_document_history_returns_immutable_log_entries(self):
         InventoryDocumentLog.objects.create(
             document=self.document,
@@ -112,6 +258,14 @@ class InventoryDashboardAPITests(TestCase):
         response = self.client.get(f"/api/inventory/documents/{self.document.id}/history/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data[0]["actor_username"], self.user.username)
+        self.assertEqual(
+            response.data[0]["actor_display"],
+            self.user.username,
+        )
+        self.assertEqual(
+            response.data[0]["actor_role"],
+            "مشاهده‌گر انبار",
+        )
 
     def test_threshold_update_is_manager_only(self):
         self.client.force_authenticate(self.user)

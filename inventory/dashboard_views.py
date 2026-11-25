@@ -95,7 +95,7 @@ class InventoryDocumentListAPIView(APIView):
     def get(self, request):
         _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
         queryset = InventoryDocument.objects.select_related(
-            "created_by", "reviewed_by", "approved_by", "source_order"
+            "created_by", "created_by__profile", "reviewed_by", "reviewed_by__profile", "approved_by", "approved_by__profile", "source_order"
         ).annotate(item_count=Count("items")).order_by("-created_at", "-pk")
 
         status_filter = request.query_params.get("status")
@@ -134,7 +134,7 @@ class InventoryDocumentDetailAPIView(APIView):
         _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
         document = get_object_or_404(
             InventoryDocument.objects.select_related(
-                "created_by", "reviewed_by", "approved_by", "source_order"
+                "created_by", "created_by__profile", "reviewed_by", "reviewed_by__profile", "approved_by", "approved_by__profile", "source_order"
             ).prefetch_related(
                 "items__variant__product__brand", "items__batch"
             ),
@@ -151,7 +151,7 @@ class InventoryDocumentHistoryAPIView(APIView):
         get_object_or_404(InventoryDocument, pk=document_id)
         logs = InventoryDocumentLog.objects.filter(
             document_id=document_id
-        ).select_related("actor").order_by("created_at", "pk")
+        ).select_related("actor", "actor__profile").order_by("created_at", "pk")
         return Response(InventoryDocumentLogSerializer(logs, many=True).data)
 
 

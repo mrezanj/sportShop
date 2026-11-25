@@ -1,6 +1,8 @@
 from decimal import Decimal
 from uuid import uuid4
 
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APITestCase
@@ -638,3 +640,71 @@ class ShippingMethodsAPITests(
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, [])
+
+
+
+class ShippingSeedCommandTests(APITestCase):
+    def setUp(self):
+        self.province = Province.objects.create(
+            slug="hamedan",
+            name="همدان",
+            source_code="TEST-HAM",
+            is_active=True,
+        )
+        self.hamadan_city = City.objects.create(
+            province=self.province,
+            code="TSTHAM001",
+            name="همدان",
+            county_name="همدان",
+            district_name="مرکزی",
+            is_active=True,
+        )
+        self.other_city = City.objects.create(
+            province=self.province,
+            code="TSTHAM002",
+            name="ملایر",
+            county_name="ملایر",
+            district_name="مرکزی",
+            is_active=True,
+        )
+        self.url = reverse("shipping-methods")
+
+    def test_seed_command_restricts_motorcycle_to_hamadan_city(self):
+        ShippingMethod.objects.create(
+            name="پیک قدیمی",
+            slug="motorcycle",
+            restricted_province="hamedan",
+            restricted_city=self.other_city,
+        )
+
+        call_command("seed_shipping")
+
+        motorcycle = ShippingMethod.objects.get(slug="motorcycle")
+        self.assertEqual(motorcycle.restricted_city_id, self.hamadan_city.pk)
+        self.assertEqual(motorcycle.restricted_province, "hamedan")
+
+        hamadan_response = self.client.get(
+            self.url,
+            {"province": "hamedan", "city_code": self.hamadan_city.code},
+        )
+        other_city_response = self.client.get(
+            self.url,
+            {"province": "hamedan", "city_code": self.other_city.code},
+        )
+
+        self.assertEqual(hamadan_response.status_code, 200)
+        self.assertIn(
+            "motorcycle",
+            [item["slug"] for item in hamadan_response.data],
+        )
+        self.assertEqual(other_city_response.status_code, 200)
+        self.assertNotIn(
+            "motorcycle",
+            [item["slug"] for item in other_city_response.data],
+        )
+
+    def test_seed_command_fails_when_hamadan_city_is_missing(self):
+        self.hamadan_city.delete()
+
+        with self.assertRaises(CommandError):
+            call_command("seed_shipping")

@@ -9,6 +9,11 @@ from .dashboard_views import (
     InventoryThresholdDetailAPIView,
     InventoryThresholdListAPIView,
 )
+from .import_views import InventoryBulkImportAPIView
+from .report_views import (
+    InventoryBatchReportAPIView,
+    InventoryMovementReportAPIView,
+)
 from .views import (
     InventoryDocumentApproveAPIView,
     InventoryDocumentCreateAPIView,
@@ -21,7 +26,10 @@ from .views import (
 )
 
 urlpatterns = [
+    path("import/", InventoryBulkImportAPIView.as_view(), name="inventory-bulk-import"),
     path("reports/", InventoryReportAPIView.as_view(), name="inventory-report"),
+    path("reports/batches/", InventoryBatchReportAPIView.as_view(), name="inventory-batch-report"),
+    path("reports/movements/", InventoryMovementReportAPIView.as_view(), name="inventory-movement-report"),
     path("summary/", InventorySummaryAPIView.as_view(), name="inventory-summary"),
     path("low-stock/", InventoryLowStockAPIView.as_view(), name="inventory-low-stock"),
     path("thresholds/", InventoryThresholdListAPIView.as_view(), name="inventory-threshold-list"),

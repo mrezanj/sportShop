@@ -1973,6 +1973,15 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
                         "First verification did not reach the gateway",
                     )
 
+                    cancel_client = APIClient()
+                    cancel_user = User.objects.get(pk=user.pk)
+                    cancel_client.force_authenticate(user=cancel_user)
+                    cancel_response = cancel_client.post(
+                        f"/api/orders/{order.order_number}/cancel/",
+                        {},
+                        format="json",
+                    )
+
                     second_future = executor.submit(send_verify_request)
                     second_response = second_future.result(timeout=10)
                 finally:
@@ -1982,6 +1991,7 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
 
         self.assertEqual(first_response.status_code, 200)
         self.assertEqual(second_response.status_code, 409)
+        self.assertEqual(cancel_response.status_code, 409)
         self.assertEqual(verify_call_count, [1])
 
         payment.refresh_from_db()

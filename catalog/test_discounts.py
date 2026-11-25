@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.contrib import admin
 from django.contrib.auth.models import Permission, User
 from django.test import TestCase
 from django.urls import reverse
@@ -8,6 +9,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
 
+from catalog.admin import DiscountCampaignAdmin, DiscountRedemptionAdmin
 from catalog.discounts import calculate_discounts, record_discount_redemptions
 from catalog.models import (
     Brand,
@@ -259,7 +261,7 @@ class DiscountCampaignManagementAPITests(APITestCase):
         )
         self.permission = Permission.objects.get(
             content_type__app_label="catalog",
-            codename="can_manage_product_prices",
+            codename="can_manage_discounts",
         )
         self.user.user_permissions.add(self.permission)
         self.client.force_authenticate(self.user)
@@ -306,10 +308,52 @@ class DiscountCampaignManagementAPITests(APITestCase):
         self.assertEqual(listing.status_code, 200)
         self.assertEqual(len(listing.data), 1)
 
-    def test_staff_without_price_permission_cannot_manage_campaigns(self):
+    def test_discount_permission_is_independent_from_price_permission(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.user.has_perm("catalog.can_manage_product_prices"))
+
+        self.user.user_permissions.clear()
+        self.user.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="catalog",
+                codename="can_manage_product_prices",
+            )
+        )
+        # Django caches permissions on each User instance. Re-fetch the user
+        # and re-authenticate so the request sees the changed permission set.
+        self.user = User.objects.get(pk=self.user.pk)
+        self.client.force_authenticate(self.user)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_staff_without_discount_or_price_permission_cannot_manage_campaigns(self):
         self.user.user_permissions.clear()
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
+
+    def test_discount_admins_require_discount_permission_not_price_permission(self):
+        from types import SimpleNamespace
+
+        campaign_admin = DiscountCampaignAdmin(DiscountCampaign, admin.site)
+        redemption_admin = DiscountRedemptionAdmin(DiscountRedemption, admin.site)
+        request = SimpleNamespace(user=self.user)
+
+        self.assertTrue(campaign_admin.has_module_permission(request))
+        self.assertTrue(redemption_admin.has_module_permission(request))
+
+        self.user.user_permissions.clear()
+        self.user.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="catalog",
+                codename="can_manage_product_prices",
+            )
+        )
+        # Use a fresh instance because ModelBackend caches permissions per user instance.
+        request.user = User.objects.get(pk=self.user.pk)
+
+        self.assertFalse(campaign_admin.has_module_permission(request))
+        self.assertFalse(redemption_admin.has_module_permission(request))
 
     def test_invalid_scope_target_is_rejected(self):
         data = self.payload()

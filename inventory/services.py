@@ -4,7 +4,7 @@ from django.db.models import F, Q, Sum
 from django.utils import timezone
 
 from catalog.models import ProductVariant
-from orders.models import StockReservation
+from orders.models import Order, StockReservation
 
 from .models import (
     InventoryBatch,
@@ -37,6 +37,122 @@ def get_batch_reserved_quantity(batch, now=None):
     return result["total"] or 0
 
 
+def get_variants_batch_inventory(variant_ids, today=None, now=None):
+    """
+    Return physical and effective reserved quantities per batch.
+
+    Explicit allocations stay attached to their batches. Active reservations
+    that have not yet been fully allocated are virtually protected in FEFO
+    order, matching allocate_stock_reservation and outbound document approval.
+    No allocation records are created or changed by this reporting helper.
+    """
+    today = today or timezone.localdate()
+    now = now or timezone.now()
+    variant_ids = list(dict.fromkeys(variant_ids))
+
+    if not variant_ids:
+        return {}
+
+    batches = list(
+        InventoryBatch.objects.filter(
+            variant_id__in=variant_ids,
+        )
+        .order_by(
+            "variant_id",
+            F("expiration_date").asc(nulls_last=True),
+            "id",
+        )
+        .values("id", "variant_id", "status", "expiration_date")
+    )
+    if not batches:
+        return {}
+
+    physical_by_batch = {
+        row["batch_id"]: row["total"] or 0
+        for row in InventoryMovement.objects.filter(
+            batch__variant_id__in=variant_ids,
+        )
+        .values("batch_id")
+        .annotate(total=Sum("quantity_delta"))
+    }
+
+    active_allocation_rows = ReservationAllocation.objects.filter(
+        batch__variant_id__in=variant_ids,
+        reservation__status="active",
+        reservation__expires_at__gt=now,
+        reservation__order__reservation_expires_at__gt=now,
+        reservation__order__status="pending",
+    ).values("batch_id", "reservation__variant_id").annotate(
+        total=Sum("quantity"),
+    )
+
+    reserved_by_batch = {}
+    allocated_by_variant = {}
+    for row in active_allocation_rows:
+        batch_id = row["batch_id"]
+        reservation_variant_id = row["reservation__variant_id"]
+        quantity = row["total"] or 0
+        reserved_by_batch[batch_id] = (
+            reserved_by_batch.get(batch_id, 0) + quantity
+        )
+        allocated_by_variant[reservation_variant_id] = (
+            allocated_by_variant.get(reservation_variant_id, 0) + quantity
+        )
+
+    reserved_by_variant = {
+        row["variant_id"]: row["total"] or 0
+        for row in StockReservation.objects.filter(
+            variant_id__in=variant_ids,
+            status="active",
+            expires_at__gt=now,
+            order__status="pending",
+            order__reservation_expires_at__gt=now,
+        )
+        .values("variant_id")
+        .annotate(total=Sum("quantity"))
+    }
+
+    unallocated_by_variant = {
+        variant_id: max(
+            reserved_by_variant.get(variant_id, 0)
+            - allocated_by_variant.get(variant_id, 0),
+            0,
+        )
+        for variant_id in variant_ids
+    }
+
+    result = {
+        batch["id"]: {
+            "physical": physical_by_batch.get(batch["id"], 0),
+            "reserved": reserved_by_batch.get(batch["id"], 0),
+        }
+        for batch in batches
+    }
+
+    for batch in batches:
+        if batch["status"] != "available" or (
+            batch["expiration_date"] is not None
+            and batch["expiration_date"] < today
+        ):
+            continue
+
+        variant_id = batch["variant_id"]
+        unallocated = unallocated_by_variant.get(variant_id, 0)
+        if not unallocated:
+            continue
+
+        batch_id = batch["id"]
+        physical = result[batch_id]["physical"]
+        explicitly_reserved = result[batch_id]["reserved"]
+        unreserved_physical = max(physical - explicitly_reserved, 0)
+        virtually_reserved = min(unreserved_physical, unallocated)
+
+        result[batch_id]["reserved"] += virtually_reserved
+        unallocated_by_variant[variant_id] -= virtually_reserved
+
+    return result
+
+
 def get_batch_available_quantity(batch, today=None, now=None):
     today = today or timezone.localdate()
     now = now or timezone.now()
@@ -47,10 +163,13 @@ def get_batch_available_quantity(batch, today=None, now=None):
     if batch.expiration_date and batch.expiration_date < today:
         return 0
 
-    physical = get_batch_physical_quantity(batch)
-    reserved = get_batch_reserved_quantity(batch, now=now)
+    quantities = get_variants_batch_inventory(
+        [batch.variant_id],
+        today=today,
+        now=now,
+    ).get(batch.id, {"physical": 0, "reserved": 0})
 
-    return max(physical - reserved, 0)
+    return max(quantities["physical"] - quantities["reserved"], 0)
 
 
 def get_variant_inventory(variant, today=None, now=None):
@@ -168,14 +287,26 @@ from orders.models import StockReservation
 def allocate_stock_reservation(reservation, now=None):
     now = now or timezone.now()
     today = timezone.localdate()
+
+    # Match payment and cancellation lock order: order, variant, reservation,
+    # then batches. Refresh every state-bearing row after acquiring its lock.
+    order = Order.objects.select_for_update().get(
+        pk=reservation.order_id,
+    )
     ProductVariant.objects.select_for_update().get(
         pk=reservation.variant_id,
     )
+    reservation = StockReservation.objects.select_for_update().get(
+        pk=reservation.pk,
+    )
+
     if (
-        reservation.status != "active"
+        reservation.order_id != order.pk
+        or reservation.status != "active"
         or reservation.expires_at <= now
-        or reservation.order.status != "pending"
-        or reservation.order.reservation_expires_at <= now
+        or order.status != "pending"
+        or order.reservation_expires_at is None
+        or order.reservation_expires_at <= now
     ):
         raise ValidationError(
             "Cannot allocate stock for an inactive or expired reservation."
