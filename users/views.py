@@ -15,6 +15,26 @@ from .serializers import (
 )
 
 
+BUSINESS_STAFF_GROUPS = (
+    "مدیرعامل",
+    "رئیس هیئت‌مدیره",
+    "مدیر داخلی",
+    "حسابدار",
+    "مشاور",
+)
+
+
+def _staff_flags(user):
+    is_staff = bool(user.is_staff)
+    is_employee = is_staff or user.groups.filter(
+        name__in=BUSINESS_STAFF_GROUPS
+    ).exists()
+    return {
+        "is_staff": is_staff,
+        "is_employee": is_employee,
+    }
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @throttle_classes([OTPRequestThrottle])
@@ -48,6 +68,7 @@ def verify_otp(request):
             "user": {
                 "id": user.id,
                 "mobile": profile.mobile if profile else None,
+                **_staff_flags(user),
             },
         }
     )
@@ -62,7 +83,7 @@ def me(request):
         {
             "id": user.id,
             "mobile": profile.mobile if profile else None,
-            "is_staff": user.is_staff,
+            **_staff_flags(user),
         }
     )
 
