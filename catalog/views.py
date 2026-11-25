@@ -314,3 +314,56 @@ class ProductViewSet(PriceManagementMixin, viewsets.ReadOnlyModelViewSet):
         context.update(build_product_inventory_context([product]))
         serializer = self.get_serializer(product, context=context)
         return Response(serializer.data)
+
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework import generics
+from .serializers import (
+    CatalogCategoryManagementSerializer,
+    CatalogBrandManagementSerializer,
+    CatalogProductManagementSerializer,
+)
+
+
+class CatalogManagementPermission(IsAdminUser):
+    def has_permission(self, request, view):
+        return bool(
+            super().has_permission(request, view)
+            and (request.user.is_superuser or request.user.has_perm("catalog.can_manage_catalog"))
+        )
+
+
+class CatalogCategoryManagementView(generics.ListCreateAPIView):
+    queryset = Category.objects.all().order_by("name")
+    serializer_class = CatalogCategoryManagementSerializer
+    permission_classes = [CatalogManagementPermission]
+
+
+class CatalogCategoryDetailManagementView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CatalogCategoryManagementSerializer
+    permission_classes = [CatalogManagementPermission]
+
+
+class CatalogBrandManagementView(generics.ListCreateAPIView):
+    queryset = Brand.objects.all().order_by("name")
+    serializer_class = CatalogBrandManagementSerializer
+    permission_classes = [CatalogManagementPermission]
+
+
+class CatalogBrandDetailManagementView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Brand.objects.all()
+    serializer_class = CatalogBrandManagementSerializer
+    permission_classes = [CatalogManagementPermission]
+
+
+class CatalogProductManagementView(generics.ListCreateAPIView):
+    queryset = Product.objects.all().select_related("brand", "category").order_by("-created_at")
+    serializer_class = CatalogProductManagementSerializer
+    permission_classes = [CatalogManagementPermission]
+
+
+class CatalogProductDetailManagementView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Product.objects.all().select_related("brand", "category")
+    serializer_class = CatalogProductManagementSerializer
+    permission_classes = [CatalogManagementPermission]
