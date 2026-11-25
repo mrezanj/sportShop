@@ -2516,6 +2516,11 @@ class PaymentAdminPermissionBoundaryTests(TestCase):
         )
         self.user.user_permissions.add(permission)
 
+        # Django caches permissions on the User instance after has_perm().
+        # Reload it so the newly granted permission is visible in this test.
+        self.user = User.objects.get(pk=self.user.pk)
+        request.user = self.user
+
         self.assertTrue(self.refund_admin.has_change_permission(request))
         self.assertFalse(self.refund_admin.has_add_permission(request))
         self.assertFalse(self.refund_admin.has_delete_permission(request))
