@@ -82,9 +82,8 @@ class InventoryDashboardAPITests(TestCase):
 
     def test_document_list_filter_and_search(self):
         self.client.force_authenticate(self.user)
-        response = self.client.get("/api/inventory/documents/?status=draft&search=DASH-DOC")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["count"], 0)
+        denied = self.client.get("/api/inventory/documents/?status=draft&search=DASH-DOC")
+        self.assertEqual(denied.status_code, 403)
 
         self.user.user_permissions.add(
             Permission.objects.get(codename="can_create_inventory_document")
@@ -130,15 +129,13 @@ class InventoryDashboardAPITests(TestCase):
     def test_report_only_user_cannot_view_draft_document_or_history(self):
         self.client.force_authenticate(self.user)
         listing = self.client.get("/api/inventory/documents/")
-        self.assertEqual(listing.status_code, 200)
-        self.assertEqual(listing.data["count"], 0)
-
         detail = self.client.get(f"/api/inventory/documents/{self.document.id}/")
         history = self.client.get(
             f"/api/inventory/documents/{self.document.id}/history/"
         )
-        self.assertEqual(detail.status_code, 404)
-        self.assertEqual(history.status_code, 404)
+        self.assertEqual(listing.status_code, 403)
+        self.assertEqual(detail.status_code, 403)
+        self.assertEqual(history.status_code, 403)
 
     def test_creator_can_view_only_own_documents(self):
         self.user.user_permissions.add(
