@@ -542,6 +542,8 @@ class CatalogVariantAndGalleryManagementAPITests(TestCase):
         self.assertEqual(images.status_code, 403)
 
     def test_variant_creation_requires_price_permission_and_records_initial_price(self):
+        from catalog.models import ProductVariantPriceHistory
+
         payload = {
             "flavor": "شکلات",
             "weight": "۱ کیلو",
