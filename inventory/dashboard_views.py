@@ -26,6 +26,7 @@ DOCUMENT_VIEW_PERMISSIONS = (
     "inventory.can_create_inventory_document",
     "inventory.can_review_inventory_document",
     "inventory.can_approve_inventory_document",
+    "inventory.can_view_inventory_reports",
 )
 
 INVENTORY_OVERVIEW_PERMISSIONS = DOCUMENT_VIEW_PERMISSIONS + (
@@ -57,6 +58,9 @@ def _visible_documents(user):
 
     if user.has_perm("inventory.can_review_inventory_document"):
         visibility |= Q(status="pending_review") | Q(reviewed_by=user) | Q(history__actor=user)
+
+    if user.has_perm("inventory.can_view_inventory_reports"):
+        visibility |= Q(status="approved")
 
     return qs.filter(visibility).distinct()
 
@@ -260,4 +264,5 @@ class InventorySummaryAPIView(APIView):
             "can_create_document": request.user.has_perm("inventory.can_create_inventory_document"),
             "can_review_document": request.user.has_perm("inventory.can_review_inventory_document"),
             "can_approve_document": request.user.has_perm("inventory.can_approve_inventory_document"),
+            "can_view_reports": request.user.has_perm("inventory.can_view_inventory_reports"),
         })
