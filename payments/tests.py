@@ -29,7 +29,7 @@ from orders.shipping_preview import ShippingPreviewSerializer
 from locations.testing import get_test_tehran_city
 from orders.services import cancel_locked_order
 from payments.gateways import get_gateway
-from payments.models import Payment, Refund, MockGatewayTransaction
+from payments.models import Payment, Refund, MockGatewayTransaction, Invoice
 from payments.admin import PaymentAdmin, RefundAdmin
 from payments.views import mock_payment_page
 from concurrent.futures import ThreadPoolExecutor
@@ -1624,6 +1624,51 @@ class PaymentFlowTests(TestCase):
 
         with self.assertRaises(Http404):
             mock_payment_page(request, payment_id=1)
+
+
+    def test_successful_payment_issues_one_immutable_customer_invoice(self):
+        order = self.create_order(quantity=2)
+        payment = self.start_payment(order)
+
+        mock_request = RequestFactory().post("/", {"status": "success"})
+        mock_response = mock_payment_page(mock_request, payment.id)
+        self.assertEqual(mock_response.status_code, 302)
+
+        response = self.verify(order, payment.authority)
+        self.assertEqual(response.status_code, 200)
+
+        invoice = Invoice.objects.get(order=order)
+        self.assertEqual(invoice.payment_id, payment.id)
+        self.assertEqual(invoice.snapshot["document_type"], "internal_sales_invoice")
+        self.assertFalse(invoice.snapshot["official_tax_invoice"])
+        self.assertEqual(invoice.snapshot["order_number"], order.order_number)
+        self.assertEqual(invoice.snapshot["items"][0]["sku"], self.variant.sku)
+        self.assertEqual(invoice.snapshot["items"][0]["quantity"], 2)
+        self.assertEqual(invoice.snapshot["totals"]["total_amount"], str(order.total_amount))
+
+        repeated = self.verify(order, payment.authority)
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(Invoice.objects.filter(order=order).count(), 1)
+
+    def test_invoice_endpoint_is_limited_to_order_owner(self):
+        order = self.create_order(quantity=1)
+        payment = self.start_payment(order)
+        mock_request = RequestFactory().post("/", {"status": "success"})
+        mock_response = mock_payment_page(mock_request, payment.id)
+        self.assertEqual(mock_response.status_code, 302)
+        self.assertEqual(self.verify(order, payment.authority).status_code, 200)
+
+        own_response = self.client.get(f"/api/payments/invoices/{order.order_number}/")
+        self.assertEqual(own_response.status_code, 200)
+        self.assertEqual(own_response.data["invoice_number"], Invoice.objects.get(order=order).invoice_number)
+
+        another_user = User.objects.create_user(
+            username="other-invoice-user",
+            password="test-password",
+        )
+        self.client.force_authenticate(user=another_user)
+        foreign_response = self.client.get(f"/api/payments/invoices/{order.order_number}/")
+        self.assertEqual(foreign_response.status_code, 404)
 
 
 @override_settings(DEBUG=True, ACTIVE_PAYMENT_GATEWAY="mock")
