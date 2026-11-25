@@ -9,6 +9,7 @@ from .dashboard_views import (
     InventoryThresholdDetailAPIView,
     InventoryThresholdListAPIView,
 )
+from .import_views import InventoryBulkImportAPIView
 from .views import (
     InventoryDocumentApproveAPIView,
     InventoryDocumentCreateAPIView,
@@ -21,6 +22,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("import/", InventoryBulkImportAPIView.as_view(), name="inventory-bulk-import"),
     path("reports/", InventoryReportAPIView.as_view(), name="inventory-report"),
     path("summary/", InventorySummaryAPIView.as_view(), name="inventory-summary"),
     path("low-stock/", InventoryLowStockAPIView.as_view(), name="inventory-low-stock"),
