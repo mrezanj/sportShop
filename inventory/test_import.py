@@ -186,8 +186,8 @@ class InventoryBulkImportAPITests(TestCase):
 
     def test_import_changes_stock_only_after_review_and_final_approval(self):
         response = self.post_import(
-            "sku,quantity,batch_number,expiration_date\\n"
-            "BULK-001,6,APPROVAL-BATCH,2032-01-01\\n",
+            "sku,quantity,batch_number,expiration_date\n"
+            "BULK-001,6,APPROVAL-BATCH,2032-01-01\n",
             document_number="BULK-DOC-APPROVAL",
         )
         self.assertEqual(response.status_code, 201)
