@@ -28,6 +28,10 @@ DOCUMENT_VIEW_PERMISSIONS = (
     "inventory.can_approve_inventory_document",
 )
 
+INVENTORY_OVERVIEW_PERMISSIONS = DOCUMENT_VIEW_PERMISSIONS + (
+    "inventory.can_view_inventory_reports",
+)
+
 
 def _require_any_permission(user, permissions):
     if not user.is_authenticated or not any(user.has_perm(p) for p in permissions):
@@ -181,7 +185,7 @@ class InventoryThresholdListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
+        _require_any_permission(request.user, INVENTORY_OVERVIEW_PERMISSIONS)
         variants = ProductVariant.objects.select_related(
             "product", "product__brand"
         ).order_by("sku")
@@ -219,7 +223,7 @@ class InventoryLowStockAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
+        _require_any_permission(request.user, INVENTORY_OVERVIEW_PERMISSIONS)
         variants = list(
             ProductVariant.objects.select_related(
                 "product", "product__brand"
@@ -236,7 +240,7 @@ class InventorySummaryAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
+        _require_any_permission(request.user, INVENTORY_OVERVIEW_PERMISSIONS)
         variants = list(
             ProductVariant.objects.select_related(
                 "product", "product__brand"
