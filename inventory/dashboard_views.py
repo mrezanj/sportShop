@@ -53,7 +53,7 @@ def _visible_documents(user):
         visibility |= Q(created_by=user)
 
     if user.has_perm("inventory.can_review_inventory_document"):
-        visibility |= Q(status="pending_review") | Q(reviewed_by=user)
+        visibility |= Q(status="pending_review") | Q(reviewed_by=user) | Q(history__actor=user)
 
     if user.has_perm("inventory.can_view_inventory_reports"):
         visibility |= Q(status="approved")
