@@ -755,7 +755,7 @@ class CatalogAdminPermissionBoundaryTests(TestCase):
             password="test-password",
             is_staff=True,
         )
-        self.variant_inline = ProductVariantInline(Product, admin.site)
+        self.variant_inline = ProductVariantInline(ProductVariant, admin.site)
         self.discount_admin = DiscountCampaignAdmin(DiscountCampaign, admin.site)
         self.redemption_admin = DiscountRedemptionAdmin(DiscountRedemption, admin.site)
 
