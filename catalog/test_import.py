@@ -123,6 +123,20 @@ class CatalogImportAPITests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("موجودی", str(response.data))
 
+
+    def test_import_rejects_more_than_5000_rows_during_file_read(self):
+        header = "product_slug,name_fa,brand_slug,category_slug,description,price,sku\\n"
+        row = "too-many,محصول,import-brand,import-category,توضیح,100000,TOO-MANY\\n"
+        response = self.client.post(
+            reverse("product-import-catalog"),
+            {"file": self.upload(header + row * 5001)},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("۵۰۰۰", str(response.data))
+        self.assertFalse(Product.objects.filter(slug="too-many").exists())
+
     def test_import_requires_price_management_permission(self):
         self.user.user_permissions.clear()
         response = self.client.post(
