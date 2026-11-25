@@ -66,7 +66,9 @@ class RefundAdmin(JalaliDateModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
-        return request.user.has_perm("payments.can_manage_refunds")
+        # Refund state transitions must go through the permission-checked API/service.
+        # Django Admin is intentionally read-only, even for refund operators.
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return False
