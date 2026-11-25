@@ -178,6 +178,15 @@ class InventoryDashboardAPITests(TestCase):
             codename="can_create_inventory_document"
         )
         self.user.user_permissions.add(creator_permission)
+        unrelated_creator = User.objects.create_user(
+            username="unsubmitted_draft_creator", password="test-pass"
+        )
+        unrelated_draft = InventoryDocument.objects.create(
+            document_number="DASH-UNSUBMITTED-001",
+            document_type="inbound",
+            created_by=unrelated_creator,
+            reason="Must remain outside review queue",
+        )
         from .document_services import submit_inventory_document
 
         submit_inventory_document(user=self.user, document_id=self.document.id)
@@ -189,6 +198,52 @@ class InventoryDashboardAPITests(TestCase):
         self.assertEqual(listing.data["results"][0]["id"], self.document.id)
         self.assertEqual(
             self.client.get(f"/api/inventory/documents/{self.document.id}/").status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get(f"/api/inventory/documents/{unrelated_draft.id}/").status_code,
+            404,
+        )
+
+    def test_report_only_user_can_view_approved_documents(self):
+        from .document_services import (
+            approve_inventory_document,
+            review_inventory_document,
+            submit_inventory_document,
+        )
+
+        self.user.user_permissions.add(
+            Permission.objects.get(codename="can_create_inventory_document")
+        )
+        accountant = User.objects.create_user(
+            username="approved_document_accountant", password="test-pass"
+        )
+        accountant.user_permissions.add(
+            Permission.objects.get(codename="can_review_inventory_document")
+        )
+        self.manager.user_permissions.add(
+            Permission.objects.get(codename="can_approve_inventory_document")
+        )
+
+        submit_inventory_document(user=self.user, document_id=self.document.id)
+        review_inventory_document(user=accountant, document_id=self.document.id)
+        approve_inventory_document(user=self.manager, document_id=self.document.id)
+
+        report_viewer = User.objects.create_user(
+            username="approved_document_reporter", password="test-pass"
+        )
+        report_viewer.user_permissions.add(
+            Permission.objects.get(codename="can_view_inventory_reports")
+        )
+        self.client.force_authenticate(report_viewer)
+        listing = self.client.get("/api/inventory/documents/")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.data["count"], 1)
+        self.assertEqual(listing.data["results"][0]["status"], "approved")
+        self.assertEqual(
+            self.client.get(
+                f"/api/inventory/documents/{self.document.id}/"
+            ).status_code,
             200,
         )
 
