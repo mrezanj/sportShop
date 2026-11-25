@@ -119,6 +119,15 @@ def _parse_json(value, expected_type, field_name, row_number, default):
     return parsed
 
 
+
+def _collect_rows(rows):
+    collected = []
+    for row in rows:
+        if len(collected) >= MAX_ROWS:
+            raise ValidationError({"file": "حداکثر ۵۰۰۰ ردیف مجاز است."})
+        collected.append(row)
+    return collected
+
 def _read_rows(upload):
     if not upload:
         raise ValidationError({"file": "فایل کاتالوگ را انتخاب کنید."})
@@ -139,10 +148,12 @@ def _read_rows(upload):
         if len(headers) != len(set(headers)):
             raise ValidationError({"file": "نام ستون تکراری است."})
         reader.fieldnames = headers
-        rows = [
-            (line_number, {key: value for key, value in row.items() if key is not None})
-            for line_number, row in enumerate(reader, start=2)
-        ]
+        rows = _collect_rows(
+            (
+                (line_number, {key: value for key, value in row.items() if key is not None})
+                for line_number, row in enumerate(reader, start=2)
+            )
+        )
     elif suffix == ".xlsx":
         workbook = None
         try:
@@ -155,14 +166,16 @@ def _read_rows(upload):
             headers = [str(value or "").strip().lower() for value in header_row]
             if len(headers) != len(set(headers)):
                 raise ValidationError({"file": "نام ستون تکراری است."})
-            rows = [
-                (line_number, {
-                    headers[index]: value
-                    for index, value in enumerate(values)
-                    if index < len(headers)
-                })
-                for line_number, values in enumerate(iterator, start=2)
-            ]
+            rows = _collect_rows(
+                (
+                    (line_number, {
+                        headers[index]: value
+                        for index, value in enumerate(values)
+                        if index < len(headers)
+                    })
+                    for line_number, values in enumerate(iterator, start=2)
+                )
+            )
         except ValidationError:
             raise
         except Exception as exc:
@@ -175,9 +188,6 @@ def _read_rows(upload):
 
     if not rows:
         raise ValidationError({"file": "فایل هیچ ردیف داده‌ای ندارد."})
-    if len(rows) > MAX_ROWS:
-        raise ValidationError({"file": "حداکثر ۵۰۰۰ ردیف مجاز است."})
-
     header_set = set(headers)
     missing = sorted(REQUIRED_COLUMNS - header_set)
     if missing:
