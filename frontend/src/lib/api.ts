@@ -956,6 +956,8 @@ export interface InventoryBatchReportRow {
   available: number;
   created_by_display: string | null;
   created_by_role: string | null;
+  document_created_by_display: string | null;
+  document_created_by_role: string | null;
   created_at: string;
 }
 
@@ -978,6 +980,8 @@ export interface InventoryMovementReportRow {
   unit_cost: string | null;
   created_by_display: string | null;
   created_by_role: string | null;
+  document_created_by_display: string | null;
+  document_created_by_role: string | null;
   created_at: string;
   notes: string;
 }
