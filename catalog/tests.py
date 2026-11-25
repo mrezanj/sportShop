@@ -391,3 +391,118 @@ class ProductConsumptionGoalFilterTests(ProductInventoryAPITests):
         response = self.client.get(reverse("product-list"), {"consumption_goal": " "})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["count"], 1)
+
+class CatalogManagementAPITests(TestCase):
+    def setUp(self):
+        from rest_framework.test import APIClient
+        self.client = APIClient()
+        self.staff = User.objects.create_user(
+            username="catalog_manager_test", password="password", is_staff=True
+        )
+        self.client.force_authenticate(self.staff)
+
+    def test_staff_without_catalog_permission_is_forbidden(self):
+        response = self.client.get("/api/management/categories/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_catalog_permission_allows_category_and_brand_creation(self):
+        from django.contrib.auth.models import Permission
+        permission = Permission.objects.get(codename="can_manage_catalog")
+        self.staff.user_permissions.add(permission)
+
+        category_response = self.client.post(
+            "/api/management/categories/",
+            {"name": "Manager Category", "slug": "manager-category", "parent": None, "is_active": True},
+            format="json",
+        )
+        self.assertEqual(category_response.status_code, 201)
+
+        brand_response = self.client.post(
+            "/api/management/brands/",
+            {"name": "Manager Brand", "slug": "manager-brand", "description": "", "is_active": True},
+            format="json",
+        )
+        self.assertEqual(brand_response.status_code, 201)
+
+    def test_catalog_permission_creates_product_without_stock_or_price_mutation(self):
+        from django.contrib.auth.models import Permission
+        permission = Permission.objects.get(codename="can_manage_catalog")
+        self.staff.user_permissions.add(permission)
+        brand = Brand.objects.create(name="Admin Brand", slug="admin-brand")
+        category = Category.objects.create(name="Admin Category", slug="admin-category")
+
+        response = self.client.post(
+            "/api/management/products/",
+            {
+                "name_fa": "محصول مدیریتی",
+                "name_en": "",
+                "slug": "managed-product",
+                "brand": brand.slug,
+                "category": category.slug,
+                "description": "توضیحات",
+                "ingredients": "",
+                "usage": "",
+                "warnings": "",
+                "contraindications": "",
+                "medical_advice": "",
+                "license_id": "",
+                "authenticity_code": "",
+                "license_details": "",
+                "consumption_goals": [],
+                "requires_cold_shipping": False,
+                "minimum_age": None,
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertFalse(ProductVariant.objects.filter(product__slug="managed-product").exists())
+
+    def test_category_cannot_be_moved_under_its_descendant(self):
+        from django.contrib.auth.models import Permission
+        permission = Permission.objects.get(codename="can_manage_catalog")
+        self.staff.user_permissions.add(permission)
+
+        parent = Category.objects.create(name="Parent", slug="cycle-parent")
+        child = Category.objects.create(
+            name="Child", slug="cycle-child", parent=parent
+        )
+
+        response = self.client.patch(
+            f"/api/management/categories/{parent.id}/",
+            {"parent": child.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        parent.refresh_from_db()
+        self.assertIsNone(parent.parent)
+
+    def test_category_cannot_be_its_own_parent(self):
+        from django.contrib.auth.models import Permission
+        permission = Permission.objects.get(codename="can_manage_catalog")
+        self.staff.user_permissions.add(permission)
+        category = Category.objects.create(name="Self", slug="self-parent")
+
+        response = self.client.patch(
+            f"/api/management/categories/{category.id}/",
+            {"parent": category.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        category.refresh_from_db()
+        self.assertIsNone(category.parent)
+
+    def test_category_and_brand_detail_endpoints_do_not_allow_delete(self):
+        from django.contrib.auth.models import Permission
+        permission = Permission.objects.get(codename="can_manage_catalog")
+        self.staff.user_permissions.add(permission)
+        category = Category.objects.create(name="Protected Category", slug="protected-category")
+        brand = Brand.objects.create(name="Protected Brand", slug="protected-brand")
+        category_response = self.client.delete(f"/api/management/categories/{category.id}/")
+        brand_response = self.client.delete(f"/api/management/brands/{brand.id}/")
+        self.assertEqual(category_response.status_code, 405)
+        self.assertEqual(brand_response.status_code, 405)
+        self.assertTrue(Category.objects.filter(pk=category.pk).exists())
+        self.assertTrue(Brand.objects.filter(pk=brand.pk).exists())

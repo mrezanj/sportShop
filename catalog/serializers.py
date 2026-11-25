@@ -149,3 +149,55 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+class CatalogCategoryManagementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ["id", "name", "slug", "parent", "is_active"]
+
+    def validate_parent(self, parent):
+        if parent is None:
+            return parent
+
+        # Walk upward from the proposed parent. The edited category must never
+        # appear in that chain, otherwise the update would create a cycle.
+        current = parent
+        visited = set()
+        while current is not None:
+            if self.instance and current.pk == self.instance.pk:
+                raise serializers.ValidationError(
+                    "یک دسته نمی‌تواند والد خودش یا یکی از زیرمجموعه‌های خودش باشد."
+                )
+            if current.pk in visited:
+                raise serializers.ValidationError(
+                    "زنجیره والدهای دسته‌بندی دارای چرخه است."
+                )
+            visited.add(current.pk)
+            current = current.parent
+        return parent
+
+
+class CatalogBrandManagementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Brand
+        fields = ["id", "name", "slug", "description", "is_active"]
+
+
+class CatalogProductManagementSerializer(serializers.ModelSerializer):
+    brand = serializers.SlugRelatedField(slug_field="slug", queryset=Brand.objects.all())
+    category = serializers.SlugRelatedField(slug_field="slug", queryset=Category.objects.all())
+
+    class Meta:
+        model = Product
+        fields = [
+            "id", "name_fa", "name_en", "slug", "brand", "category",
+            "description", "ingredients", "usage", "warnings",
+            "contraindications", "medical_advice", "license_id",
+            "authenticity_code", "license_details", "consumption_goals",
+            "requires_cold_shipping", "minimum_age", "is_active",
+        ]
+
+    def validate_consumption_goals(self, value):
+        if not isinstance(value, list) or any(not isinstance(x, str) or not x.strip() for x in value):
+            raise serializers.ValidationError("اهداف مصرف باید فهرست متن‌های غیرخالی باشد.")
+        return value

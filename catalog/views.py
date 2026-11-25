@@ -314,3 +314,59 @@ class ProductViewSet(PriceManagementMixin, viewsets.ReadOnlyModelViewSet):
         context.update(build_product_inventory_context([product]))
         serializer = self.get_serializer(product, context=context)
         return Response(serializer.data)
+
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework import generics
+from .serializers import (
+    CatalogCategoryManagementSerializer,
+    CatalogBrandManagementSerializer,
+    CatalogProductManagementSerializer,
+)
+
+
+class CatalogManagementPermission(IsAdminUser):
+    def has_permission(self, request, view):
+        return bool(
+            super().has_permission(request, view)
+            and (request.user.is_superuser or request.user.has_perm("catalog.can_manage_catalog"))
+        )
+
+
+class CatalogCategoryManagementView(generics.ListCreateAPIView):
+    pagination_class = None
+    queryset = Category.objects.all().order_by("name")
+    serializer_class = CatalogCategoryManagementSerializer
+    permission_classes = [CatalogManagementPermission]
+
+
+class CatalogCategoryDetailManagementView(generics.RetrieveUpdateAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CatalogCategoryManagementSerializer
+    permission_classes = [CatalogManagementPermission]
+
+
+class CatalogBrandManagementView(generics.ListCreateAPIView):
+    pagination_class = None
+    queryset = Brand.objects.all().order_by("name")
+    serializer_class = CatalogBrandManagementSerializer
+    permission_classes = [CatalogManagementPermission]
+
+
+class CatalogBrandDetailManagementView(generics.RetrieveUpdateAPIView):
+    queryset = Brand.objects.all()
+    serializer_class = CatalogBrandManagementSerializer
+    permission_classes = [CatalogManagementPermission]
+
+
+class CatalogProductManagementView(generics.ListCreateAPIView):
+    pagination_class = None
+    queryset = Product.objects.all().select_related("brand", "category").order_by("-created_at")
+    serializer_class = CatalogProductManagementSerializer
+    permission_classes = [CatalogManagementPermission]
+
+
+class CatalogProductDetailManagementView(generics.RetrieveUpdateAPIView):
+    queryset = Product.objects.all().select_related("brand", "category")
+    serializer_class = CatalogProductManagementSerializer
+    permission_classes = [CatalogManagementPermission]
