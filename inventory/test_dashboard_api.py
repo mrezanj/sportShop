@@ -89,6 +89,10 @@ class InventoryDashboardAPITests(TestCase):
         self.user.user_permissions.add(
             Permission.objects.get(codename="can_create_inventory_document")
         )
+        # Django caches permissions on the User instance after has_perm().
+        # Reload so the newly granted creator permission is reflected.
+        self.user = User.objects.get(pk=self.user.pk)
+        self.client.force_authenticate(self.user)
         response = self.client.get("/api/inventory/documents/?status=draft&search=DASH-DOC")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["count"], 1)
