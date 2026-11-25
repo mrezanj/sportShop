@@ -1,10 +1,13 @@
 from datetime import timedelta
+from types import SimpleNamespace
 from orders.models import Order, StockReservation
-from django.contrib.auth.models import User
+from django.contrib import admin
+from django.contrib.auth.models import User, Permission
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-from .models import Brand, Category, Product, ProductVariant
+from .models import Brand, Category, Product, ProductVariant, DiscountCampaign, DiscountRedemption
+from .admin import ProductVariantInline, DiscountCampaignAdmin, DiscountRedemptionAdmin
 from inventory.models import (
     InventoryBatch,
     InventoryDocument,
