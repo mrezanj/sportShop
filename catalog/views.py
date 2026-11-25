@@ -28,6 +28,7 @@ from .serializers import (
     ProductDetailSerializer,
 )
 from .services import build_product_inventory_context
+from .import_services import import_catalog_file
 
 
 def _price_permission(user):
@@ -110,6 +111,20 @@ def _apply_price_updates(rows, mode, user, note, change_type):
 
 
 class PriceManagementMixin:
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-catalog",
+        permission_classes=[IsAdminUser],
+    )
+    def import_catalog(self, request):
+        _price_permission(request.user)
+        result = import_catalog_file(
+            upload=request.FILES.get("file"),
+            user=request.user,
+        )
+        return Response(result)
+
     @action(
         detail=False,
         methods=["post"],
