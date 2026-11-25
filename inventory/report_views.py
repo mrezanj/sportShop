@@ -11,10 +11,7 @@ from rest_framework.views import APIView
 from .dashboard_serializers import _person_info
 from .dashboard_views import DOCUMENT_VIEW_PERMISSIONS, _require_any_permission
 from .models import InventoryBatch, InventoryDocument, InventoryMovement
-from .services import (
-    get_batch_physical_quantity,
-    get_batch_reserved_quantity,
-)
+from .services import get_variants_batch_inventory
 
 
 class InventoryReportPagination(PageNumberPagination):
@@ -69,11 +66,19 @@ class InventoryBatchReportAPIView(APIView):
         paginator = InventoryReportPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
         today = timezone.localdate()
+        batch_quantities = get_variants_batch_inventory(
+            {batch.variant_id for batch in page},
+            today=today,
+        )
         rows = []
 
         for batch in page:
-            physical = get_batch_physical_quantity(batch)
-            reserved = get_batch_reserved_quantity(batch)
+            quantities = batch_quantities.get(
+                batch.id,
+                {"physical": 0, "reserved": 0},
+            )
+            physical = quantities["physical"]
+            reserved = quantities["reserved"]
             available = (
                 max(physical - reserved, 0)
                 if batch.status == "available"
