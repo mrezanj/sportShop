@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
@@ -35,6 +35,18 @@ class InventoryBatchReportAPIView(APIView):
             "variant__product__brand",
             "created_by",
             "created_by__profile",
+        ).prefetch_related(
+            Prefetch(
+                "movements",
+                queryset=InventoryMovement.objects.filter(
+                    movement_type="inbound"
+                ).select_related(
+                    "document",
+                    "document__created_by",
+                    "document__created_by__profile",
+                ).order_by("created_at", "pk"),
+                to_attr="report_inbound_movements",
+            )
         ).order_by("variant__sku", "expiration_date", "pk")
 
         search = request.query_params.get("search", "").strip()
@@ -69,6 +81,17 @@ class InventoryBatchReportAPIView(APIView):
                 else 0
             )
             created_by_display, created_by_role = _person_info(batch.created_by)
+            source_document = next(
+                (
+                    movement.document
+                    for movement in batch.report_inbound_movements
+                    if movement.document.created_by_id
+                ),
+                None,
+            )
+            document_creator_display, document_creator_role = _person_info(
+                source_document.created_by if source_document else None
+            )
             rows.append({
                 "id": batch.id,
                 "variant_id": batch.variant_id,
@@ -87,6 +110,8 @@ class InventoryBatchReportAPIView(APIView):
                 "available": available,
                 "created_by_display": created_by_display,
                 "created_by_role": created_by_role,
+                "document_created_by_display": document_creator_display,
+                "document_created_by_role": document_creator_role,
                 "created_at": batch.created_at,
             })
 
@@ -106,6 +131,8 @@ class InventoryMovementReportAPIView(APIView):
             "batch__variant__product__brand",
             "document",
             "document_item",
+            "document__created_by",
+            "document__created_by__profile",
             "created_by",
             "created_by__profile",
         ).order_by("-created_at", "-pk")
@@ -178,6 +205,9 @@ class InventoryMovementReportAPIView(APIView):
             actor_display, actor_role = _person_info(movement.created_by)
             if movement.created_by_type == "system":
                 actor_display = "سیستم"
+            document_creator_display, document_creator_role = _person_info(
+                movement.document.created_by
+            )
             rows.append({
                 "id": movement.id,
                 "batch_id": movement.batch_id,
@@ -204,6 +234,8 @@ class InventoryMovementReportAPIView(APIView):
                 "unit_cost": movement.document_item.unit_cost,
                 "created_by_display": actor_display,
                 "created_by_role": actor_role,
+                "document_created_by_display": document_creator_display,
+                "document_created_by_role": document_creator_role,
                 "created_at": movement.created_at,
                 "notes": movement.notes,
             })
