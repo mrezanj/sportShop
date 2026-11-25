@@ -38,7 +38,7 @@ class Command(BaseCommand):
         executive_permissions = Permission.objects.filter(
             content_type__app_label__in=BUSINESS_APP_LABELS
         ).exclude(
-            content_type__model__in=("otpcode", "otpfailedattempt", "otprequestlimit")
+            content_type__model__in=("otpcode", "otpfailedattempt", "otprequestlimit", "profile")
         )
         for name in EXECUTIVE_GROUPS:
             groups[name].permissions.set(executive_permissions)
