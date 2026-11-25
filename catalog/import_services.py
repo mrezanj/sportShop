@@ -205,6 +205,7 @@ def import_catalog_file(upload, user):
     rows = _read_rows(upload)
     normalized_rows = []
     seen_skus = set()
+    seen_variant_identities = set()
 
     for row_number, raw in rows:
         row = {str(key).strip().lower(): value for key, value in raw.items()}
@@ -272,6 +273,25 @@ def import_catalog_file(upload, user):
             values["variant_fields"]["attributes"] = _parse_json(
                 row["attributes"], dict, "attributes", row_number, {}
             )
+        identity_fields = {
+            "flavor": "",
+            "weight": "",
+            "servings": None,
+            "size": "",
+            "color": "",
+            "attributes": {},
+        }
+        identity_fields.update(values["variant_fields"])
+        identity = ProductVariant(**identity_fields)
+        identity_key = (
+            values["product_slug"],
+            identity.build_variant_fingerprint(),
+        )
+        if identity_key in seen_variant_identities:
+            raise ValidationError({
+                "file": f"ترکیب ویژگی‌های تنوع در ردیف {row_number} تکراری است."
+            })
+        seen_variant_identities.add(identity_key)
         normalized_rows.append(values)
 
     created_products = set()
