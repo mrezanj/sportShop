@@ -7,8 +7,9 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from catalog.models import Brand, Category, Product, ProductVariant
-
+from orders.models import Order, StockReservation
 from .models import (
+    ReservationAllocation,
     InventoryBatch,
     InventoryDocument,
     InventoryDocumentItem,
@@ -107,6 +108,72 @@ class InventoryReportsAPITests(TestCase):
         self.assertEqual(row["document_created_by_display"], self.viewer.get_full_name() or self.viewer.username)
         self.assertEqual(row["document_created_by_role"], "مشاهده‌گر انبار")
         self.assertFalse(row["is_expired"])
+
+    def test_batch_report_distributes_unallocated_reservations_by_fefo(self):
+        second_batch = InventoryBatch.objects.create(
+            variant=self.batch.variant,
+            batch_number="REPORT-BATCH-002",
+            expiration_date=timezone.localdate() + timedelta(days=60),
+            created_by=self.viewer,
+        )
+        second_document = InventoryDocument.objects.create(
+            document_number="REPORT-DOC-002",
+            document_type="purchase",
+            created_by=self.viewer,
+        )
+        second_item = InventoryDocumentItem.objects.create(
+            document=second_document,
+            variant=self.batch.variant,
+            batch=second_batch,
+            quantity=5,
+            direction="inbound",
+        )
+        InventoryMovement.objects.create(
+            batch=second_batch,
+            document=second_document,
+            document_item=second_item,
+            movement_type="inbound",
+            quantity_delta=5,
+            created_by=self.viewer,
+        )
+        order = Order.objects.create(
+            user=self.viewer,
+            first_name="Report",
+            last_name="Reservation",
+            mobile="09120000000",
+            province="tehran",
+            city="Tehran",
+            address="Report test",
+            subtotal=1000,
+            vat_amount=0,
+            total_amount=1000,
+            status="pending",
+            reservation_expires_at=timezone.now() + timedelta(minutes=10),
+        )
+        reservation = StockReservation.objects.create(
+            order=order,
+            variant=self.batch.variant,
+            quantity=3,
+            expires_at=timezone.now() + timedelta(minutes=5),
+        )
+        ReservationAllocation.objects.create(
+            reservation=reservation,
+            batch=second_batch,
+            quantity=1,
+        )
+
+        self.client.force_authenticate(self.viewer)
+        response = self.client.get("/api/inventory/reports/batches/?page_size=100")
+
+        self.assertEqual(response.status_code, 200)
+        rows = {
+            row["batch_number"]: row
+            for row in response.data["results"]
+        }
+        self.assertEqual(rows["REPORT-BATCH-001"]["reserved"], 2)
+        self.assertEqual(rows["REPORT-BATCH-001"]["available"], 5)
+        self.assertEqual(rows["REPORT-BATCH-002"]["reserved"], 1)
+        self.assertEqual(rows["REPORT-BATCH-002"]["available"], 4)
 
     def test_batch_report_search_and_status_validation(self):
         self.client.force_authenticate(self.viewer)
