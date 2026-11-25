@@ -433,6 +433,48 @@ export async function fetchOrderDetail(
   return res.json();
 }
 
+export interface InvoiceRecord {
+  invoice_number: string;
+  issued_at: string;
+  snapshot: {
+    document_type: string;
+    official_tax_invoice: boolean;
+    notice: string;
+    currency: string;
+    order_number: string;
+    seller: Record<string, string>;
+    buyer: Record<string, string>;
+    items: {
+      order_item_id: number;
+      sku: string;
+      product_name: string;
+      brand_name: string;
+      variant_label: string;
+      quantity: number;
+      unit_price: string;
+      subtotal: string;
+      discount_amount: string;
+      final_subtotal: string;
+    }[];
+    totals: Record<string, string>;
+    tax: { rate: string; amount: string; description: string };
+    payment: { gateway: string; reference: string; paid_at: string | null; amount: string };
+  };
+}
+
+export async function fetchInvoice(
+  orderNumber: string,
+  token: string
+): Promise<InvoiceRecord> {
+  const res = await fetch(`${API_URL}/payments/invoices/${encodeURIComponent(orderNumber)}/`, {
+    headers: { Authorization: `Token ${token}` },
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || 'فاکتور برای این سفارش در دسترس نیست.');
+  return data as InvoiceRecord;
+}
+
 export interface ReturnRequestItemPayload {
   order_item_id: number;
   quantity: number;
