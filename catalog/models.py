@@ -127,6 +127,9 @@ class Product(models.Model):
         verbose_name = "محصول"
         verbose_name_plural = "محصولات"
         ordering = ["-created_at"]
+        permissions = [
+            ("can_manage_catalog", "Can manage catalog products, categories and brands"),
+        ]
 
     def clean(self):
         super().clean()
