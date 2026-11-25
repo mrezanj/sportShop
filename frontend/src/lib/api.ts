@@ -607,6 +607,12 @@ export interface InventoryDocumentRow {
   created_by_username: string | null;
   reviewed_by_username: string | null;
   approved_by_username: string | null;
+  created_by_display: string | null;
+  created_by_role: string | null;
+  reviewed_by_display: string | null;
+  reviewed_by_role: string | null;
+  approved_by_display: string | null;
+  approved_by_role: string | null;
   item_count: number;
   created_at: string;
   updated_at: string;
@@ -640,6 +646,8 @@ export interface InventoryDocumentLog {
   to_status: string;
   actor_type: string;
   actor_username: string | null;
+  actor_display: string | null;
+  actor_role: string | null;
   note: string;
   created_at: string;
 }
