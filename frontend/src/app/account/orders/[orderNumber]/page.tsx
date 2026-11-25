@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { createReturnRequest, fetchOrderDetail, fetchReturnRequests, type OrderDetail, type ReturnRequestRecord } from '@/lib/api';
+import { createReturnRequest, fetchInvoice, fetchOrderDetail, fetchReturnRequests, type OrderDetail, type ReturnRequestRecord } from '@/lib/api';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -38,6 +38,7 @@ function OrderDetailContent() {
   const { isAuthenticated, loading: authLoading, token } = useAuth();
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
+  const [invoiceAvailable, setInvoiceAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [returnReason, setReturnReason] = useState('');
@@ -58,6 +59,14 @@ function OrderDetailContent() {
     fetchOrderDetail(orderNumber, token)
       .then(async (result) => {
         setOrder(result);
+        if (['paid', 'processing', 'shipped', 'delivered', 'discrepancy'].includes(result.status)) {
+          try {
+            await fetchInvoice(result.order_number, token);
+            setInvoiceAvailable(true);
+          } catch {
+            // Older paid orders may predate invoice issuance.
+          }
+        }
         try {
           const requests = await fetchReturnRequests(token);
           setReturnRequest(requests.find((item) => item.order_id === result.id && ["requested", "approved", "received"].includes(item.status)) ?? null);
@@ -191,7 +200,7 @@ function OrderDetailContent() {
           </div>
         )}
 
-        {['paid', 'processing', 'shipped', 'delivered', 'discrepancy'].includes(order.status) && (
+        {invoiceAvailable && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4">
             <div>
               <p className="font-semibold text-gray-900">فاکتور فروش</p>
