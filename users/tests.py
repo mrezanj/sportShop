@@ -8,7 +8,7 @@ from django.test import (
     skipUnlessDBFeature,
 )
 from django.db import close_old_connections, connections
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from django.core.cache import cache
@@ -200,6 +200,10 @@ class OTPAPITests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["success"])
         self.assertTrue(response.data["token"])
+        self.assertIn("is_staff", response.data["user"])
+        self.assertIn("is_employee", response.data["user"])
+        self.assertFalse(response.data["user"]["is_staff"])
+        self.assertFalse(response.data["user"]["is_employee"])
         otp.refresh_from_db()
         self.assertTrue(otp.is_used)
         user = User.objects.get(username=self.mobile)
