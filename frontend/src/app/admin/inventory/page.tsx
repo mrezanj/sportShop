@@ -44,7 +44,7 @@ const number = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 const date = (value: string) => new Date(value).toLocaleString('fa-IR', {
   year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
 });
-const inputClass = 'w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-pink-500';
+const inputClass = 'w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:border-pink-600 focus:ring-2 focus:ring-pink-100';
 
 export default function InventoryDashboardPage() {
   const { token, user, loading: authLoading } = useAuth();
