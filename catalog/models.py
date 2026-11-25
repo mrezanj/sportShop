@@ -379,10 +379,19 @@ class ProductVariant(models.Model):
         self.variant_fingerprint = self.build_variant_fingerprint()
 
     def save(self, *args, **kwargs):
-        self.variant_fingerprint = self.build_variant_fingerprint()
         update_fields = kwargs.get("update_fields")
-        if update_fields is not None:
-            kwargs["update_fields"] = set(update_fields) | {"variant_fingerprint"}
+        identity_fields = {
+            "flavor",
+            "weight",
+            "servings",
+            "size",
+            "color",
+            "attributes",
+        }
+        if update_fields is None or identity_fields.intersection(update_fields):
+            self.variant_fingerprint = self.build_variant_fingerprint()
+            if update_fields is not None:
+                kwargs["update_fields"] = set(update_fields) | {"variant_fingerprint"}
 
         # Auto-generate SKU if empty or a temporary admin-form placeholder.
         if not self.sku or self.sku.startswith("__TMP__"):
