@@ -938,3 +938,89 @@ export function updateDiscountCampaign(
 export function deleteDiscountCampaign(token: string, id: number): Promise<void> {
   return discountApiRequest<void>(token, `discounts/${id}/`, 'DELETE');
 }
+
+
+export interface InventoryBatchReportRow {
+  id: number;
+  variant_id: number;
+  sku: string;
+  product_name: string;
+  brand_name: string;
+  batch_number: string;
+  expiration_date: string | null;
+  status: string;
+  status_display: string;
+  is_expired: boolean;
+  physical: number;
+  reserved: number;
+  available: number;
+  created_by_display: string | null;
+  created_by_role: string | null;
+  created_at: string;
+}
+
+export interface InventoryMovementReportRow {
+  id: number;
+  batch_id: number;
+  batch_number: string;
+  sku: string;
+  product_name: string;
+  movement_type: string;
+  movement_type_display: string;
+  quantity_delta: number;
+  document_id: number;
+  document_number: string;
+  document_type: string;
+  document_type_display: string;
+  document_status: string;
+  document_status_display: string;
+  document_item_id: number;
+  unit_cost: string | null;
+  created_by_display: string | null;
+  created_by_role: string | null;
+  created_at: string;
+  notes: string;
+}
+
+export function fetchInventoryBatchReport(
+  token: string,
+  params: { page?: number; page_size?: number; search?: string; status?: string } = {}
+) {
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', String(params.page));
+  if (params.page_size) query.set('page_size', String(params.page_size));
+  if (params.search) query.set('search', params.search);
+  if (params.status) query.set('status', params.status);
+  const suffix = query.size ? `?${query.toString()}` : '';
+  return inventoryRequest<PaginatedResponse<InventoryBatchReportRow>>(
+    `reports/batches/${suffix}`, token
+  );
+}
+
+export function fetchInventoryMovementReport(
+  token: string,
+  params: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    movement_type?: string;
+    batch_id?: number;
+    document_number?: string;
+    from_date?: string;
+    to_date?: string;
+  } = {}
+) {
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', String(params.page));
+  if (params.page_size) query.set('page_size', String(params.page_size));
+  if (params.search) query.set('search', params.search);
+  if (params.movement_type) query.set('movement_type', params.movement_type);
+  if (params.batch_id) query.set('batch_id', String(params.batch_id));
+  if (params.document_number) query.set('document_number', params.document_number);
+  if (params.from_date) query.set('from_date', params.from_date);
+  if (params.to_date) query.set('to_date', params.to_date);
+  const suffix = query.size ? `?${query.toString()}` : '';
+  return inventoryRequest<PaginatedResponse<InventoryMovementReportRow>>(
+    `reports/movements/${suffix}`, token
+  );
+}
