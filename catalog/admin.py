@@ -198,7 +198,7 @@ class DiscountCampaignAdmin(JalaliDateModelAdmin):
     def _allowed(self, request):
         return request.user.is_superuser or (
             request.user.is_staff
-            and request.user.has_perm("catalog.can_manage_product_prices")
+            and request.user.has_perm("catalog.can_manage_discounts")
         )
 
     def has_module_permission(self, request):
@@ -249,7 +249,7 @@ class DiscountRedemptionAdmin(admin.ModelAdmin):
     def has_module_permission(self, request):
         return request.user.is_superuser or (
             request.user.is_staff
-            and request.user.has_perm("catalog.can_manage_product_prices")
+            and request.user.has_perm("catalog.can_manage_discounts")
         )
 
     def has_view_permission(self, request, obj=None):
