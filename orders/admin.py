@@ -122,6 +122,12 @@ class OrderAdmin(JalaliDateModelAdmin):
         "mark_delivered",
     ]
 
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if not request.user.has_perm("orders.can_manage_order_shipping_cost"):
+            readonly.append("shipping_cost")
+        return readonly
+
     def has_manage_order_status_permission(self, request):
         return request.user.has_perm("orders.can_manage_order_status")
 
