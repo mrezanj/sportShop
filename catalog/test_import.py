@@ -156,6 +156,22 @@ class CatalogImportAPITests(TestCase):
         self.assertEqual(variants.count(), 3)
         self.assertEqual(set(variants.values_list("servings", flat=True)), {30, 60})
 
+    def test_import_rejects_duplicate_variant_identity_even_with_different_skus(self):
+        content = (
+            "product_slug,name_fa,brand_slug,category_slug,description,price,sku,flavor,servings\\n"
+            "duplicate-variant,محصول,import-brand,import-category,توضیح,100000,DUP-001,شکلات,30\\n"
+            "duplicate-variant,محصول,import-brand,import-category,توضیح,110000,DUP-002,شکلات,30\\n"
+        )
+        response = self.client.post(
+            reverse("product-import-catalog"),
+            {"file": self.upload(content)},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("تکراری", str(response.data))
+        self.assertFalse(Product.objects.filter(slug="duplicate-variant").exists())
+
     def test_import_requires_price_management_permission(self):
         self.user.user_permissions.clear()
         response = self.client.post(
