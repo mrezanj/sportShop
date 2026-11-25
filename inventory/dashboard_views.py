@@ -42,8 +42,8 @@ def _visible_documents(user):
 
     Managers have organization-wide audit visibility. Reviewers see the active
     review queue and documents on which they acted. Creators see their own
-    documents in every state. Report access alone does not expose operational
-    documents or their potentially sensitive cost and audit details.
+    documents in every state. Report-only users can inspect finalized approved
+    documents, but never drafts or documents awaiting workflow action.
     """
     qs = InventoryDocument.objects.all()
     if user.has_perm("inventory.can_approve_inventory_document"):
