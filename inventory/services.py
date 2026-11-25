@@ -4,7 +4,7 @@ from django.db.models import F, Q, Sum
 from django.utils import timezone
 
 from catalog.models import ProductVariant
-from orders.models import StockReservation
+from orders.models import Order, StockReservation
 
 from .models import (
     InventoryBatch,
@@ -287,14 +287,26 @@ from orders.models import StockReservation
 def allocate_stock_reservation(reservation, now=None):
     now = now or timezone.now()
     today = timezone.localdate()
+
+    # Match payment and cancellation lock order: order, variant, reservation,
+    # then batches. Refresh every state-bearing row after acquiring its lock.
+    order = Order.objects.select_for_update().get(
+        pk=reservation.order_id,
+    )
     ProductVariant.objects.select_for_update().get(
         pk=reservation.variant_id,
     )
+    reservation = StockReservation.objects.select_for_update().get(
+        pk=reservation.pk,
+    )
+
     if (
-        reservation.status != "active"
+        reservation.order_id != order.pk
+        or reservation.status != "active"
         or reservation.expires_at <= now
-        or reservation.order.status != "pending"
-        or reservation.order.reservation_expires_at <= now
+        or order.status != "pending"
+        or order.reservation_expires_at is None
+        or order.reservation_expires_at <= now
     ):
         raise ValidationError(
             "Cannot allocate stock for an inactive or expired reservation."
