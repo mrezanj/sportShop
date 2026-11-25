@@ -29,10 +29,38 @@ DOCUMENT_VIEW_PERMISSIONS = (
     "inventory.can_view_inventory_reports",
 )
 
+INVENTORY_OVERVIEW_PERMISSIONS = DOCUMENT_VIEW_PERMISSIONS
+
 
 def _require_any_permission(user, permissions):
     if not user.is_authenticated or not any(user.has_perm(p) for p in permissions):
         raise PermissionDenied("شما مجوز مشاهده اطلاعات انبار را ندارید.")
+
+
+def _visible_documents(user):
+    """Build document scope from explicit workflow capabilities.
+
+    Managers have organization-wide audit visibility. Reviewers see the active
+    review queue and documents on which they acted. Creators see their own
+    documents in every state. Report-only users can inspect finalized approved
+    documents, but never drafts or documents awaiting workflow action.
+    """
+    qs = InventoryDocument.objects.all()
+    if user.has_perm("inventory.can_approve_inventory_document"):
+        return qs
+
+    visibility = Q(pk__in=[])
+
+    if user.has_perm("inventory.can_create_inventory_document"):
+        visibility |= Q(created_by=user)
+
+    if user.has_perm("inventory.can_review_inventory_document"):
+        visibility |= Q(status="pending_review") | Q(reviewed_by=user) | Q(history__actor=user)
+
+    if user.has_perm("inventory.can_view_inventory_reports"):
+        visibility |= Q(status="approved")
+
+    return qs.filter(visibility).distinct()
 
 
 def _user_label(user):
@@ -94,7 +122,7 @@ class InventoryDocumentListAPIView(APIView):
 
     def get(self, request):
         _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
-        queryset = InventoryDocument.objects.select_related(
+        queryset = _visible_documents(request.user).select_related(
             "created_by", "reviewed_by", "approved_by", "source_order"
         ).annotate(item_count=Count("items")).order_by("-created_at", "-pk")
 
@@ -133,7 +161,7 @@ class InventoryDocumentDetailAPIView(APIView):
     def get(self, request, document_id):
         _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
         document = get_object_or_404(
-            InventoryDocument.objects.select_related(
+            _visible_documents(request.user).select_related(
                 "created_by", "reviewed_by", "approved_by", "source_order"
             ).prefetch_related(
                 "items__variant__product__brand", "items__batch"
@@ -148,9 +176,9 @@ class InventoryDocumentHistoryAPIView(APIView):
 
     def get(self, request, document_id):
         _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
-        get_object_or_404(InventoryDocument, pk=document_id)
+        document = get_object_or_404(_visible_documents(request.user), pk=document_id)
         logs = InventoryDocumentLog.objects.filter(
-            document_id=document_id
+            document=document
         ).select_related("actor").order_by("created_at", "pk")
         return Response(InventoryDocumentLogSerializer(logs, many=True).data)
 
@@ -159,7 +187,7 @@ class InventoryThresholdListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
+        _require_any_permission(request.user, INVENTORY_OVERVIEW_PERMISSIONS)
         variants = ProductVariant.objects.select_related(
             "product", "product__brand"
         ).order_by("sku")
@@ -197,7 +225,7 @@ class InventoryLowStockAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
+        _require_any_permission(request.user, INVENTORY_OVERVIEW_PERMISSIONS)
         variants = list(
             ProductVariant.objects.select_related(
                 "product", "product__brand"
@@ -214,23 +242,25 @@ class InventorySummaryAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _require_any_permission(request.user, DOCUMENT_VIEW_PERMISSIONS)
+        _require_any_permission(request.user, INVENTORY_OVERVIEW_PERMISSIONS)
         variants = list(
             ProductVariant.objects.select_related(
                 "product", "product__brand"
             ).filter(is_active=True)
         )
         rows = _inventory_snapshot(variants)
+        visible = _visible_documents(request.user)
         return Response({
             "sku_count": len(rows),
             "low_stock_count": sum(1 for row in rows if row["minimum_quantity"] > 0 and row["low_stock"]),
             "physical_quantity": sum(row["physical"] for row in rows),
             "reserved_quantity": sum(row["reserved"] for row in rows),
             "available_quantity": sum(row["available"] for row in rows),
-            "pending_review_count": InventoryDocument.objects.filter(status="pending_review").count(),
-            "pending_approval_count": InventoryDocument.objects.filter(status="pending_approval").count(),
+            "pending_review_count": visible.filter(status="pending_review").count(),
+            "pending_approval_count": visible.filter(status="pending_approval").count(),
             "can_manage_threshold": request.user.has_perm("inventory.can_approve_inventory_document"),
             "can_create_document": request.user.has_perm("inventory.can_create_inventory_document"),
             "can_review_document": request.user.has_perm("inventory.can_review_inventory_document"),
             "can_approve_document": request.user.has_perm("inventory.can_approve_inventory_document"),
+            "can_view_reports": request.user.has_perm("inventory.can_view_inventory_reports"),
         })

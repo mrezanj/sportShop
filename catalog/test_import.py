@@ -16,9 +16,14 @@ class CatalogImportAPITests(TestCase):
         )
         permission = Permission.objects.get(
             content_type__app_label="catalog",
-            codename="can_manage_product_prices",
+            codename="can_manage_catalog",
         )
         self.user.user_permissions.add(permission)
+        price_permission = Permission.objects.get(
+            content_type__app_label="catalog",
+            codename="can_manage_product_prices",
+        )
+        self.user.user_permissions.add(price_permission)
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         self.brand = Brand.objects.create(name="Import Brand", slug="import-brand")
@@ -32,6 +37,21 @@ class CatalogImportAPITests(TestCase):
             content.encode("utf-8"),
             content_type="text/csv",
         )
+
+
+    def test_catalog_manager_without_price_permission_cannot_import_catalog(self):
+        self.user.user_permissions.clear()
+        catalog_permission = Permission.objects.get(
+            content_type__app_label="catalog",
+            codename="can_manage_catalog",
+        )
+        self.user.user_permissions.add(catalog_permission)
+        response = self.client.post(
+            reverse("product-import-catalog"),
+            {"file": self.upload("product_slug,name_fa,brand_slug,category_slug,description,price\nx,x,x,x,x,1")},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 403)
 
     def test_import_creates_product_variant_and_price_history(self):
         content = (
@@ -172,7 +192,22 @@ class CatalogImportAPITests(TestCase):
         self.assertIn("تکراری", str(response.data))
         self.assertFalse(Product.objects.filter(slug="duplicate-variant").exists())
 
-    def test_import_requires_price_management_permission(self):
+
+    def test_price_manager_cannot_import_catalog_without_catalog_permission(self):
+        self.user.user_permissions.clear()
+        price_permission = Permission.objects.get(
+            content_type__app_label="catalog",
+            codename="can_manage_product_prices",
+        )
+        self.user.user_permissions.add(price_permission)
+        response = self.client.post(
+            reverse("product-import-catalog"),
+            {"file": self.upload("product_slug,name_fa,brand_slug,category_slug,description,price\nx,x,x,x,x,1")},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_import_requires_catalog_management_permission(self):
         self.user.user_permissions.clear()
         response = self.client.post(
             reverse("product-import-catalog"),

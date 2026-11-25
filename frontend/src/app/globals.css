@@ -29,6 +29,19 @@
     font-feature-settings: "ss01", "ss02";
   }
 
+  input::placeholder,
+  textarea::placeholder {
+    color: #6b7280;
+    opacity: 1;
+  }
+
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    color: #4b5563;
+    opacity: 1;
+  }
+
   h1,
   h2,
   h3,

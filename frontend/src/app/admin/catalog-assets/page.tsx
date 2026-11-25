@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '@/context/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
-const input = 'w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-pink-500';
+const input = 'w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:border-pink-600 focus:ring-2 focus:ring-pink-100';
 
 type Product = { id:number; name_fa:string; slug:string };
 type Variant = {

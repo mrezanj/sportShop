@@ -36,6 +36,11 @@ def _price_permission(user):
         raise PermissionDenied("شما مجوز مدیریت قیمت محصولات را ندارید.")
 
 
+def _catalog_permission(user):
+    if not user.is_superuser and not user.has_perm("catalog.can_manage_catalog"):
+        raise PermissionDenied("شما مجوز مدیریت کاتالوگ محصولات را ندارید.")
+
+
 def _apply_price_updates(rows, mode, user, note, change_type):
     if not isinstance(rows, list) or not rows:
         raise ValidationError({"items": "حداقل یک تغییر قیمت لازم است."})
@@ -118,6 +123,8 @@ class PriceManagementMixin:
         permission_classes=[IsAdminUser],
     )
     def import_catalog(self, request):
+        # Catalog import includes variant prices, so both domains are required.
+        _catalog_permission(request.user)
         _price_permission(request.user)
         result = import_catalog_file(
             upload=request.FILES.get("file"),

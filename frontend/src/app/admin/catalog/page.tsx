@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '@/context/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
-const cls = 'w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-pink-500 outline-none';
+const cls = 'w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:border-pink-600 focus:ring-2 focus:ring-pink-100 outline-none';
 
 type Category = {id:number;name:string;slug:string;parent:number|null;is_active:boolean};
 type Brand = {id:number;name:string;slug:string;description:string;is_active:boolean};
