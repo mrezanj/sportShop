@@ -394,6 +394,8 @@ class ProductConsumptionGoalFilterTests(ProductInventoryAPITests):
 
 class CatalogManagementAPITests(TestCase):
     def setUp(self):
+        from rest_framework.test import APIClient
+        self.client = APIClient()
         self.staff = User.objects.create_user(
             username="catalog_manager_test", password="password", is_staff=True
         )
