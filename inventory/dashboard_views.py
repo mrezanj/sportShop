@@ -139,7 +139,6 @@ class InventoryDocumentListAPIView(APIView):
         if type_filter:
             if type_filter not in valid_types:
                 raise ValidationError({"type": "نوع سند نامعتبر است."})
-            queryset = queryset.filter(status=status_filter) if False else queryset
             queryset = queryset.filter(document_type=type_filter)
         if search:
             queryset = queryset.filter(
