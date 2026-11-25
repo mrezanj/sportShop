@@ -8,9 +8,10 @@ const cls = 'w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:bo
 
 type Category = {id:number;name:string;slug:string;parent:number|null;is_active:boolean};
 type Brand = {id:number;name:string;slug:string;description:string;is_active:boolean};
-type Product = {id:number;name_fa:string;name_en:string;slug:string;brand:string;category:string;description:string;ingredients:string;usage:string;warnings:string;contraindications:string;medical_advice:string;license_id:string;authenticity_code:string;license_details:string;consumption_goals:string[];requires_cold_shipping:boolean;minimum_age:number|null;is_active:boolean};
+type ProductForm = {name_fa:string;name_en:string;slug:string;brand:string;category:string;description:string;ingredients:string;usage:string;warnings:string;contraindications:string;medical_advice:string;license_id:string;authenticity_code:string;license_details:string;consumption_goals:string[];requires_cold_shipping:boolean;minimum_age:number|null;is_active:boolean};
+type Product = ProductForm & {id:number;name_fa:string;name_en:string;slug:string;brand:string;category:string;description:string;ingredients:string;usage:string;warnings:string;contraindications:string;medical_advice:string;license_id:string;authenticity_code:string;license_details:string;consumption_goals:string[];requires_cold_shipping:boolean;minimum_age:number|null;is_active:boolean};
 
-const blankProduct = {name_fa:'',name_en:'',slug:'',brand:'',category:'',description:'',ingredients:'',usage:'',warnings:'',contraindications:'',medical_advice:'',license_id:'',authenticity_code:'',license_details:'',consumption_goals:[],requires_cold_shipping:false,minimum_age:null,is_active:true};
+const blankProduct:ProductForm = {name_fa:'',name_en:'',slug:'',brand:'',category:'',description:'',ingredients:'',usage:'',warnings:'',contraindications:'',medical_advice:'',license_id:'',authenticity_code:'',license_details:'',consumption_goals:[] as string[],requires_cold_shipping:false,minimum_age:null as number|null,is_active:true};
 const blankCategory = {name:'',slug:'',parent:null as number|null,is_active:true};
 const blankBrand = {name:'',slug:'',description:'',is_active:true};
 
