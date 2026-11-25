@@ -614,7 +614,7 @@ class CatalogVariantAndGalleryManagementAPITests(TestCase):
         from .models import ProductImage
 
         png = base64.b64decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p0sAAAAASUVORK5CYII="
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
         )
         first = self.client.post(
             f"/api/management/products/{self.product.id}/images/",
