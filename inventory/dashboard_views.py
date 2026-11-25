@@ -29,9 +29,7 @@ DOCUMENT_VIEW_PERMISSIONS = (
     "inventory.can_view_inventory_reports",
 )
 
-INVENTORY_OVERVIEW_PERMISSIONS = DOCUMENT_VIEW_PERMISSIONS + (
-    "inventory.can_view_inventory_reports",
-)
+INVENTORY_OVERVIEW_PERMISSIONS = DOCUMENT_VIEW_PERMISSIONS
 
 
 def _require_any_permission(user, permissions):
