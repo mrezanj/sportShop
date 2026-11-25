@@ -938,7 +938,7 @@ class StaffRoleSetupCommandTests(TestCase):
         self.assertFalse(ceo.permissions.filter(content_type__app_label="auth").exists())
         self.assertFalse(
             ceo.permissions.filter(
-                content_type__model__in=("otpcode", "otpfailedattempt", "otprequestlimit")
+                content_type__model__in=("otpcode", "otpfailedattempt", "otprequestlimit", "profile")
             ).exists()
         )
 
