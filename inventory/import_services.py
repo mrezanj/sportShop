@@ -44,8 +44,9 @@ def _read_rows(upload):
         headers = [_text(value).lower() for value in reader.fieldnames]
         if len(headers) != len(set(headers)):
             raise ValidationError({"file": "نام ستون تکراری است."})
+        reader.fieldnames = headers
         rows = [
-            (line, {headers[index]: value for index, value in enumerate(row) if index < len(headers)})
+            (line, {key: value for key, value in row.items() if key is not None})
             for line, row in enumerate(reader, start=2)
         ]
     elif suffix == ".xlsx":
