@@ -574,6 +574,9 @@ class DiscountCampaign(models.Model):
         verbose_name = "کمپین تخفیف"
         verbose_name_plural = "کمپین‌های تخفیف"
         ordering = ["-priority", "-created_at"]
+        permissions = [
+            ("can_manage_discounts", "Can manage discount campaigns and redemptions"),
+        ]
         indexes = [
             models.Index(fields=["is_active", "starts_at", "ends_at"], name="discount_active_window_idx"),
             models.Index(fields=["scope", "priority"], name="discount_scope_priority_idx"),
