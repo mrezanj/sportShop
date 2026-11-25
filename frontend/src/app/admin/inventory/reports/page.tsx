@@ -13,7 +13,38 @@ const number = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 const date = (value: string | null) => value
   ? new Date(value).toLocaleDateString('fa-IR')
   : '—';
-const dateTime = (value: string) => new Date(value).toLocaleString('fa-IR');
+const dateTimeParts = (value: string) => {
+  const parsed = new Date(value);
+  return {
+    date: parsed.toLocaleDateString('fa-IR'),
+    time: parsed.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+  };
+};
+
+const movementRowClass = (type: string, index: number) => {
+  const tones: Record<string, [string, string]> = {
+    inbound: ['bg-emerald-50', 'bg-emerald-100/70'],
+    outbound: ['bg-rose-50', 'bg-rose-100/70'],
+    return: ['bg-sky-50', 'bg-sky-100/70'],
+    waste: ['bg-amber-50', 'bg-amber-100/70'],
+    adjustment: ['bg-violet-50', 'bg-violet-100/70'],
+    reversal: ['bg-slate-100', 'bg-slate-200/80'],
+  };
+  const [base, alternate] = tones[type] ?? ['bg-slate-100', 'bg-slate-200/70'];
+  return `${index % 2 === 0 ? base : alternate} hover:brightness-[0.98] transition-colors [&>td]:border-b-2 [&>td]:border-white/90`;
+};
+
+const movementBadgeClass = (type: string) => {
+  const tones: Record<string, string> = {
+    inbound: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
+    outbound: 'bg-rose-100 text-rose-800 ring-rose-200',
+    return: 'bg-sky-100 text-sky-800 ring-sky-200',
+    waste: 'bg-amber-100 text-amber-800 ring-amber-200',
+    adjustment: 'bg-violet-100 text-violet-800 ring-violet-200',
+    reversal: 'bg-slate-200 text-slate-800 ring-slate-300',
+  };
+  return tones[type] ?? 'bg-slate-200 text-slate-700 ring-slate-300';
+};
 const inputClass = 'w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-pink-500';
 
 function PersonEntry({ label, name, role }: { label: string; name: string | null; role: string | null }) {
@@ -131,10 +162,10 @@ export default function InventoryReportsPage() {
                   <th className="border-b-2 border-slate-300 p-3 font-bold">SKU / کالا</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">شماره بچ</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">وضعیت</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">انقضا</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">فیزیکی</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">رزرو</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">قابل فروش</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">افراد مرتبط</th>
                 </tr></thead>
                 <tbody>
-                  {(batchData?.results ?? []).map((row: InventoryBatchReportRow) => <tr key={row.id} className="bg-white even:bg-slate-100 hover:bg-sky-50 transition-colors [&>td]:border-b-2 [&>td]:border-slate-200">
+                  {(batchData?.results ?? []).map((row: InventoryBatchReportRow) => <tr key={row.id} className="bg-slate-100 even:bg-sky-50/80 hover:bg-sky-100 transition-colors [&>td]:border-b-2 [&>td]:border-white">
                     <td className="border-b-2 border-slate-200 p-3 align-middle"><strong>{row.sku}</strong><span className="block text-xs text-gray-500">{row.product_name} · {row.brand_name}</span></td>
                     <td className="border-b-2 border-slate-200 p-3 align-middle font-mono text-slate-700">{row.batch_number}</td>
-                    <td className="border-b-2 border-slate-200 p-3 align-middle"><span className={row.is_expired ? 'text-red-700' : 'text-gray-700'}>{row.is_expired ? 'منقضی' : row.status_display}</span></td>
+                    <td className="border-b-2 border-slate-200 p-3 align-middle"><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${row.is_expired ? 'bg-rose-100 text-rose-800' : row.status === 'available' ? 'bg-emerald-100 text-emerald-800' : row.status === 'quarantined' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'}`}>{row.is_expired ? 'منقضی' : row.status_display}</span></td>
                     <td className="border-b-2 border-slate-200 p-3 align-middle">{date(row.expiration_date)}</td><td className="border-b-2 border-slate-200 p-3 align-middle tabular-nums">{number(row.physical)}</td><td className="border-b-2 border-slate-200 p-3 align-middle tabular-nums">{number(row.reserved)}</td><td className="border-b-2 border-slate-200 p-3 align-middle tabular-nums font-bold text-slate-900">{number(row.available)}</td>
                     <td className="border-b-2 border-slate-200 p-3 align-middle">
                       <div className="space-y-2">
@@ -155,8 +186,8 @@ export default function InventoryReportsPage() {
                   <th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">تاریخ</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">SKU</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">بچ</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">نوع گردش</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">تغییر تعداد</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">شماره سند</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">وضعیت سند</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">بهای واحد (تومان)</th><th className="border-b-2 border-slate-300 p-3 font-bold whitespace-nowrap">افراد مرتبط</th>
                 </tr></thead>
                 <tbody>
-                  {(movementData?.results ?? []).map((row: InventoryMovementReportRow) => <tr key={row.id} className="bg-white even:bg-slate-100 hover:bg-sky-50 transition-colors [&>td]:border-b-2 [&>td]:border-slate-200">
-                    <td className="border-b-2 border-slate-200 p-3 align-middle whitespace-nowrap">{dateTime(row.created_at)}</td><td className="border-b-2 border-slate-200 p-3 align-middle">{row.sku}<span className="block text-xs text-gray-500">{row.product_name}</span></td><td className="border-b-2 border-slate-200 p-3 align-middle font-mono">{row.batch_number}</td><td className="border-b-2 border-slate-200 p-3 align-middle">{row.movement_type_display}</td>
+                  {(movementData?.results ?? []).map((row: InventoryMovementReportRow, index: number) => <tr key={row.id} className={movementRowClass(row.movement_type, index)}>
+                    <td className="border-b-2 border-white/90 p-3 align-middle whitespace-nowrap"><div className="font-semibold text-slate-800">{dateTimeParts(row.created_at).date}</div><div className="mt-1 text-xs tabular-nums text-slate-500">{dateTimeParts(row.created_at).time}</div></td><td className="border-b-2 border-slate-200 p-3 align-middle">{row.sku}<span className="block text-xs text-gray-500">{row.product_name}</span></td><td className="border-b-2 border-slate-200 p-3 align-middle font-mono">{row.batch_number}</td><td className="border-b-2 border-white/90 p-3 align-middle"><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ring-1 ring-inset ${movementBadgeClass(row.movement_type)}`}>{row.movement_type_display}</span></td>
                     <td className={'border-b-2 border-slate-200 p-3 align-middle font-bold tabular-nums ' + (row.quantity_delta > 0 ? 'text-green-700' : 'text-red-700')}>{row.quantity_delta > 0 ? '+' : ''}{number(row.quantity_delta)}</td>
                     <td className="border-b-2 border-slate-200 p-3 align-middle">{row.document_number}<span className="block text-xs text-gray-500">{row.document_type_display}</span></td><td className="border-b-2 border-slate-200 p-3 align-middle">{row.document_status_display}</td><td className="border-b-2 border-slate-200 p-3 align-middle tabular-nums">{row.unit_cost === null ? '—' : number(Number(row.unit_cost))}</td>
                     <td className="border-b-2 border-slate-200 p-3 align-middle">
