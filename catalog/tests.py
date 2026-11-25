@@ -391,3 +391,67 @@ class ProductConsumptionGoalFilterTests(ProductInventoryAPITests):
         response = self.client.get(reverse("product-list"), {"consumption_goal": " "})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["count"], 1)
+
+class CatalogManagementAPITests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="catalog_manager_test", password="password", is_staff=True
+        )
+        self.client.force_authenticate(self.staff)
+
+    def test_staff_without_catalog_permission_is_forbidden(self):
+        response = self.client.get("/api/management/categories/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_catalog_permission_allows_category_and_brand_creation(self):
+        from django.contrib.auth.models import Permission
+        permission = Permission.objects.get(codename="can_manage_catalog")
+        self.staff.user_permissions.add(permission)
+
+        category_response = self.client.post(
+            "/api/management/categories/",
+            {"name": "Manager Category", "slug": "manager-category", "parent": None, "is_active": True},
+            format="json",
+        )
+        self.assertEqual(category_response.status_code, 201)
+
+        brand_response = self.client.post(
+            "/api/management/brands/",
+            {"name": "Manager Brand", "slug": "manager-brand", "description": "", "is_active": True},
+            format="json",
+        )
+        self.assertEqual(brand_response.status_code, 201)
+
+    def test_catalog_permission_creates_product_without_stock_or_price_mutation(self):
+        from django.contrib.auth.models import Permission
+        permission = Permission.objects.get(codename="can_manage_catalog")
+        self.staff.user_permissions.add(permission)
+        brand = Brand.objects.create(name="Admin Brand", slug="admin-brand")
+        category = Category.objects.create(name="Admin Category", slug="admin-category")
+
+        response = self.client.post(
+            "/api/management/products/",
+            {
+                "name_fa": "محصول مدیریتی",
+                "name_en": "",
+                "slug": "managed-product",
+                "brand": brand.slug,
+                "category": category.slug,
+                "description": "توضیحات",
+                "ingredients": "",
+                "usage": "",
+                "warnings": "",
+                "contraindications": "",
+                "medical_advice": "",
+                "license_id": "",
+                "authenticity_code": "",
+                "license_details": "",
+                "consumption_goals": [],
+                "requires_cold_shipping": False,
+                "minimum_age": None,
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertFalse(ProductVariant.objects.filter(product__slug="managed-product").exists())
