@@ -284,7 +284,7 @@ export default function InventoryDashboardPage() {
   if (!user || !token) {
     return <main className="container mx-auto px-4 py-16"><div className="max-w-xl mx-auto rounded-2xl border border-pink-100 bg-white p-8 text-center shadow-sm"><h1 className="text-2xl mb-3">ورود به پنل انبار</h1><p className="text-gray-600">برای مشاهده اطلاعات انبار ابتدا وارد حساب کاربری شوید.</p><a href="/login" className="inline-flex mt-5 rounded-xl bg-pink-800 px-6 py-3 font-bold text-white">ورود به حساب</a></div></main>;
   }
-  if (!user.is_staff) {
+  if (!user.is_employee) {
     return <main className="container mx-auto px-4 py-16"><div className="max-w-xl mx-auto rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center"><h1 className="text-2xl text-amber-900 mb-3">دسترسی محدود است</h1><p className="text-amber-800">این بخش فقط برای کاربران داخلی فروشگاه در دسترس است.</p></div></main>;
   }
 
