@@ -457,3 +457,16 @@ class CatalogManagementAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertFalse(ProductVariant.objects.filter(product__slug="managed-product").exists())
+
+    def test_category_and_brand_detail_endpoints_do_not_allow_delete(self):
+        from django.contrib.auth.models import Permission
+        permission = Permission.objects.get(codename="can_manage_catalog")
+        self.staff.user_permissions.add(permission)
+        category = Category.objects.create(name="Protected Category", slug="protected-category")
+        brand = Brand.objects.create(name="Protected Brand", slug="protected-brand")
+        category_response = self.client.delete(f"/api/management/categories/{category.id}/")
+        brand_response = self.client.delete(f"/api/management/brands/{brand.id}/")
+        self.assertEqual(category_response.status_code, 405)
+        self.assertEqual(brand_response.status_code, 405)
+        self.assertTrue(Category.objects.filter(pk=category.pk).exists())
+        self.assertTrue(Brand.objects.filter(pk=brand.pk).exists())
