@@ -569,6 +569,68 @@ class InventoryServiceTests(TestCase):
         self.assertEqual(inventory["reserved"], 5)
         self.assertEqual(inventory["available"], 15)
 
+    def test_batch_available_quantity_protects_unallocated_reservations_by_fefo(self):
+        self.create_movement(self.batch, 10)
+        second_batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="BATCH-UNALLOCATED-002",
+            expiration_date=self.today + timedelta(days=60),
+            created_by=self.user,
+        )
+        self.create_movement(second_batch, 10)
+        self.create_reservation(quantity=6)
+
+        self.assertEqual(
+            get_batch_available_quantity(
+                self.batch,
+                today=self.today,
+                now=self.now,
+            ),
+            4,
+        )
+        self.assertEqual(
+            get_batch_available_quantity(
+                second_batch,
+                today=self.today,
+                now=self.now,
+            ),
+            10,
+        )
+
+    def test_batch_inventory_combines_explicit_and_unallocated_reservations(self):
+        self.create_movement(self.batch, 10)
+        second_batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="BATCH-MIXED-002",
+            expiration_date=self.today + timedelta(days=60),
+            created_by=self.user,
+        )
+        self.create_movement(second_batch, 10)
+
+        reservation = self.create_reservation(quantity=5)
+        ReservationAllocation.objects.create(
+            reservation=reservation,
+            batch=second_batch,
+            quantity=2,
+        )
+
+        self.assertEqual(
+            get_batch_available_quantity(
+                self.batch,
+                today=self.today,
+                now=self.now,
+            ),
+            7,
+        )
+        self.assertEqual(
+            get_batch_available_quantity(
+                second_batch,
+                today=self.today,
+                now=self.now,
+            ),
+            8,
+        )
+
     def test_expired_reservation_is_not_counted(self):
         self.create_movement(self.batch, 20)
         self.create_reservation(
