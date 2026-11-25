@@ -12,7 +12,6 @@ from .dashboard_serializers import _person_info
 from .dashboard_views import DOCUMENT_VIEW_PERMISSIONS, _require_any_permission
 from .models import InventoryBatch, InventoryDocument, InventoryMovement
 from .services import (
-    get_batch_available_quantity,
     get_batch_physical_quantity,
     get_batch_reserved_quantity,
 )
@@ -63,7 +62,12 @@ class InventoryBatchReportAPIView(APIView):
         for batch in page:
             physical = get_batch_physical_quantity(batch)
             reserved = get_batch_reserved_quantity(batch)
-            available = get_batch_available_quantity(batch, today=today)
+            available = (
+                max(physical - reserved, 0)
+                if batch.status == "available"
+                and not (batch.expiration_date and batch.expiration_date < today)
+                else 0
+            )
             created_by_display, created_by_role = _person_info(batch.created_by)
             rows.append({
                 "id": batch.id,
