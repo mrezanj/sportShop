@@ -278,9 +278,11 @@ class InventoryDashboardAPITests(TestCase):
             response.data[0]["actor_display"],
             self.user.username,
         )
+        # This user has both report-view and document-creation permissions.
+        # The operational creator role takes precedence in the actor label.
         self.assertEqual(
             response.data[0]["actor_role"],
-            "مشاهده‌گر انبار",
+            "ثبت‌کننده",
         )
 
     def test_threshold_update_is_manager_only(self):
