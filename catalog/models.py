@@ -338,8 +338,14 @@ class ProductVariant(models.Model):
             parts.append(self.weight)
         if self.size:
             parts.append(self.size)
+        if self.servings is not None:
+            parts.append(f"{self.servings} سروینگ")
         if self.color:
             parts.append(self.color)
+        parts.extend(
+            f"{key}: {value}"
+            for key, value in sorted((self.attributes or {}).items())
+        )
         return " - ".join(parts)
 
     def build_variant_fingerprint(self):
