@@ -7,7 +7,8 @@ from django.db import connection, close_old_connections
 from django.db.models import Sum
 from django.test import TransactionTestCase
 from payments.gateways.base import PaymentResult
-from django.contrib.auth.models import User
+from django.contrib import admin
+from django.contrib.auth.models import User, Permission
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.http import Http404
@@ -28,7 +29,8 @@ from orders.shipping_preview import ShippingPreviewSerializer
 from locations.testing import get_test_tehran_city
 from orders.services import cancel_locked_order
 from payments.gateways import get_gateway
-from payments.models import Payment, MockGatewayTransaction
+from payments.models import Payment, Refund, MockGatewayTransaction
+from payments.admin import PaymentAdmin, RefundAdmin
 from payments.views import mock_payment_page
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
@@ -2485,3 +2487,35 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             Payment.objects.filter(order=order).count(),
             1,
         )
+
+
+class PaymentAdminPermissionBoundaryTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="payment-admin-auditor",
+            password="test-password",
+            is_staff=True,
+        )
+        self.payment_admin = PaymentAdmin(Payment, admin.site)
+        self.refund_admin = RefundAdmin(Refund, admin.site)
+
+    def test_payment_records_are_never_editable_in_admin(self):
+        request = SimpleNamespace(user=self.user)
+
+        self.assertFalse(self.payment_admin.has_add_permission(request))
+        self.assertFalse(self.payment_admin.has_change_permission(request))
+        self.assertFalse(self.payment_admin.has_delete_permission(request))
+
+    def test_refund_changes_require_dedicated_permission(self):
+        request = SimpleNamespace(user=self.user)
+        self.assertFalse(self.refund_admin.has_change_permission(request))
+
+        permission = Permission.objects.get(
+            content_type__app_label="payments",
+            codename="can_manage_refunds",
+        )
+        self.user.user_permissions.add(permission)
+
+        self.assertTrue(self.refund_admin.has_change_permission(request))
+        self.assertFalse(self.refund_admin.has_add_permission(request))
+        self.assertFalse(self.refund_admin.has_delete_permission(request))
