@@ -533,6 +533,10 @@ class CatalogVariantAndGalleryManagementAPITests(TestCase):
 
     def grant_price_permission(self):
         self.staff.user_permissions.add(self.price_permission)
+        # Django caches permissions on the user instance after the first has_perm() call.
+        # Reload it so the newly granted permission is visible to the next API request.
+        self.staff = User.objects.get(pk=self.staff.pk)
+        self.client.force_authenticate(self.staff)
 
     def test_staff_without_catalog_permission_cannot_access_variants_or_images(self):
         self.staff.user_permissions.remove(self.catalog_permission)
