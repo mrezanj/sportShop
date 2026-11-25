@@ -131,7 +131,8 @@ export default function PricingAdminPage() {
             <p className="mt-2 text-sm text-gray-600">تغییر قیمت SKU، ورود گروهی و مشاهده سابقه تغییرات</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <a href="/admin/catalog-import" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900">ورود گروهی کاتالوگ</a>
+            <a href="/admin/catalog" className="rounded-xl border border-pink-200 bg-white px-4 py-2 text-sm font-bold text-pink-900">مدیریت کاتالوگ</a>
+<a href="/admin/catalog-import" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900">ورود گروهی کاتالوگ</a>
             <a href="/admin/discounts" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900">مدیریت تخفیف‌ها</a>
             <a href="/admin/inventory" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900">داشبورد انبار</a>
             <a href="/admin/returns-refunds" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900">مرجوعی و بازپرداخت</a>
