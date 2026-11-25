@@ -144,6 +144,7 @@ export interface AuthUser {
   id: number;
   mobile: string | null;
   is_staff: boolean;
+  is_employee: boolean;
 }
 
 export async function requestOTP(
