@@ -320,7 +320,10 @@ class DiscountCampaignManagementAPITests(APITestCase):
                 codename="can_manage_product_prices",
             )
         )
-        self.user.refresh_from_db()
+        # Django caches permissions on each User instance. Re-fetch the user
+        # and re-authenticate so the request sees the changed permission set.
+        self.user = User.objects.get(pk=self.user.pk)
+        self.client.force_authenticate(self.user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
 
@@ -346,8 +349,8 @@ class DiscountCampaignManagementAPITests(APITestCase):
                 codename="can_manage_product_prices",
             )
         )
-        self.user.refresh_from_db()
-        request.user = self.user
+        # Use a fresh instance because ModelBackend caches permissions per user instance.
+        request.user = User.objects.get(pk=self.user.pk)
 
         self.assertFalse(campaign_admin.has_module_permission(request))
         self.assertFalse(redemption_admin.has_module_permission(request))
