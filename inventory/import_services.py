@@ -1,4 +1,5 @@
 import csv
+import zipfile
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from io import BytesIO, StringIO
@@ -19,11 +20,50 @@ from .models import InventoryBatch
 
 MAX_FILE_SIZE = 2 * 1024 * 1024
 MAX_ROWS = 5000
+MAX_XLSX_UNCOMPRESSED_SIZE = 20 * 1024 * 1024
+MAX_XLSX_ENTRIES = 1000
 REQUIRED_COLUMNS = {"sku", "quantity", "batch_number"}
 
 
 def _text(value):
     return "" if value is None else str(value).strip()
+
+
+def _normalize_headers(values):
+    headers = [_text(value).lower() for value in values]
+    if not headers or any(not header for header in headers):
+        raise ValidationError({"file": "همه ستون‌ها باید نام داشته باشند."})
+    if len(headers) != len(set(headers)):
+        raise ValidationError({"file": "نام ستون تکراری است."})
+    missing = sorted(REQUIRED_COLUMNS - set(headers))
+    if missing:
+        raise ValidationError({"file": "ستون‌های الزامی وجود ندارند: " + ", ".join(missing)})
+    return headers
+
+
+def _append_row(rows, line, values, headers):
+    values = list(values)
+    if len(values) > len(headers) and any(_text(value) for value in values[len(headers):]):
+        raise ValidationError({"file": f"تعداد سلول‌های ردیف {line} از تعداد ستون‌های سربرگ بیشتر است."})
+    values = values[:len(headers)]
+    values.extend([None] * (len(headers) - len(values)))
+    if not any(_text(value) for value in values):
+        return
+    if len(rows) >= MAX_ROWS:
+        raise ValidationError({"file": f"حداکثر {MAX_ROWS} ردیف داده مجاز است."})
+    rows.append((line, dict(zip(headers, values))))
+
+
+def _validate_xlsx_archive(raw):
+    try:
+        with zipfile.ZipFile(BytesIO(raw)) as archive:
+            entries = archive.infolist()
+            if len(entries) > MAX_XLSX_ENTRIES:
+                raise ValidationError({"file": "ساختار فایل Excel بیش از حد پیچیده است."})
+            if sum(entry.file_size for entry in entries) > MAX_XLSX_UNCOMPRESSED_SIZE:
+                raise ValidationError({"file": "حجم بازشده فایل Excel بیش از حد مجاز است."})
+    except zipfile.BadZipFile as exc:
+        raise ValidationError({"file": "فایل Excel معتبر نیست."}) from exc
 
 
 def _read_rows(upload):
@@ -34,37 +74,44 @@ def _read_rows(upload):
 
     suffix = Path(upload.name).suffix.lower()
     raw = upload.read()
+    rows = []
+
     if suffix == ".csv":
         try:
             decoded = raw.decode("utf-8-sig")
+            reader = csv.reader(StringIO(decoded))
+            header = next(reader, None)
+            if not header:
+                raise ValidationError({"file": "فایل CSV سربرگ ندارد."})
+            headers = _normalize_headers(header)
+            for line, values in enumerate(reader, start=2):
+                if line > MAX_ROWS + 1:
+                    raise ValidationError({"file": f"حداکثر {MAX_ROWS} ردیف داده مجاز است."})
+                _append_row(rows, line, values, headers)
         except UnicodeDecodeError as exc:
             raise ValidationError({"file": "فایل CSV باید با کدگذاری UTF-8 باشد."}) from exc
-        reader = csv.DictReader(StringIO(decoded))
-        if not reader.fieldnames:
-            raise ValidationError({"file": "فایل CSV سربرگ ندارد."})
-        headers = [_text(value).lower() for value in reader.fieldnames]
-        if len(headers) != len(set(headers)):
-            raise ValidationError({"file": "نام ستون تکراری است."})
-        reader.fieldnames = headers
-        rows = [
-            (line, {key: value for key, value in row.items() if key is not None})
-            for line, row in enumerate(reader, start=2)
-        ]
+        except csv.Error as exc:
+            raise ValidationError({"file": "ساختار فایل CSV معتبر نیست."}) from exc
+
     elif suffix == ".xlsx":
+        _validate_xlsx_archive(raw)
         workbook = None
         try:
-            workbook = load_workbook(BytesIO(raw), read_only=True, data_only=True)
+            workbook = load_workbook(
+                BytesIO(raw),
+                read_only=True,
+                data_only=True,
+                keep_links=False,
+            )
             iterator = workbook.active.iter_rows(values_only=True)
             header = next(iterator, None)
             if not header:
                 raise ValidationError({"file": "فایل Excel خالی است."})
-            headers = [_text(value).lower() for value in header]
-            if len(headers) != len(set(headers)):
-                raise ValidationError({"file": "نام ستون تکراری است."})
-            rows = [
-                (line, {headers[index]: value for index, value in enumerate(values) if index < len(headers)})
-                for line, values in enumerate(iterator, start=2)
-            ]
+            headers = _normalize_headers(header)
+            for line, values in enumerate(iterator, start=2):
+                if line > MAX_ROWS + 1:
+                    raise ValidationError({"file": f"حداکثر {MAX_ROWS} ردیف داده مجاز است."})
+                _append_row(rows, line, values, headers)
         except ValidationError:
             raise
         except Exception as exc:
@@ -75,14 +122,8 @@ def _read_rows(upload):
     else:
         raise ValidationError({"file": "فقط فایل‌های CSV و XLSX پشتیبانی می‌شوند."})
 
-    rows = [(line, row) for line, row in rows if any(_text(value) for value in row.values())]
     if not rows:
         raise ValidationError({"file": "فایل هیچ ردیف داده‌ای ندارد."})
-    if len(rows) > MAX_ROWS:
-        raise ValidationError({"file": f"حداکثر {MAX_ROWS} ردیف داده مجاز است."})
-    missing = sorted(REQUIRED_COLUMNS - set(headers))
-    if missing:
-        raise ValidationError({"file": "ستون‌های الزامی وجود ندارند: " + ", ".join(missing)})
     return rows
 
 
@@ -101,14 +142,13 @@ def _parse_date(value, line):
 
 
 def _parse_quantity(value, line):
-    raw = _text(value)
     try:
-        parsed = int(raw)
-    except (TypeError, ValueError) as exc:
+        parsed = Decimal(_text(value))
+    except (InvalidOperation, TypeError, ValueError) as exc:
         raise ValidationError({"file": f"تعداد ردیف {line} باید عدد صحیح باشد."}) from exc
-    if parsed <= 0:
-        raise ValidationError({"file": f"تعداد ردیف {line} باید بزرگ‌تر از صفر باشد."})
-    return parsed
+    if not parsed.is_finite() or parsed <= 0 or parsed != parsed.to_integral_value():
+        raise ValidationError({"file": f"تعداد ردیف {line} باید عدد صحیح بزرگ‌تر از صفر باشد."})
+    return int(parsed)
 
 
 def _parse_unit_cost(value, line):
