@@ -26,7 +26,7 @@ export default function RootLayout({
               <SiteChrome />
             </Suspense>
 
-            <main className="min-h-[60vh] flex-1">{children}</main>
+            <div className="min-h-[60vh] flex-1">{children}</div>
 
             <Suspense fallback={null}>
               <SiteFooter />
