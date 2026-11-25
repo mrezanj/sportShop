@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -20,7 +20,7 @@ function detail(label: string, value?: string) {
   );
 }
 
-export default function InvoicePage() {
+function InvoicePageContent() {
   const params = useParams();
   const router = useRouter();
   const orderNumber = params.orderNumber as string;
@@ -173,5 +173,20 @@ export default function InvoicePage() {
         }
       `}</style>
     </main>
+  );
+}
+
+
+export default function InvoicePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-gray-500">
+          در حال بارگذاری فاکتور...
+        </div>
+      }
+    >
+      <InvoicePageContent />
+    </Suspense>
   );
 }
