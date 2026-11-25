@@ -936,6 +936,11 @@ class StaffRoleSetupCommandTests(TestCase):
         self.assertEqual(set(ceo.permissions.values_list("id", flat=True)), set(chair.permissions.values_list("id", flat=True)))
         self.assertTrue(ceo.permissions.filter(content_type__app_label="catalog").exists())
         self.assertFalse(ceo.permissions.filter(content_type__app_label="auth").exists())
+        self.assertFalse(
+            ceo.permissions.filter(
+                content_type__model__in=("otpcode", "otpfailattempt", "otprequestlimit")
+            ).exists()
+        )
 
     def test_accountant_and_internal_manager_permissions_are_separated(self):
         call_command("setup_staff_roles")
