@@ -33,8 +33,8 @@ class Command(BaseCommand):
         for name in (*EXECUTIVE_GROUPS, *ROLE_PERMISSIONS.keys()):
             groups[name], _ = Group.objects.get_or_create(name=name)
 
-        # Executive groups receive permissions from business modules only. Django's
-        # auth/user/group administration permissions are deliberately excluded.
+        # Executive groups receive business permissions without destructive delete
+        # access, customer profile access, OTP security records, or Django auth admin.
         executive_permissions = Permission.objects.filter(
             content_type__app_label__in=BUSINESS_APP_LABELS
         ).exclude(
