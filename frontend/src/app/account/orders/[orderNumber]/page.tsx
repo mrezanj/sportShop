@@ -191,6 +191,21 @@ function OrderDetailContent() {
           </div>
         )}
 
+        {['paid', 'processing', 'shipped', 'delivered', 'discrepancy'].includes(order.status) && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4">
+            <div>
+              <p className="font-semibold text-gray-900">فاکتور فروش</p>
+              <p className="mt-1 text-sm text-gray-600">فاکتور داخلی سفارش را مشاهده یا چاپ کنید.</p>
+            </div>
+            <Link
+              href={`/account/orders/${order.order_number}/invoice`}
+              className="rounded-lg bg-pink-800 px-5 py-2 text-sm font-semibold text-white hover:bg-pink-900"
+            >
+              مشاهده و چاپ فاکتور
+            </Link>
+          </div>
+        )}
+
         {/* Items */}
         <div className="border border-gray-200 rounded-xl overflow-hidden mb-6">
           <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
