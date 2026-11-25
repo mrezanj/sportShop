@@ -49,7 +49,8 @@ export default function CatalogManagementPage(){
  const editCategory=(row:Category)=>{setEditing(row.id);setCategoryForm({name:row.name,slug:row.slug,parent:row.parent,is_active:row.is_active});};
  const editBrand=(row:Brand)=>{setEditing(row.id);setBrandForm({name:row.name,slug:row.slug,description:row.description,is_active:row.is_active});};
  const editProduct=(row:Product)=>{setEditing(row.id);setProductForm({...row});};
- const remove=async(kind:string,id:number)=>{if(!window.confirm('از حذف این مورد مطمئن هستید؟'))return;try{await api(`management/${kind}/${id}/`,'DELETE');setNotice('حذف انجام شد');await load();}catch(e){setError(e instanceof Error?e.message:'حذف ناموفق');}};\n const deactivateProduct=async(row:Product)=>{if(!window.confirm('محصول غیرفعال شود؟ اطلاعات تاریخی حفظ می‌شود.'))return;try{await api(`management/products/${row.id}/`,'PATCH',{...row,is_active:false});setNotice('محصول غیرفعال شد');await load();}catch(e){setError(e instanceof Error?e.message:'عملیات ناموفق');}};
+ const remove=async(kind:string,id:number)=>{if(!window.confirm('از حذف این مورد مطمئن هستید؟'))return;try{await api(`management/${kind}/${id}/`,'DELETE');setNotice('حذف انجام شد');await load();}catch(e){setError(e instanceof Error?e.message:'حذف ناموفق');}};
+ const deactivateProduct=async(row:Product)=>{if(!window.confirm('محصول غیرفعال شود؟ اطلاعات تاریخی حفظ می‌شود.'))return;try{await api(`management/products/${row.id}/`,'PATCH',{...row,is_active:false});setNotice('محصول غیرفعال شد');await load();}catch(e){setError(e instanceof Error?e.message:'عملیات ناموفق');}};
  if(loading)return <main className="p-12 text-center">در حال بررسی دسترسی...</main>;
  if(!user||!token)return <main className="p-12 text-center">برای دسترسی وارد حساب شوید.</main>;
  if(!user.is_staff)return <main className="p-12 text-center text-amber-700">این صفحه فقط برای کارکنان است.</main>;
