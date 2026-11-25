@@ -400,7 +400,7 @@ class CatalogManagementAPITests(TestCase):
         from rest_framework.test import APIClient
         self.client = APIClient()
         self.staff = User.objects.create_user(
-            username="catalog_manager_test", password="password", is_staff=True
+            username="catalog_manager_test", password="password", is_staff=False
         )
         self.client.force_authenticate(self.staff)
 
@@ -518,7 +518,7 @@ class CatalogVariantAndGalleryManagementAPITests(TestCase):
 
         self.client = APIClient()
         self.staff = User.objects.create_user(
-            username="catalog_assets_manager", password="password", is_staff=True
+            username="catalog_assets_manager", password="password", is_staff=False
         )
         self.client.force_authenticate(self.staff)
         self.brand = Brand.objects.create(name="Asset Brand", slug="asset-brand")
@@ -796,3 +796,32 @@ class CatalogAdminPermissionBoundaryTests(TestCase):
         self.assertFalse(self.redemption_admin.has_add_permission(request))
         self.assertFalse(self.redemption_admin.has_change_permission(request))
         self.assertFalse(self.redemption_admin.has_delete_permission(request))
+
+
+class DiscountCampaignManagementAPITests(TestCase):
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from django.contrib.auth.models import Permission
+
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="discount_manager_api", password="password", is_staff=False
+        )
+        self.client.force_authenticate(self.user)
+        self.permission = Permission.objects.get(
+            content_type__app_label="catalog",
+            codename="can_manage_discounts",
+        )
+
+    def test_authenticated_user_without_discount_permission_is_forbidden(self):
+        response = self.client.get("/api/discounts/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_discount_permission_works_without_django_staff_flag(self):
+        self.user.user_permissions.add(self.permission)
+        self.user = User.objects.get(pk=self.user.pk)
+        self.client.force_authenticate(self.user)
+
+        self.assertFalse(self.user.is_staff)
+        response = self.client.get("/api/discounts/")
+        self.assertEqual(response.status_code, 200)
