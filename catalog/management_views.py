@@ -6,9 +6,6 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAdminUser
 
 from .models import Product, ProductImage, ProductVariant
-from .serializers import (
-    CatalogManagementPermission,
-)
 from .management_serializers import (
     CatalogProductImageManagementSerializer,
     CatalogVariantManagementSerializer,
