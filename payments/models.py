@@ -209,3 +209,52 @@ class RefundHistory(models.Model):
         ordering = ["created_at", "id"]
         verbose_name = "تاریخچه بازپرداخت"
         verbose_name_plural = "تاریخچه بازپرداخت‌ها"
+
+
+class Invoice(models.Model):
+    """
+    Immutable customer-facing sales document issued after confirmed payment.
+    This is an internal/non-tax invoice until the seller's legal details and
+    statutory reporting integration are configured.
+    """
+
+    order = models.OneToOneField(
+        Order,
+        on_delete=models.PROTECT,
+        related_name="invoice",
+        verbose_name="سفارش",
+    )
+    payment = models.ForeignKey(
+        Payment,
+        on_delete=models.PROTECT,
+        related_name="invoices",
+        verbose_name="پرداخت تأییدشده",
+    )
+    invoice_number = models.CharField(
+        max_length=32,
+        unique=True,
+        editable=False,
+        verbose_name="شماره فاکتور",
+    )
+    snapshot = models.JSONField(
+        default=dict,
+        verbose_name="اطلاعات ثابت فاکتور",
+    )
+    issued_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="زمان صدور",
+    )
+
+    class Meta:
+        verbose_name = "فاکتور فروش"
+        verbose_name_plural = "فاکتورهای فروش"
+        ordering = ["-issued_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["payment"],
+                name="unique_invoice_payment",
+            ),
+        ]
+
+    def __str__(self):
+        return self.invoice_number
