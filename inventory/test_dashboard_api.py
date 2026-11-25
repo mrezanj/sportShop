@@ -84,6 +84,13 @@ class InventoryDashboardAPITests(TestCase):
         self.client.force_authenticate(self.user)
         response = self.client.get("/api/inventory/documents/?status=draft&search=DASH-DOC")
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 0)
+
+        self.user.user_permissions.add(
+            Permission.objects.get(codename="can_create_inventory_document")
+        )
+        response = self.client.get("/api/inventory/documents/?status=draft&search=DASH-DOC")
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["document_number"], "DASH-DOC-001")
 
@@ -93,6 +100,9 @@ class InventoryDashboardAPITests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_document_detail_contains_safe_item_data(self):
+        self.user.user_permissions.add(
+            Permission.objects.get(codename="can_create_inventory_document")
+        )
         self.client.force_authenticate(self.user)
         response = self.client.get(f"/api/inventory/documents/{self.document.id}/")
         self.assertEqual(response.status_code, 200)
@@ -101,6 +111,9 @@ class InventoryDashboardAPITests(TestCase):
         self.assertNotIn("password", response.data)
 
     def test_document_history_returns_immutable_log_entries(self):
+        self.user.user_permissions.add(
+            Permission.objects.get(codename="can_create_inventory_document")
+        )
         InventoryDocumentLog.objects.create(
             document=self.document,
             action="created",
@@ -112,6 +125,80 @@ class InventoryDashboardAPITests(TestCase):
         response = self.client.get(f"/api/inventory/documents/{self.document.id}/history/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data[0]["actor_username"], self.user.username)
+
+
+    def test_report_only_user_cannot_view_draft_document_or_history(self):
+        self.client.force_authenticate(self.user)
+        listing = self.client.get("/api/inventory/documents/")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.data["count"], 0)
+
+        detail = self.client.get(f"/api/inventory/documents/{self.document.id}/")
+        history = self.client.get(
+            f"/api/inventory/documents/{self.document.id}/history/"
+        )
+        self.assertEqual(detail.status_code, 404)
+        self.assertEqual(history.status_code, 404)
+
+    def test_creator_can_view_only_own_documents(self):
+        self.user.user_permissions.add(
+            Permission.objects.get(codename="can_create_inventory_document")
+        )
+        other_creator = User.objects.create_user(
+            username="other_document_creator", password="test-pass"
+        )
+        other_document = InventoryDocument.objects.create(
+            document_number="DASH-OTHER-001",
+            document_type="inbound",
+            created_by=other_creator,
+            reason="Private draft",
+        )
+
+        self.client.force_authenticate(self.user)
+        listing = self.client.get("/api/inventory/documents/")
+        self.assertEqual(listing.status_code, 200)
+        ids = {row["id"] for row in listing.data["results"]}
+        self.assertIn(self.document.id, ids)
+        self.assertNotIn(other_document.id, ids)
+        self.assertEqual(
+            self.client.get(
+                f"/api/inventory/documents/{other_document.id}/"
+            ).status_code,
+            404,
+        )
+
+    def test_reviewer_sees_review_queue_but_not_unsubmitted_drafts(self):
+        reviewer = User.objects.create_user(
+            username="dashboard_reviewer_scope", password="test-pass"
+        )
+        reviewer.user_permissions.add(
+            Permission.objects.get(codename="can_review_inventory_document")
+        )
+        self.client.force_authenticate(reviewer)
+        listing = self.client.get("/api/inventory/documents/")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.data["count"], 0)
+        self.assertEqual(
+            self.client.get(f"/api/inventory/documents/{self.document.id}/").status_code,
+            404,
+        )
+
+    def test_manager_has_audit_visibility_for_all_documents(self):
+        other_creator = User.objects.create_user(
+            username="manager_audit_creator", password="test-pass"
+        )
+        other_document = InventoryDocument.objects.create(
+            document_number="DASH-MANAGER-AUDIT-001",
+            document_type="inbound",
+            created_by=other_creator,
+            reason="Audit visibility",
+        )
+        self.client.force_authenticate(self.manager)
+        listing = self.client.get("/api/inventory/documents/")
+        self.assertEqual(listing.status_code, 200)
+        ids = {row["id"] for row in listing.data["results"]}
+        self.assertIn(self.document.id, ids)
+        self.assertIn(other_document.id, ids)
 
     def test_threshold_update_is_manager_only(self):
         self.client.force_authenticate(self.user)
