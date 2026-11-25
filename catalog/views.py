@@ -340,7 +340,7 @@ class CatalogCategoryManagementView(generics.ListCreateAPIView):
     permission_classes = [CatalogManagementPermission]
 
 
-class CatalogCategoryDetailManagementView(generics.RetrieveUpdateDestroyAPIView):
+class CatalogCategoryDetailManagementView(generics.RetrieveUpdateAPIView):
     queryset = Category.objects.all()
     serializer_class = CatalogCategoryManagementSerializer
     permission_classes = [CatalogManagementPermission]
@@ -353,7 +353,7 @@ class CatalogBrandManagementView(generics.ListCreateAPIView):
     permission_classes = [CatalogManagementPermission]
 
 
-class CatalogBrandDetailManagementView(generics.RetrieveUpdateDestroyAPIView):
+class CatalogBrandDetailManagementView(generics.RetrieveUpdateAPIView):
     queryset = Brand.objects.all()
     serializer_class = CatalogBrandManagementSerializer
     permission_classes = [CatalogManagementPermission]
