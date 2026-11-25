@@ -155,6 +155,11 @@ class CatalogCategoryManagementSerializer(serializers.ModelSerializer):
         model = Category
         fields = ["id", "name", "slug", "parent", "is_active"]
 
+    def validate_parent(self, parent):
+        if parent and self.instance and parent.pk == self.instance.pk:
+            raise serializers.ValidationError("یک دسته نمی‌تواند والد خودش باشد.")
+        return parent
+
 
 class CatalogBrandManagementSerializer(serializers.ModelSerializer):
     class Meta:
