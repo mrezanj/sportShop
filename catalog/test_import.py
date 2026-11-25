@@ -137,6 +137,41 @@ class CatalogImportAPITests(TestCase):
         self.assertIn("۵۰۰۰", str(response.data))
         self.assertFalse(Product.objects.filter(slug="too-many").exists())
 
+    def test_import_distinguishes_variants_by_servings_and_custom_attributes(self):
+        content = (
+            "product_slug,name_fa,brand_slug,category_slug,description,price,sku,flavor,weight,servings,attributes\n"
+            "multi-variant,محصول,import-brand,import-category,توضیح,100000,VAR-30,شکلات,۱ کیلو,30,{}\n"
+            "multi-variant,محصول,import-brand,import-category,توضیح,110000,VAR-60,شکلات,۱ کیلو,60,{}\n"
+            'multi-variant,محصول,import-brand,import-category,توضیح,120000,VAR-CAPS,شکلات,۱ کیلو,30,"{""form"":""کپسول""}"\n'
+        )
+        response = self.client.post(
+            reverse("product-import-catalog"),
+            {"file": self.upload(content)},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["variants_created"], 3)
+        variants = ProductVariant.objects.filter(product__slug="multi-variant")
+        self.assertEqual(variants.count(), 3)
+        self.assertEqual(set(variants.values_list("servings", flat=True)), {30, 60})
+
+    def test_import_rejects_duplicate_variant_identity_even_with_different_skus(self):
+        content = (
+            "product_slug,name_fa,brand_slug,category_slug,description,price,sku,flavor,servings\n"
+            "duplicate-variant,محصول,import-brand,import-category,توضیح,100000,DUP-001,شکلات,30\n"
+            "duplicate-variant,محصول,import-brand,import-category,توضیح,110000,DUP-002,شکلات,30\n"
+        )
+        response = self.client.post(
+            reverse("product-import-catalog"),
+            {"file": self.upload(content)},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("تکراری", str(response.data))
+        self.assertFalse(Product.objects.filter(slug="duplicate-variant").exists())
+
     def test_import_requires_price_management_permission(self):
         self.user.user_permissions.clear()
         response = self.client.post(

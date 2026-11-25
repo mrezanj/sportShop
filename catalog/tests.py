@@ -259,6 +259,75 @@ class ProductCatalogMetadataTests(ProductInventoryAPITests):
             self.variant.full_clean()
 
 
+class ProductVariantIdentityTests(ProductInventoryAPITests):
+    def test_servings_and_custom_attributes_distinguish_variants(self):
+        base = {
+            "product": self.product,
+            "flavor": "شکلات",
+            "weight": "۱ کیلو",
+            "price": 100000,
+        }
+        servings_variant = ProductVariant.objects.create(
+            **base, servings=30, attributes={"form": "پودر"}
+        )
+        other_servings = ProductVariant.objects.create(
+            **base, servings=60, attributes={"form": "پودر"}
+        )
+        other_attribute = ProductVariant.objects.create(
+            **base, servings=30, attributes={"form": "کپسول"}
+        )
+
+        self.assertEqual(
+            {servings_variant.servings, other_servings.servings, other_attribute.servings},
+            {30, 60},
+        )
+        self.assertEqual(
+            len({
+                servings_variant.variant_fingerprint,
+                other_servings.variant_fingerprint,
+                other_attribute.variant_fingerprint,
+            }),
+            3,
+        )
+
+    def test_partial_price_save_does_not_change_identity_fingerprint(self):
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            flavor="توت‌فرنگی",
+            servings=30,
+            attributes={"form": "پودر"},
+            price=100000,
+        )
+        original_fingerprint = variant.variant_fingerprint
+        variant.attributes = {"form": "کپسول"}
+        variant.price = 110000
+        variant.save(update_fields=["price"])
+        variant.refresh_from_db()
+
+        self.assertEqual(variant.attributes, {"form": "پودر"})
+        self.assertEqual(variant.variant_fingerprint, original_fingerprint)
+
+    def test_identical_variant_identity_is_rejected(self):
+        from django.core.exceptions import ValidationError
+
+        ProductVariant.objects.create(
+            product=self.product,
+            flavor="وانیل",
+            servings=30,
+            attributes={"form": "پودر"},
+            price=100000,
+        )
+        duplicate = ProductVariant(
+            product=self.product,
+            flavor="وانیل",
+            servings=30,
+            attributes={"form": "پودر"},
+            price=120000,
+        )
+        with self.assertRaises(ValidationError):
+            duplicate.full_clean()
+
+
 class ProductImagePrimaryInvariantTests(ProductInventoryAPITests):
     def test_saving_new_primary_image_unsets_previous_primary(self):
         from django.core.files.uploadedfile import SimpleUploadedFile

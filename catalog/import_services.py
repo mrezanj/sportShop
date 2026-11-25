@@ -205,6 +205,7 @@ def import_catalog_file(upload, user):
     rows = _read_rows(upload)
     normalized_rows = []
     seen_skus = set()
+    seen_variant_identities = set()
 
     for row_number, raw in rows:
         row = {str(key).strip().lower(): value for key, value in raw.items()}
@@ -272,6 +273,25 @@ def import_catalog_file(upload, user):
             values["variant_fields"]["attributes"] = _parse_json(
                 row["attributes"], dict, "attributes", row_number, {}
             )
+        identity_fields = {
+            "flavor": "",
+            "weight": "",
+            "servings": None,
+            "size": "",
+            "color": "",
+            "attributes": {},
+        }
+        identity_fields.update(values["variant_fields"])
+        identity = ProductVariant(**identity_fields)
+        identity_key = (
+            values["product_slug"],
+            identity.build_variant_fingerprint(),
+        )
+        if identity_key in seen_variant_identities:
+            raise ValidationError({
+                "file": f"ترکیب ویژگی‌های تنوع در ردیف {row_number} تکراری است."
+            })
+        seen_variant_identities.add(identity_key)
         normalized_rows.append(values)
 
     created_products = set()
@@ -350,14 +370,20 @@ def import_catalog_file(upload, user):
                         "file": f"SKU {row['sku']} در ردیف {line} متعلق به محصول دیگری است."
                     })
             if variant is None:
-                lookup = {
-                    "product": product,
-                    "flavor": row["variant_fields"].get("flavor", ""),
-                    "weight": row["variant_fields"].get("weight", ""),
-                    "size": row["variant_fields"].get("size", ""),
-                    "color": row["variant_fields"].get("color", ""),
+                identity_fields = {
+                    "flavor": "",
+                    "weight": "",
+                    "servings": None,
+                    "size": "",
+                    "color": "",
+                    "attributes": {},
                 }
-                variant = ProductVariant.objects.select_for_update().filter(**lookup).first()
+                identity_fields.update(row["variant_fields"])
+                identity = ProductVariant(product=product, **identity_fields)
+                variant = ProductVariant.objects.select_for_update().filter(
+                    product=product,
+                    variant_fingerprint=identity.build_variant_fingerprint(),
+                ).first()
 
             is_new_variant = variant is None
             old_price = variant.price if variant else None

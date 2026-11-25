@@ -32,6 +32,7 @@ export default function VariantSelector({
     activeVariants.length === 1 &&
     !activeVariants[0].flavor &&
     !activeVariants[0].weight &&
+    activeVariants[0].servings == null &&
     !activeVariants[0].size &&
     !activeVariants[0].color &&
     Object.keys(activeVariants[0].attributes ?? {}).length === 0;
@@ -59,15 +60,7 @@ export default function VariantSelector({
     }
 
     // Label: empty string if no attributes, never "پیش‌فرض"
-    const label = [
-      selected.flavor,
-      selected.weight,
-      selected.size,
-      selected.color,
-      ...Object.values(selected.attributes ?? {}).map(String),
-    ]
-      .filter(Boolean)
-      .join(' - ');
+    const label = variantLabelOf(selected);
 
     addItem({
       variantId: selected.id,
@@ -86,8 +79,16 @@ export default function VariantSelector({
   };
 
   const variantLabelOf = (variant: ProductVariant) => {
-    const standard = [variant.flavor, variant.weight, variant.size, variant.color].filter(Boolean);
-    const custom = Object.values(variant.attributes ?? {}).map(String).filter(Boolean);
+    const standard = [
+      variant.flavor,
+      variant.weight,
+      variant.servings != null ? `${variant.servings} سروینگ` : '',
+      variant.size,
+      variant.color,
+    ].filter(Boolean);
+    const custom = Object.entries(variant.attributes ?? {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => `${key}: ${value}`);
     return [...standard, ...custom].join(' - ');
   };
 

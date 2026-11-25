@@ -1,5 +1,7 @@
 
 import uuid
+import hashlib
+import json
 
 from django.conf import settings
 from decimal import Decimal
@@ -232,6 +234,10 @@ class ProductVariant(models.Model):
     sku = models.CharField(
         max_length=100, unique=True, blank=True, verbose_name="کد انبار (SKU)"
     )
+    variant_fingerprint = models.CharField(
+        max_length=64, blank=True, default="", editable=False,
+        verbose_name="شناسه ترکیب ویژگی‌های تنوع",
+    )
 
     # Physical shipping specifications
     shipping_weight_grams = models.PositiveIntegerField(
@@ -291,11 +297,14 @@ class ProductVariant(models.Model):
     class Meta:
         verbose_name = "تنوع محصول"
         verbose_name_plural = "تنوع‌های محصول"
-        unique_together = ["product", "flavor", "weight", "size", "color"]
         permissions = [
             ("can_manage_product_prices", "Can manage product prices"),
         ]
         constraints = [
+            models.UniqueConstraint(
+                fields=["product", "variant_fingerprint"],
+                name="unique_product_variant_fingerprint",
+            ),
             models.CheckConstraint(
                 condition=Q(price__gte=1),
                 name="variant_price_positive",
@@ -329,9 +338,32 @@ class ProductVariant(models.Model):
             parts.append(self.weight)
         if self.size:
             parts.append(self.size)
+        if self.servings is not None:
+            parts.append(f"{self.servings} سروینگ")
         if self.color:
             parts.append(self.color)
+        parts.extend(
+            f"{key}: {value}"
+            for key, value in sorted((self.attributes or {}).items())
+        )
         return " - ".join(parts)
+
+    def build_variant_fingerprint(self):
+        identity = {
+            "flavor": self.flavor or "",
+            "weight": self.weight or "",
+            "servings": self.servings,
+            "size": self.size or "",
+            "color": self.color or "",
+            "attributes": self.attributes or {},
+        }
+        serialized = json.dumps(
+            identity,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
     def clean(self):
         super().clean()
@@ -344,11 +376,24 @@ class ProductVariant(models.Model):
             raise ValidationError(
                 {"attributes": "ویژگی‌های سفارشی باید شیئی با کلید متنی و مقدار ساده باشند."}
             )
+        self.variant_fingerprint = self.build_variant_fingerprint()
 
     def save(self, *args, **kwargs):
-        # Auto-generate SKU if:
-        # - empty (new variant with no manual SKU), OR
-        # - starts with __TMP__ (placeholder from ProductVariantForm.clean_sku)
+        update_fields = kwargs.get("update_fields")
+        identity_fields = {
+            "flavor",
+            "weight",
+            "servings",
+            "size",
+            "color",
+            "attributes",
+        }
+        if update_fields is None or identity_fields.intersection(update_fields):
+            self.variant_fingerprint = self.build_variant_fingerprint()
+            if update_fields is not None:
+                kwargs["update_fields"] = set(update_fields) | {"variant_fingerprint"}
+
+        # Auto-generate SKU if empty or a temporary admin-form placeholder.
         if not self.sku or self.sku.startswith("__TMP__"):
             from django.db import transaction
 
