@@ -26,7 +26,6 @@ DOCUMENT_VIEW_PERMISSIONS = (
     "inventory.can_create_inventory_document",
     "inventory.can_review_inventory_document",
     "inventory.can_approve_inventory_document",
-    "inventory.can_view_inventory_reports",
 )
 
 
@@ -36,12 +35,12 @@ def _require_any_permission(user, permissions):
 
 
 def _visible_documents(user):
-    """Build the union of documents visible through each permission the user holds.
+    """Build document scope from explicit workflow capabilities.
 
-    Managers have organization-wide audit visibility. Reviewers see their active
-    review queue and documents they have reviewed. Creators see their own
-    documents. Report-only users see finalized documents, not workflow drafts.
-    Combining permissions combines scopes instead of silently hiding one role.
+    Managers have organization-wide audit visibility. Reviewers see the active
+    review queue and documents on which they acted. Creators see their own
+    documents in every state. Report access alone does not expose operational
+    documents or their potentially sensitive cost and audit details.
     """
     qs = InventoryDocument.objects.all()
     if user.has_perm("inventory.can_approve_inventory_document"):
@@ -54,9 +53,6 @@ def _visible_documents(user):
 
     if user.has_perm("inventory.can_review_inventory_document"):
         visibility |= Q(status="pending_review") | Q(reviewed_by=user) | Q(history__actor=user)
-
-    if user.has_perm("inventory.can_view_inventory_reports"):
-        visibility |= Q(status="approved")
 
     return qs.filter(visibility).distinct()
 
