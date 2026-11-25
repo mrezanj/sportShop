@@ -680,6 +680,10 @@ class InventoryDashboardAPITests(TestCase):
         self.assertEqual(history.status_code, 404)
 
     def test_creator_can_view_only_own_documents(self):
+        self.user.user_permissions.add(
+            Permission.objects.get(codename="can_create_inventory_document")
+        )
+        self.user = User.objects.get(pk=self.user.pk)
         other_creator = User.objects.create_user(
             username="other_document_creator", password="test-pass"
         )
@@ -707,6 +711,10 @@ class InventoryDashboardAPITests(TestCase):
         reviewer.user_permissions.add(
             Permission.objects.get(codename="can_review_inventory_document")
         )
+        self.user.user_permissions.add(
+            Permission.objects.get(codename="can_create_inventory_document")
+        )
+        self.user = User.objects.get(pk=self.user.pk)
         unrelated_creator = User.objects.create_user(
             username="unsubmitted_draft_creator", password="test-pass"
         )
