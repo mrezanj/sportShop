@@ -506,3 +506,133 @@ class CatalogManagementAPITests(TestCase):
         self.assertEqual(brand_response.status_code, 405)
         self.assertTrue(Category.objects.filter(pk=category.pk).exists())
         self.assertTrue(Brand.objects.filter(pk=brand.pk).exists())
+
+
+class CatalogVariantAndGalleryManagementAPITests(TestCase):
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from django.contrib.auth.models import Permission
+
+        self.client = APIClient()
+        self.staff = User.objects.create_user(
+            username="catalog_assets_manager", password="password", is_staff=True
+        )
+        self.client.force_authenticate(self.staff)
+        self.brand = Brand.objects.create(name="Asset Brand", slug="asset-brand")
+        self.category = Category.objects.create(name="Asset Category", slug="asset-category")
+        self.product = Product.objects.create(
+            name_fa="محصول مدیریت تنوع",
+            slug="asset-product",
+            brand=self.brand,
+            category=self.category,
+            description="تست مدیریت تنوع و تصویر",
+        )
+        self.catalog_permission = Permission.objects.get(codename="can_manage_catalog")
+        self.price_permission = Permission.objects.get(codename="can_manage_product_prices")
+        self.staff.user_permissions.add(self.catalog_permission)
+
+    def grant_price_permission(self):
+        self.staff.user_permissions.add(self.price_permission)
+
+    def test_staff_without_catalog_permission_cannot_access_variants_or_images(self):
+        self.staff.user_permissions.remove(self.catalog_permission)
+        variants = self.client.get(f"/api/management/products/{self.product.id}/variants/")
+        images = self.client.get(f"/api/management/products/{self.product.id}/images/")
+        self.assertEqual(variants.status_code, 403)
+        self.assertEqual(images.status_code, 403)
+
+    def test_variant_creation_requires_price_permission_and_records_initial_price(self):
+        payload = {
+            "flavor": "شکلات",
+            "weight": "۱ کیلو",
+            "servings": ۳۰,
+            "attributes": {"form": "پودر"},
+            "initial_price": "125000",
+        }
+        denied = self.client.post(
+            f"/api/management/products/{self.product.id}/variants/",
+            payload,
+            format="json",
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.assertFalse(ProductVariant.objects.filter(product=self.product).exists())
+
+        self.grant_price_permission()
+        response = self.client.post(
+            f"/api/management/products/{self.product.id}/variants/",
+            payload,
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        variant = ProductVariant.objects.get(product=self.product)
+        self.assertEqual(variant.price, 125000)
+        self.assertTrue(variant.sku)
+        history = ProductVariantPriceHistory.objects.get(variant=variant)
+        self.assertEqual(history.change_type, "initial")
+        self.assertIsNone(history.old_price)
+        self.assertEqual(history.new_price, 125000)
+
+    def test_variant_update_cannot_change_price_stock_or_sku(self):
+        variant = ProductVariant.objects.create(
+            product=self.product, flavor="وانیل", price=100000, stock=17
+        )
+        response = self.client.patch(
+            f"/api/management/variants/{variant.id}/",
+            {"flavor": "توت‌فرنگی", "price": "1", "stock": 0, "sku": "HACKED"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        variant.refresh_from_db()
+        self.assertEqual(variant.flavor, "توت‌فرنگی")
+        self.assertEqual(variant.price, 100000)
+        self.assertEqual(variant.stock, 17)
+        self.assertNotEqual(variant.sku, "HACKED")
+
+    def test_duplicate_variant_fingerprint_is_rejected_by_management_api(self):
+        ProductVariant.objects.create(
+            product=self.product, flavor="وانیل", servings=30,
+            attributes={"form": "پودر"}, price=100000,
+        )
+        self.grant_price_permission()
+        response = self.client.post(
+            f"/api/management/products/{self.product.id}/variants/",
+            {
+                "flavor": "وانیل",
+                "servings": 30,
+                "attributes": {"form": "پودر"},
+                "initial_price": "110000",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_image_upload_primary_selection_and_delete_promotes_remaining_image(self):
+        import base64
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .models import ProductImage
+
+        png = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p0sAAAAASUVORK5CYII="
+        )
+        first = self.client.post(
+            f"/api/management/products/{self.product.id}/images/",
+            {"image": SimpleUploadedFile("first.png", png, content_type="image/png"), "alt_text": "اول", "order": 1},
+            format="multipart",
+        )
+        self.assertEqual(first.status_code, 201, first.data)
+        second = self.client.post(
+            f"/api/management/products/{self.product.id}/images/",
+            {"image": SimpleUploadedFile("second.png", png, content_type="image/png"), "alt_text": "دوم", "order": 2, "is_primary": True},
+            format="multipart",
+        )
+        self.assertEqual(second.status_code, 201, second.data)
+        first_image = ProductImage.objects.get(pk=first.data["id"])
+        second_image = ProductImage.objects.get(pk=second.data["id"])
+        first_image.refresh_from_db()
+        self.assertFalse(first_image.is_primary)
+        self.assertTrue(second_image.is_primary)
+
+        deleted = self.client.delete(f"/api/management/images/{second_image.id}/")
+        self.assertEqual(deleted.status_code, 204)
+        first_image.refresh_from_db()
+        self.assertTrue(first_image.is_primary)
