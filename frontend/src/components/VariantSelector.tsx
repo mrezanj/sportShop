@@ -60,15 +60,7 @@ export default function VariantSelector({
     }
 
     // Label: empty string if no attributes, never "پیش‌فرض"
-    const label = [
-      selected.flavor,
-      selected.weight,
-      selected.size,
-      selected.color,
-      ...Object.values(selected.attributes ?? {}).map(String),
-    ]
-      .filter(Boolean)
-      .join(' - ');
+    const label = variantLabelOf(selected);
 
     addItem({
       variantId: selected.id,
