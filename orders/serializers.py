@@ -496,17 +496,18 @@ class CreateOrderSerializer(serializers.Serializer):
                     else ""
                 )
 
-                label = " - ".join(
-                    filter(
-                        None,
-                        [
-                            variant.flavor,
-                            variant.weight,
-                            variant.size,
-                            variant.color,
-                        ],
-                    )
+                label_parts = [
+                    variant.flavor,
+                    variant.weight,
+                    f"{variant.servings} سروینگ" if variant.servings is not None else "",
+                    variant.size,
+                    variant.color,
+                ]
+                label_parts.extend(
+                    f"{key}: {value}"
+                    for key, value in sorted((variant.attributes or {}).items())
                 )
+                label = " - ".join(part for part in label_parts if part)
 
                 items_data.append(
                     {
