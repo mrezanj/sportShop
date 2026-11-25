@@ -143,3 +143,37 @@ class InventoryBulkImportAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["rows_processed"], 1)
+
+
+    def test_csv_rejects_extra_nonempty_cells_without_creating_document(self):
+        response = self.post_import(
+            "sku,quantity,batch_number\\n"
+            "BULK-001,5,BATCH-A,UNEXPECTED\\n"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(InventoryDocument.objects.count(), 0)
+
+    def test_csv_rejects_blank_or_duplicate_headers(self):
+        for content, number in (
+            ("sku,quantity,batch_number,\\nBULK-001,5,BATCH-A,\\n", "BULK-DOC-BLANK-HEADER"),
+            ("sku,quantity,sku,batch_number\\nBULK-001,5,BULK-001,BATCH-A\\n", "BULK-DOC-DUP-HEADER"),
+        ):
+            response = self.post_import(content, document_number=number)
+            self.assertEqual(response.status_code, 400)
+        self.assertEqual(InventoryDocument.objects.count(), 0)
+
+    def test_csv_rejects_more_than_5000_data_rows(self):
+        lines = ["sku,quantity,batch_number"]
+        lines.extend(f"BULK-001,1,BATCH-{index}" for index in range(5001))
+        response = self.post_import("\\n".join(lines) + "\\n", document_number="BULK-DOC-TOO-MANY")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(InventoryDocument.objects.count(), 0)
+
+    def test_import_requires_authentication(self):
+        self.client.force_authenticate(user=None)
+        response = self.post_import(
+            "sku,quantity,batch_number\\nBULK-001,5,BATCH-A\\n",
+            document_number="BULK-DOC-UNAUTHENTICATED",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(InventoryDocument.objects.count(), 0)
