@@ -547,7 +547,7 @@ class CatalogVariantAndGalleryManagementAPITests(TestCase):
         payload = {
             "flavor": "شکلات",
             "weight": "۱ کیلو",
-            "servings": ۳۰,
+            "servings": 30,
             "attributes": {"form": "پودر"},
             "initial_price": "125000",
         }
