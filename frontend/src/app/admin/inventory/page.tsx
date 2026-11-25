@@ -81,12 +81,17 @@ export default function InventoryDashboardPage() {
     setLoading(true);
     setError('');
     try {
-      const [summaryData, lowData, thresholdData, docsData] = await Promise.all([
-        fetchInventorySummary(token),
+      const summaryData = await fetchInventorySummary(token);
+      const [lowData, thresholdData] = await Promise.all([
         fetchInventoryLowStock(token),
         fetchInventoryThresholds(token),
-        fetchInventoryDocuments(token, { page, status, type, search }),
       ]);
+      const canViewDocuments = summaryData.can_create_document ||
+        summaryData.can_review_document || summaryData.can_approve_document;
+      const docsData = canViewDocuments
+        ? await fetchInventoryDocuments(token, { page, status, type, search })
+        : { results: [], count: 0 };
+
       setSummary(summaryData);
       setLowStock(lowData.results);
       setThresholds(thresholdData);
