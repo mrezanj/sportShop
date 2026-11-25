@@ -13,6 +13,7 @@ from catalog.models import ProductVariant
 from .document_services import (
     add_inventory_document_item,
     create_inventory_document,
+    _require_permission,
 )
 from .models import InventoryBatch
 
@@ -124,6 +125,7 @@ def _parse_unit_cost(value, line):
 
 @transaction.atomic
 def import_inventory_file(*, user, upload, document_number, reference="", reason="ورود گروهی موجودی"):
+    _require_permission(user, "inventory.can_create_inventory_document")
     rows = _read_rows(upload)
     normalized = []
     seen = set()
