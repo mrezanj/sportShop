@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Payment, Refund, RefundHistory
+from .models import Payment, Refund, RefundHistory, Invoice
 from jalali_suite.admin import JalaliDateModelAdmin
 
 
@@ -68,6 +68,23 @@ class RefundAdmin(JalaliDateModelAdmin):
     def has_change_permission(self, request, obj=None):
         # Refund state transitions must go through the permission-checked API/service.
         # Django Admin is intentionally read-only, even for refund operators.
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Invoice)
+class InvoiceAdmin(JalaliDateModelAdmin):
+    list_display = ("invoice_number", "order", "payment", "issued_at")
+    search_fields = ("invoice_number", "order__order_number", "payment__ref_id")
+    readonly_fields = ("order", "payment", "invoice_number", "snapshot", "issued_at")
+    ordering = ("-issued_at", "-id")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False
 
     def has_delete_permission(self, request, obj=None):
