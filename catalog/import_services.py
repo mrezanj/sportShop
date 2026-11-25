@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO, StringIO
 from pathlib import Path
 
+from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from openpyxl import load_workbook
@@ -202,6 +203,10 @@ def _read_rows(upload):
 
 
 def import_catalog_file(upload, user):
+    if not user.is_superuser and not user.has_perm("catalog.can_manage_catalog"):
+        raise DjangoPermissionDenied("شما مجوز مدیریت کاتالوگ را ندارید.")
+    if not user.is_superuser and not user.has_perm("catalog.can_manage_product_prices"):
+        raise DjangoPermissionDenied("شما مجوز مدیریت قیمت محصولات را ندارید.")
     rows = _read_rows(upload)
     normalized_rows = []
     seen_skus = set()
