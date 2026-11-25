@@ -36,31 +36,29 @@ def _require_any_permission(user, permissions):
 
 
 def _visible_documents(user):
-    """Return documents visible to a staff member, independent of query filters."""
-    qs = InventoryDocument.objects.all()
-    is_creator = user.has_perm("inventory.can_create_inventory_document")
-    is_reviewer = user.has_perm("inventory.can_review_inventory_document")
-    is_manager = user.has_perm("inventory.can_approve_inventory_document")
-    can_reports = user.has_perm("inventory.can_view_inventory_reports")
+    """Build the union of documents visible through each permission the user holds.
 
-    # Workflow roles take precedence over general reporting / creation rights.
-    if is_manager:
-        return qs.filter(
-            Q(status="pending_approval")
-            | Q(approved_by=user)
-            | Q(status="rejected", created_by=user)
-        )
-    if is_reviewer:
-        return qs.filter(
-            Q(status="pending_review")
-            | Q(reviewed_by=user)
-            | Q(status="rejected", created_by=user)
-        )
-    if is_creator:
-        return qs.filter(created_by=user)
-    if can_reports:
-        return qs.filter(status="approved")
-    return qs.none()
+    Managers have organization-wide audit visibility. Reviewers see their active
+    review queue and documents they have reviewed. Creators see their own
+    documents. Report-only users see finalized documents, not workflow drafts.
+    Combining permissions combines scopes instead of silently hiding one role.
+    """
+    qs = InventoryDocument.objects.all()
+    if user.has_perm("inventory.can_approve_inventory_document"):
+        return qs
+
+    visibility = Q(pk__in=[])
+
+    if user.has_perm("inventory.can_create_inventory_document"):
+        visibility |= Q(created_by=user)
+
+    if user.has_perm("inventory.can_review_inventory_document"):
+        visibility |= Q(status="pending_review") | Q(reviewed_by=user)
+
+    if user.has_perm("inventory.can_view_inventory_reports"):
+        visibility |= Q(status="approved")
+
+    return qs.filter(visibility).distinct()
 
 
 def _user_label(user):
