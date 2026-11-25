@@ -91,7 +91,7 @@ export default function ReturnsRefundsAdminPage() {
   }, [token]);
 
   useEffect(() => {
-    if (token && user?.is_staff) void load();
+    if (token && user?.is_employee) void load();
   }, [token, user, load]);
 
   const run = async (key: string, action: () => Promise<unknown>, message: string) => {
@@ -154,7 +154,7 @@ export default function ReturnsRefundsAdminPage() {
 
   if (authLoading) return <main className="grid min-h-[60vh] place-items-center">در حال بررسی دسترسی...</main>;
   if (!user || !token) return <main className="container mx-auto px-4 py-16 text-center">برای ورود به پنل عملیاتی ابتدا وارد حساب کاربری شوید.</main>;
-  if (!user.is_staff) return <main className="container mx-auto px-4 py-16 text-center text-amber-800">این بخش فقط برای کاربران داخلی فروشگاه است.</main>;
+  if (!user.is_employee) return <main className="container mx-auto px-4 py-16 text-center text-amber-800">این بخش فقط برای کاربران داخلی فروشگاه است.</main>;
 
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: 'returns', label: 'درخواست‌های مرجوعی', count: returns.length },
