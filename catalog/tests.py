@@ -458,6 +458,42 @@ class CatalogManagementAPITests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertFalse(ProductVariant.objects.filter(product__slug="managed-product").exists())
 
+    def test_category_cannot_be_moved_under_its_descendant(self):
+        from django.contrib.auth.models import Permission
+        permission = Permission.objects.get(codename="can_manage_catalog")
+        self.staff.user_permissions.add(permission)
+
+        parent = Category.objects.create(name="Parent", slug="cycle-parent")
+        child = Category.objects.create(
+            name="Child", slug="cycle-child", parent=parent
+        )
+
+        response = self.client.patch(
+            f"/api/management/categories/{parent.id}/",
+            {"parent": child.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        parent.refresh_from_db()
+        self.assertIsNone(parent.parent)
+
+    def test_category_cannot_be_its_own_parent(self):
+        from django.contrib.auth.models import Permission
+        permission = Permission.objects.get(codename="can_manage_catalog")
+        self.staff.user_permissions.add(permission)
+        category = Category.objects.create(name="Self", slug="self-parent")
+
+        response = self.client.patch(
+            f"/api/management/categories/{category.id}/",
+            {"parent": category.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        category.refresh_from_db()
+        self.assertIsNone(category.parent)
+
     def test_category_and_brand_detail_endpoints_do_not_allow_delete(self):
         from django.contrib.auth.models import Permission
         permission = Permission.objects.get(codename="can_manage_catalog")
