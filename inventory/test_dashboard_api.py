@@ -203,6 +203,12 @@ class InventoryDashboardAPITests(TestCase):
             self.client.get(f"/api/inventory/documents/{unrelated_draft.id}/").status_code,
             404,
         )
+        self.assertEqual(
+            self.client.get(
+                f"/api/inventory/documents/{unrelated_draft.id}/history/"
+            ).status_code,
+            404,
+        )
 
     def test_report_only_user_can_view_approved_documents(self):
         from .document_services import (
