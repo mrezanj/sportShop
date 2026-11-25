@@ -114,7 +114,7 @@ export default function InventoryReportsPage() {
   return (
     <main className="min-h-screen bg-page py-8 sm:py-10">
       <div className="container mx-auto max-w-7xl space-y-6 px-4">
-        <header className="flex flex-wrap items-end justify-between gap-3 align-middle">
+        <header className="flex flex-wrap items-end justify-between gap-3 text-center align-middle">
           <div>
             <p className="section-label">مدیریت عملیات فروشگاه</p>
             <h1 className="text-3xl sm:text-4xl">گزارش‌های انبار</h1>
@@ -163,12 +163,12 @@ export default function InventoryReportsPage() {
                 </tr></thead>
                 <tbody>
                   {(batchData?.results ?? []).map((row: InventoryBatchReportRow) => <tr key={row.id} className="bg-slate-100 even:bg-sky-50/80 hover:bg-sky-100 transition-colors [&>td]:border-b-2 [&>td]:border-white">
-                    <td className="border-b-2 border-slate-200 p-3 align-middle"><strong>{row.sku}</strong><span className="block text-xs text-gray-500">{row.product_name} · {row.brand_name}</span></td>
-                    <td className="border-b-2 border-slate-200 p-3 align-middle font-mono text-slate-700">{row.batch_number}</td>
-                    <td className="border-b-2 border-slate-200 p-3 align-middle"><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${row.is_expired ? 'bg-rose-100 text-rose-800' : row.status === 'available' ? 'bg-emerald-100 text-emerald-800' : row.status === 'quarantined' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'}`}>{row.is_expired ? 'منقضی' : row.status_display}</span></td>
-                    <td className="border-b-2 border-slate-200 p-3 align-middle">{date(row.expiration_date)}</td><td className="border-b-2 border-slate-200 p-3 align-middle tabular-nums">{number(row.physical)}</td><td className="border-b-2 border-slate-200 p-3 align-middle tabular-nums">{number(row.reserved)}</td><td className="border-b-2 border-slate-200 p-3 align-middle tabular-nums font-bold text-slate-900">{number(row.available)}</td>
-                    <td className="border-b-2 border-slate-200 p-3 align-middle">
-                      <div className="space-y-2">
+                    <td className="border-b-2 border-slate-200 p-3 text-center align-middle"><strong>{row.sku}</strong><span className="block text-xs text-gray-500">{row.product_name} · {row.brand_name}</span></td>
+                    <td className="border-b-2 border-slate-200 p-3 text-center align-middle font-mono text-slate-700">{row.batch_number}</td>
+                    <td className="border-b-2 border-slate-200 p-3 text-center align-middle"><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${row.is_expired ? 'bg-rose-100 text-rose-800' : row.status === 'available' ? 'bg-emerald-100 text-emerald-800' : row.status === 'quarantined' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'}`}>{row.is_expired ? 'منقضی' : row.status_display}</span></td>
+                    <td className="border-b-2 border-slate-200 p-3 text-center align-middle">{date(row.expiration_date)}</td><td className="border-b-2 border-slate-200 p-3 text-center align-middle tabular-nums">{number(row.physical)}</td><td className="border-b-2 border-slate-200 p-3 text-center align-middle tabular-nums">{number(row.reserved)}</td><td className="border-b-2 border-slate-200 p-3 text-center align-middle tabular-nums font-bold text-slate-900">{number(row.available)}</td>
+                    <td className="border-b-2 border-slate-200 p-3 text-center align-middle">
+                      <div className="mx-auto max-w-xs space-y-2">
                         <PersonEntry label="ثبت‌کننده سند" name={row.document_created_by_display} role={row.document_created_by_role} />
                         <div className="border-t border-dashed border-gray-200" />
                         <PersonEntry label="ایجادکننده بچ" name={row.created_by_display} role={row.created_by_role} />
@@ -187,11 +187,11 @@ export default function InventoryReportsPage() {
                 </tr></thead>
                 <tbody>
                   {(movementData?.results ?? []).map((row: InventoryMovementReportRow, index: number) => <tr key={row.id} className={movementRowClass(row.movement_type, index)}>
-                    <td className="border-b-2 border-white/90 p-3 align-middle whitespace-nowrap"><div className="font-semibold text-slate-800">{dateTimeParts(row.created_at).date}</div><div className="mt-1 text-xs tabular-nums text-slate-500">{dateTimeParts(row.created_at).time}</div></td><td className="border-b-2 border-slate-200 p-3 align-middle">{row.sku}<span className="block text-xs text-gray-500">{row.product_name}</span></td><td className="border-b-2 border-slate-200 p-3 align-middle font-mono">{row.batch_number}</td><td className="border-b-2 border-white/90 p-3 align-middle"><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ring-1 ring-inset ${movementBadgeClass(row.movement_type)}`}>{row.movement_type_display}</span></td>
-                    <td className={'border-b-2 border-slate-200 p-3 align-middle font-bold tabular-nums ' + (row.quantity_delta > 0 ? 'text-green-700' : 'text-red-700')}>{row.quantity_delta > 0 ? '+' : ''}{number(row.quantity_delta)}</td>
-                    <td className="border-b-2 border-slate-200 p-3 align-middle">{row.document_number}<span className="block text-xs text-gray-500">{row.document_type_display}</span></td><td className="border-b-2 border-slate-200 p-3 align-middle">{row.document_status_display}</td><td className="border-b-2 border-slate-200 p-3 align-middle tabular-nums">{row.unit_cost === null ? '—' : number(Number(row.unit_cost))}</td>
-                    <td className="border-b-2 border-slate-200 p-3 align-middle">
-                      <div className="space-y-3">
+                    <td className="border-b-2 border-white/90 p-3 text-center align-middle whitespace-nowrap"><div className="font-semibold text-slate-800">{dateTimeParts(row.created_at).date}</div><div className="mt-1 text-xs tabular-nums text-slate-500">{dateTimeParts(row.created_at).time}</div></td><td className="border-b-2 border-slate-200 p-3 text-center align-middle">{row.sku}<span className="block text-xs text-gray-500">{row.product_name}</span></td><td className="border-b-2 border-slate-200 p-3 text-center align-middle font-mono">{row.batch_number}</td><td className="border-b-2 border-white/90 p-3 text-center align-middle"><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ring-1 ring-inset ${movementBadgeClass(row.movement_type)}`}>{row.movement_type_display}</span></td>
+                    <td className={'border-b-2 border-slate-200 p-3 text-center align-middle font-bold tabular-nums ' + (row.quantity_delta > 0 ? 'text-green-700' : 'text-red-700')}>{row.quantity_delta > 0 ? '+' : ''}{number(row.quantity_delta)}</td>
+                    <td className="border-b-2 border-slate-200 p-3 text-center align-middle">{row.document_number}<span className="block text-xs text-gray-500">{row.document_type_display}</span></td><td className="border-b-2 border-slate-200 p-3 text-center align-middle">{row.document_status_display}</td><td className="border-b-2 border-slate-200 p-3 text-center align-middle tabular-nums">{row.unit_cost === null ? '—' : number(Number(row.unit_cost))}</td>
+                    <td className="border-b-2 border-slate-200 p-3 text-center align-middle">
+                      <div className="mx-auto max-w-xs space-y-3">
                         <PersonEntry label="ثبت‌کننده سند" name={row.document_created_by_display} role={row.document_created_by_role} />
                         <div className="border-t border-dashed border-gray-200" />
                         <PersonEntry label="انجام‌دهنده گردش" name={row.created_by_display ?? 'سیستم'} role={row.created_by_role} />
