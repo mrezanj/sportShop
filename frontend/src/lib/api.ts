@@ -581,6 +581,7 @@ export interface InventorySummary {
   can_create_document: boolean;
   can_review_document: boolean;
   can_approve_document: boolean;
+  can_view_reports: boolean;
 }
 
 export interface InventoryStockRow {
