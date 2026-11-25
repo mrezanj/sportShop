@@ -334,6 +334,7 @@ class CatalogManagementPermission(IsAdminUser):
 
 
 class CatalogCategoryManagementView(generics.ListCreateAPIView):
+    pagination_class = None
     queryset = Category.objects.all().order_by("name")
     serializer_class = CatalogCategoryManagementSerializer
     permission_classes = [CatalogManagementPermission]
@@ -346,6 +347,7 @@ class CatalogCategoryDetailManagementView(generics.RetrieveUpdateDestroyAPIView)
 
 
 class CatalogBrandManagementView(generics.ListCreateAPIView):
+    pagination_class = None
     queryset = Brand.objects.all().order_by("name")
     serializer_class = CatalogBrandManagementSerializer
     permission_classes = [CatalogManagementPermission]
@@ -358,6 +360,7 @@ class CatalogBrandDetailManagementView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class CatalogProductManagementView(generics.ListCreateAPIView):
+    pagination_class = None
     queryset = Product.objects.all().select_related("brand", "category").order_by("-created_at")
     serializer_class = CatalogProductManagementSerializer
     permission_classes = [CatalogManagementPermission]
