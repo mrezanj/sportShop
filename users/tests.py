@@ -336,6 +336,40 @@ class OTPAPITests(APITestCase):
         response = self.client.get("/api/auth/me/")
         self.assertEqual(response.status_code, 401)
 
+    def test_me_marks_business_role_as_employee_without_django_staff_access(self):
+        user = User.objects.create_user(
+            username="business-role-user",
+            password="test-password",
+            is_staff=False,
+        )
+        group = Group.objects.create(name="حسابدار")
+        user.groups.add(group)
+        token = Token.objects.create(user=user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.get("/api/auth/me/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["is_staff"])
+        self.assertTrue(response.data["is_employee"])
+
+    def test_me_does_not_mark_customer_group_as_employee(self):
+        user = User.objects.create_user(
+            username="customer-role-user",
+            password="test-password",
+            is_staff=False,
+        )
+        group = Group.objects.create(name="مشتری")
+        user.groups.add(group)
+        token = Token.objects.create(user=user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.get("/api/auth/me/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["is_staff"])
+        self.assertFalse(response.data["is_employee"])
+
     def test_logout_deletes_auth_token(self):
         user = User.objects.create_user(
             username=self.mobile,
