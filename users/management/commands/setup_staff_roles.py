@@ -39,7 +39,7 @@ class Command(BaseCommand):
             content_type__app_label__in=BUSINESS_APP_LABELS
         ).exclude(
             content_type__model__in=("otpcode", "otpfailedattempt", "otprequestlimit", "profile")
-        )
+        ).exclude(codename__startswith="delete_")
         for name in EXECUTIVE_GROUPS:
             groups[name].permissions.set(executive_permissions)
 
