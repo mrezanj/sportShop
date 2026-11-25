@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.contrib import admin
 from django.contrib.auth.models import Permission, User
 from django.test import TestCase
 from django.urls import reverse
@@ -8,6 +9,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
 
+from catalog.admin import DiscountCampaignAdmin, DiscountRedemptionAdmin
 from catalog.discounts import calculate_discounts, record_discount_redemptions
 from catalog.models import (
     Brand,
@@ -326,6 +328,29 @@ class DiscountCampaignManagementAPITests(APITestCase):
         self.user.user_permissions.clear()
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
+
+    def test_discount_admins_require_discount_permission_not_price_permission(self):
+        from types import SimpleNamespace
+
+        campaign_admin = DiscountCampaignAdmin(DiscountCampaign, admin.site)
+        redemption_admin = DiscountRedemptionAdmin(DiscountRedemption, admin.site)
+        request = SimpleNamespace(user=self.user)
+
+        self.assertTrue(campaign_admin.has_module_permission(request))
+        self.assertTrue(redemption_admin.has_module_permission(request))
+
+        self.user.user_permissions.clear()
+        self.user.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="catalog",
+                codename="can_manage_product_prices",
+            )
+        )
+        self.user.refresh_from_db()
+        request.user = self.user
+
+        self.assertFalse(campaign_admin.has_module_permission(request))
+        self.assertFalse(redemption_admin.has_module_permission(request))
 
     def test_invalid_scope_target_is_rejected(self):
         data = self.payload()
