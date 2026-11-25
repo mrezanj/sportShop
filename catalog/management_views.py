@@ -3,7 +3,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import generics
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 
 from .models import Product, ProductImage, ProductVariant
 from .management_serializers import (
@@ -12,7 +12,7 @@ from .management_serializers import (
 )
 
 
-class CatalogAssetPermission(IsAdminUser):
+class CatalogAssetPermission(IsAuthenticated):
     def has_permission(self, request, view):
         return bool(
             super().has_permission(request, view)
