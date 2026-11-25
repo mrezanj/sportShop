@@ -642,3 +642,104 @@ class CatalogVariantAndGalleryManagementAPITests(TestCase):
         self.assertEqual(deleted.status_code, 204)
         first_image.refresh_from_db()
         self.assertTrue(first_image.is_primary)
+
+
+class InventoryBatchPrivacyAPITests(TestCase):
+    """Batch identifiers and expiry dates must remain internal inventory data."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        self.client = APIClient()
+        self.customer = User.objects.create_user(
+            username="batch_privacy_customer",
+            password="test-password",
+        )
+        self.brand = Brand.objects.create(
+            name="Batch Privacy Brand",
+            slug="batch-privacy-brand",
+        )
+        self.category = Category.objects.create(
+            name="Batch Privacy Category",
+            slug="batch-privacy-category",
+        )
+        self.product = Product.objects.create(
+            name_fa="محصول محرمانگی بچ",
+            slug="batch-privacy-product",
+            brand=self.brand,
+            category=self.category,
+            description="Batch privacy acceptance test",
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            price=100000,
+            stock=0,
+            sku="BATCH-PRIVACY-001",
+        )
+        self.batch = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="PRIVATE-BATCH-2026",
+            expiration_date=timezone.localdate() + timedelta(days=30),
+            created_by=self.customer,
+        )
+        self.document = InventoryDocument.objects.create(
+            document_number="BATCH-PRIVACY-DOC-001",
+            document_type="inbound",
+            created_by=self.customer,
+            reason="Batch privacy test",
+        )
+        self.item = InventoryDocumentItem.objects.create(
+            document=self.document,
+            variant=self.variant,
+            batch=self.batch,
+            quantity=5,
+            direction="inbound",
+        )
+        self.client.force_authenticate(self.customer)
+
+    def test_public_product_detail_never_exposes_batch_metadata(self):
+        response = self.client.get(
+            reverse("product-detail", kwargs={"slug": self.product.slug})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        variant_data = response.data["variants"][0]
+        forbidden_fields = {
+            "batch",
+            "batch_id",
+            "batch_number",
+            "expiration",
+            "expiration_date",
+            "batch_expiration_date",
+        }
+        self.assertTrue(forbidden_fields.isdisjoint(variant_data.keys()))
+        self.assertEqual(variant_data["stock"], 0)
+
+    def test_customer_cannot_access_batch_data_through_inventory_endpoints(self):
+        protected_urls = [
+            "/api/inventory/reports/",
+            "/api/inventory/summary/",
+            "/api/inventory/low-stock/",
+            "/api/inventory/thresholds/",
+            "/api/inventory/documents/",
+            f"/api/inventory/documents/{self.document.id}/",
+            f"/api/inventory/documents/{self.document.id}/history/",
+        ]
+
+        for url in protected_urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_user_cannot_access_inventory_batch_endpoints(self):
+        self.client.force_authenticate(user=None)
+        protected_urls = [
+            "/api/inventory/reports/",
+            "/api/inventory/documents/",
+            f"/api/inventory/documents/{self.document.id}/",
+        ]
+
+        for url in protected_urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertIn(response.status_code, (401, 403))
