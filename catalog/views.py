@@ -10,7 +10,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.filters import SearchFilter, OrderingFilter
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -115,7 +115,7 @@ class PriceManagementMixin:
         detail=False,
         methods=["post"],
         url_path="import-catalog",
-        permission_classes=[IsAdminUser],
+        permission_classes=[IsAuthenticated],
     )
     def import_catalog(self, request):
         _price_permission(request.user)
@@ -129,7 +129,7 @@ class PriceManagementMixin:
         detail=False,
         methods=["post"],
         url_path="bulk-price-update",
-        permission_classes=[IsAdminUser],
+        permission_classes=[IsAuthenticated],
     )
     def bulk_price_update(self, request):
         _price_permission(request.user)
@@ -150,7 +150,7 @@ class PriceManagementMixin:
         detail=False,
         methods=["get"],
         url_path="price-history",
-        permission_classes=[IsAdminUser],
+        permission_classes=[IsAuthenticated],
     )
     def price_history(self, request):
         _price_permission(request.user)
@@ -177,7 +177,7 @@ class PriceManagementMixin:
         detail=False,
         methods=["post"],
         url_path="import-prices",
-        permission_classes=[IsAdminUser],
+        permission_classes=[IsAuthenticated],
     )
     def import_prices(self, request):
         _price_permission(request.user)
@@ -325,7 +325,7 @@ from .serializers import (
 )
 
 
-class CatalogManagementPermission(IsAdminUser):
+class CatalogManagementPermission(IsAuthenticated):
     def has_permission(self, request, view):
         return bool(
             super().has_permission(request, view)
