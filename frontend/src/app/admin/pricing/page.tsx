@@ -49,7 +49,7 @@ export default function PricingAdminPage() {
   }, [token, historySku]);
 
   useEffect(() => {
-    if (token && user?.is_staff) void loadHistory();
+    if (token && user?.is_employee) void loadHistory();
   }, [token, user, loadHistory]);
 
   const submitBulk = async (event: FormEvent<HTMLFormElement>) => {
@@ -117,7 +117,7 @@ export default function PricingAdminPage() {
   if (!user || !token) {
     return <main className="container mx-auto px-4 py-16 text-center">برای ورود به مدیریت قیمت ابتدا وارد حساب کاربری شوید.</main>;
   }
-  if (!user.is_staff) {
+  if (!user.is_employee) {
     return <main className="container mx-auto px-4 py-16 text-center text-amber-800">این بخش فقط برای کاربران داخلی فروشگاه است.</main>;
   }
 
