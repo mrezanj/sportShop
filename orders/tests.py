@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
+from django.contrib import admin
 from orders.admin import OrderAdmin
 from django.contrib.auth.models import User, Permission
 from users.models import Profile
@@ -1540,6 +1541,27 @@ class OrderAdminStatusActionTests(TestCase):
             OrderStatusHistory.objects.filter(order=self.order).count(),
             0,
         )
+
+    def test_shipping_cost_is_readonly_without_dedicated_permission(self):
+        request = SimpleNamespace(user=self.user)
+        model_admin = OrderAdmin(Order, admin.site)
+
+        readonly_fields = model_admin.get_readonly_fields(request)
+
+        self.assertIn("shipping_cost", readonly_fields)
+
+    def test_shipping_cost_is_editable_with_dedicated_permission(self):
+        permission = Permission.objects.get(
+            content_type__app_label="orders",
+            codename="can_manage_order_shipping_cost",
+        )
+        self.user.user_permissions.add(permission)
+        request = SimpleNamespace(user=self.user)
+        model_admin = OrderAdmin(Order, admin.site)
+
+        readonly_fields = model_admin.get_readonly_fields(request)
+
+        self.assertNotIn("shipping_cost", readonly_fields)
 
     def test_invalid_admin_transition_does_not_change_order(self):
         self.client.force_login(self.user)
