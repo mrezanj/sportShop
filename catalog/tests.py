@@ -290,6 +290,23 @@ class ProductVariantIdentityTests(ProductInventoryAPITests):
             3,
         )
 
+    def test_partial_price_save_does_not_change_identity_fingerprint(self):
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            flavor="توت‌فرنگی",
+            servings=30,
+            attributes={"form": "پودر"},
+            price=100000,
+        )
+        original_fingerprint = variant.variant_fingerprint
+        variant.attributes = {"form": "کپسول"}
+        variant.price = 110000
+        variant.save(update_fields=["price"])
+        variant.refresh_from_db()
+
+        self.assertEqual(variant.attributes, {"form": "پودر"})
+        self.assertEqual(variant.variant_fingerprint, original_fingerprint)
+
     def test_identical_variant_identity_is_rejected(self):
         from django.core.exceptions import ValidationError
 
