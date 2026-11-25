@@ -6,6 +6,12 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from .document_services import (
+    approve_inventory_document,
+    review_inventory_document,
+    submit_inventory_document,
+)
+
 from catalog.models import Brand, Category, Product, ProductVariant
 from .models import InventoryBatch, InventoryDocument, InventoryDocumentItem, InventoryMovement
 
@@ -177,3 +183,44 @@ class InventoryBulkImportAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 401)
         self.assertEqual(InventoryDocument.objects.count(), 0)
+
+    def test_import_changes_stock_only_after_review_and_final_approval(self):
+        response = self.post_import(
+            "sku,quantity,batch_number,expiration_date\\n"
+            "BULK-001,6,APPROVAL-BATCH,2032-01-01\\n",
+            document_number="BULK-DOC-APPROVAL",
+        )
+        self.assertEqual(response.status_code, 201)
+        document_id = response.data["document_id"]
+
+        self.assertEqual(InventoryBatch.objects.count(), 0)
+        self.assertEqual(InventoryMovement.objects.count(), 0)
+
+        reviewer = User.objects.create_user(username="bulk_reviewer", password="test-pass")
+        reviewer.user_permissions.add(
+            Permission.objects.get(codename="can_review_inventory_document")
+        )
+        approver = User.objects.create_user(username="bulk_approver", password="test-pass")
+        approver.user_permissions.add(
+            Permission.objects.get(codename="can_approve_inventory_document")
+        )
+
+        submitted = submit_inventory_document(user=self.user, document_id=document_id)
+        self.assertEqual(submitted.status, "pending_review")
+        self.assertEqual(InventoryBatch.objects.count(), 0)
+        self.assertEqual(InventoryMovement.objects.count(), 0)
+
+        reviewed = review_inventory_document(user=reviewer, document_id=document_id)
+        self.assertEqual(reviewed.status, "pending_approval")
+        self.assertEqual(InventoryBatch.objects.count(), 0)
+        self.assertEqual(InventoryMovement.objects.count(), 0)
+
+        approved = approve_inventory_document(user=approver, document_id=document_id)
+        self.assertEqual(approved.status, "approved")
+        batch = InventoryBatch.objects.get(
+            variant=self.variant,
+            batch_number="APPROVAL-BATCH",
+        )
+        movement = InventoryMovement.objects.get(document_id=document_id)
+        self.assertEqual(movement.batch_id, batch.id)
+        self.assertEqual(movement.quantity_delta, 6)
