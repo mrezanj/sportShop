@@ -1549,6 +1549,9 @@ class OrderAdminStatusActionTests(TestCase):
         readonly_fields = model_admin.get_readonly_fields(request)
 
         self.assertIn("shipping_cost", readonly_fields)
+        self.assertIn("mobile", readonly_fields)
+        self.assertIn("address", readonly_fields)
+        self.assertIn("total_amount", readonly_fields)
 
     def test_shipping_cost_is_editable_with_dedicated_permission(self):
         permission = Permission.objects.get(
@@ -1562,6 +1565,9 @@ class OrderAdminStatusActionTests(TestCase):
         readonly_fields = model_admin.get_readonly_fields(request)
 
         self.assertNotIn("shipping_cost", readonly_fields)
+        self.assertIn("mobile", readonly_fields)
+        self.assertIn("address", readonly_fields)
+        self.assertIn("total_amount", readonly_fields)
 
     def test_invalid_admin_transition_does_not_change_order(self):
         self.client.force_login(self.user)
