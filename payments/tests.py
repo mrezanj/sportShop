@@ -1650,6 +1650,21 @@ class PaymentFlowTests(TestCase):
         self.assertEqual(repeated.status_code, 200)
         self.assertEqual(Invoice.objects.filter(order=order).count(), 1)
 
+
+    def test_failed_payment_does_not_issue_invoice(self):
+        order = self.create_order(quantity=1)
+        payment = self.start_payment(order)
+        mock_request = RequestFactory().post("/", {"status": "cancelled"})
+        mock_response = mock_payment_page(mock_request, payment.id)
+        self.assertEqual(mock_response.status_code, 302)
+
+        response = self.verify(order, payment.authority, status="cancelled")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Invoice.objects.filter(order=order).exists())
+        order.refresh_from_db()
+        self.assertEqual(order.status, "pending")
+
+
     def test_invoice_endpoint_is_limited_to_order_owner(self):
         order = self.create_order(quantity=1)
         payment = self.start_payment(order)
