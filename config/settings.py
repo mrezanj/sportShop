@@ -215,6 +215,16 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 # Financial settings
 VAT_RATE = 0.10
+
+# Optional seller identity used in customer-facing internal invoices.
+# Keep empty until the legal business details have been verified.
+INVOICE_SELLER_NAME = os.getenv("INVOICE_SELLER_NAME", "").strip()
+INVOICE_SELLER_NATIONAL_ID = os.getenv("INVOICE_SELLER_NATIONAL_ID", "").strip()
+INVOICE_SELLER_ECONOMIC_CODE = os.getenv("INVOICE_SELLER_ECONOMIC_CODE", "").strip()
+INVOICE_SELLER_REGISTRATION_NUMBER = os.getenv("INVOICE_SELLER_REGISTRATION_NUMBER", "").strip()
+INVOICE_SELLER_PHONE = os.getenv("INVOICE_SELLER_PHONE", "").strip()
+INVOICE_SELLER_ADDRESS = os.getenv("INVOICE_SELLER_ADDRESS", "").strip()
+INVOICE_SELLER_POSTAL_CODE = os.getenv("INVOICE_SELLER_POSTAL_CODE", "").strip()
 FREE_SHIPPING_THRESHOLD = 4_000_000
 
 
