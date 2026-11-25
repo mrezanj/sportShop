@@ -953,6 +953,41 @@ class InventoryServiceTests(TestCase):
         )
 
 
+    def test_allocate_reservation_rechecks_order_after_loading_stale_reservation(self):
+        from django.core.exceptions import ValidationError
+
+        self.create_movement(self.batch, 5)
+        reservation = self.create_reservation(quantity=2)
+
+        # Simulate a worker holding a reservation object loaded before another
+        # transaction cancels its order and releases the reservation.
+        stale_reservation = StockReservation.objects.select_related(
+            "order",
+        ).get(pk=reservation.pk)
+
+        Order.objects.filter(pk=reservation.order_id).update(
+            status="cancelled",
+        )
+        StockReservation.objects.filter(pk=reservation.pk).update(
+            status="released",
+            released_at=self.now,
+        )
+
+        with self.assertRaises(ValidationError):
+            allocate_stock_reservation(
+                stale_reservation,
+                now=self.now,
+            )
+
+        self.assertFalse(
+            ReservationAllocation.objects.filter(
+                reservation=reservation,
+            ).exists()
+        )
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.status, "released")
+
+
 from .document_services import (
     create_inventory_document,
     add_inventory_document_item,
