@@ -125,8 +125,8 @@ class CatalogImportAPITests(TestCase):
 
 
     def test_import_rejects_more_than_5000_rows_during_file_read(self):
-        header = "product_slug,name_fa,brand_slug,category_slug,description,price,sku\\n"
-        row = "too-many,محصول,import-brand,import-category,توضیح,100000,TOO-MANY\\n"
+        header = "product_slug,name_fa,brand_slug,category_slug,description,price,sku\n"
+        row = "too-many,محصول,import-brand,import-category,توضیح,100000,TOO-MANY\n"
         response = self.client.post(
             reverse("product-import-catalog"),
             {"file": self.upload(header + row * 5001)},
