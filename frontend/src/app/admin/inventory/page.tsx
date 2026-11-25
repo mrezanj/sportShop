@@ -44,7 +44,7 @@ const number = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 const date = (value: string) => new Date(value).toLocaleString('fa-IR', {
   year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
 });
-const inputClass = 'w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-pink-500';
+const inputClass = 'w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:border-pink-600 focus:ring-2 focus:ring-pink-100';
 
 export default function InventoryDashboardPage() {
   const { token, user, loading: authLoading } = useAuth();
@@ -81,12 +81,17 @@ export default function InventoryDashboardPage() {
     setLoading(true);
     setError('');
     try {
-      const [summaryData, lowData, thresholdData, docsData] = await Promise.all([
-        fetchInventorySummary(token),
+      const summaryData = await fetchInventorySummary(token);
+      const [lowData, thresholdData] = await Promise.all([
         fetchInventoryLowStock(token),
         fetchInventoryThresholds(token),
-        fetchInventoryDocuments(token, { page, status, type, search }),
       ]);
+      const canViewDocuments = summaryData.can_create_document ||
+        summaryData.can_review_document || summaryData.can_approve_document ||
+        summaryData.can_view_reports;
+      const docsData = canViewDocuments
+        ? await fetchInventoryDocuments(token, { page, status, type, search })
+        : { results: [], count: 0 };
       setSummary(summaryData);
       setLowStock(lowData.results);
       setThresholds(thresholdData);
@@ -324,6 +329,7 @@ export default function InventoryDashboardPage() {
           {thresholds.length > 30 && <p className="mt-3 text-xs text-gray-500">در این نما ۳۰ SKU نخست نمایش داده می‌شود.</p>}
         </section>
 
+        {(summary?.can_create_document || summary?.can_review_document || summary?.can_approve_document || summary?.can_view_reports) && (
         <section className="rounded-2xl border border-pink-100 bg-white p-4 shadow-sm sm:p-6">
           <div className="mb-4"><h2 className="text-xl">اسناد انبار</h2><p className="mt-1 text-xs text-gray-500">ایجاد پیش‌نویس، افزودن اقلام و گردش بررسی و تأیید</p></div>
           <div className="mb-4 grid gap-2 sm:grid-cols-4">
@@ -336,6 +342,7 @@ export default function InventoryDashboardPage() {
           </table>{!documents.length && <p className="py-8 text-center text-sm text-gray-500">سندی با این مشخصات پیدا نشد.</p>}</div>
           <div className="mt-4 flex items-center justify-between text-sm"><span className="text-gray-500">مجموع {number(docCount)} سند</span><div className="flex gap-2"><button disabled={page<=1} onClick={()=>setPage(p=>p-1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">قبلی</button><span className="px-2 py-2">صفحه {number(page)}</span><button disabled={documents.length===0 || page*20>=docCount} onClick={()=>setPage(p=>p+1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">بعدی</button></div></div>
         </section>
+        )}
       </div>
 
       {creating && <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-8" onClick={()=>setCreating(false)}><div role="dialog" aria-modal="true" aria-label="ایجاد سند انبار" className="my-4 w-full max-w-2xl rounded-2xl bg-white p-5 shadow-2xl sm:p-7" onClick={e=>e.stopPropagation()}>
