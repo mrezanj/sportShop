@@ -16,7 +16,7 @@ class CatalogImportAPITests(TestCase):
         )
         permission = Permission.objects.get(
             content_type__app_label="catalog",
-            codename="can_manage_product_prices",
+            codename="can_manage_catalog",
         )
         self.user.user_permissions.add(permission)
         self.client = APIClient()
@@ -172,7 +172,22 @@ class CatalogImportAPITests(TestCase):
         self.assertIn("تکراری", str(response.data))
         self.assertFalse(Product.objects.filter(slug="duplicate-variant").exists())
 
-    def test_import_requires_price_management_permission(self):
+
+    def test_price_manager_cannot_import_catalog_without_catalog_permission(self):
+        self.user.user_permissions.clear()
+        price_permission = Permission.objects.get(
+            content_type__app_label="catalog",
+            codename="can_manage_product_prices",
+        )
+        self.user.user_permissions.add(price_permission)
+        response = self.client.post(
+            reverse("product-import-catalog"),
+            {"file": self.upload("product_slug,name_fa,brand_slug,category_slug,description,price\nx,x,x,x,x,1")},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_import_requires_catalog_management_permission(self):
         self.user.user_permissions.clear()
         response = self.client.post(
             reverse("product-import-catalog"),
