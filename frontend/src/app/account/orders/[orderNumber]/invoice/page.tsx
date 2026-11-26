@@ -157,7 +157,7 @@ function InvoicePageContent() {
             </div>
           </section>
 
-          <section className="invoice-totals mt-8 mr-auto max-w-md space-y-2 text-sm">
+          <section className="invoice-totals mt-8 ml-auto mr-0 w-full max-w-lg rounded-xl border border-gray-200 bg-gray-50/80 p-4 space-y-2 text-sm">
             {detail('جمع کالاها', money(totals.subtotal) + ' تومان')}
             {detail('تخفیف', money(totals.discount_amount) + ' تومان')}
             {detail('مالیات محاسبه‌شده', money(totals.vat_amount) + ' تومان')}
@@ -322,9 +322,14 @@ function InvoicePageContent() {
 
           .invoice-totals {
             width: 100% !important;
-            max-width: 85mm !important;
+            max-width: 120mm !important;
             margin-top: 4mm !important;
-            margin-right: auto !important;
+            margin-left: auto !important;
+            margin-right: 0 !important;
+            padding: 3mm !important;
+            border: 0.3mm solid #e5e7eb !important;
+            border-radius: 3mm !important;
+            background: #f9fafb !important;
             break-inside: avoid;
             page-break-inside: avoid;
           }
