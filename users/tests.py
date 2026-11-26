@@ -1277,3 +1277,98 @@ class StaffRoleManagementAPITests(APITestCase):
         response = self.client.get("/api/auth/me/")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.data["can_manage_staff"])
+
+
+class NormalizeStaffRolesCommandTests(TestCase):
+    def setUp(self):
+        call_command("setup_staff_roles")
+
+    def test_legacy_only_accounts_become_customers_and_direct_grants_are_cleared(self):
+        user = User.objects.create_user(
+            username="legacy-only-user",
+            password="test-password",
+        )
+        legacy = Group.objects.create(name="Inventory Creators")
+        permission = Permission.objects.filter(codename="add_user").first()
+        if permission is None:
+            permission = Permission.objects.create(
+                name="Test direct permission",
+                codename="normalize_test_permission",
+                content_type=ContentType.objects.get_for_model(User),
+            )
+        legacy.permissions.add(permission)
+        user.groups.add(legacy)
+        user.user_permissions.add(permission)
+
+        call_command("normalize_staff_roles")
+
+        user.refresh_from_db()
+        self.assertEqual(
+            list(user.groups.values_list("name", flat=True)),
+            ["مشتری"],
+        )
+        self.assertFalse(user.user_permissions.exists())
+        self.assertFalse(Group.objects.get(name="مشتری").permissions.exists())
+
+    def test_single_official_role_is_preserved_and_legacy_groups_are_removed(self):
+        user = User.objects.create_user(
+            username="legacy-accountant",
+            password="test-password",
+        )
+        accountant = Group.objects.get(name="حسابدار")
+        legacy = Group.objects.create(name="آزمایش انبار - حسابدار")
+        user.groups.add(accountant, legacy)
+
+        call_command("normalize_staff_roles")
+
+        user.refresh_from_db()
+        self.assertEqual(
+            list(user.groups.values_list("name", flat=True)),
+            ["حسابدار"],
+        )
+
+    def test_conflicting_official_roles_fall_back_to_customer(self):
+        user = User.objects.create_user(
+            username="conflicting-roles",
+            password="test-password",
+        )
+        user.groups.add(
+            Group.objects.get(name="حسابدار"),
+            Group.objects.get(name="مدیر داخلی"),
+        )
+
+        call_command("normalize_staff_roles")
+
+        user.refresh_from_db()
+        self.assertEqual(
+            list(user.groups.values_list("name", flat=True)),
+            ["مشتری"],
+        )
+
+    def test_superuser_groups_and_direct_permissions_are_untouched(self):
+        superuser = User.objects.create_superuser(
+            username="protected-admin",
+            email="admin@example.com",
+            password="test-password",
+        )
+        legacy = Group.objects.create(name="Legacy Admin Group")
+        permission = Permission.objects.filter(codename="add_user").first()
+        superuser.groups.add(legacy)
+        if permission is not None:
+            superuser.user_permissions.add(permission)
+        before_groups = set(superuser.groups.values_list("pk", flat=True))
+        before_permissions = set(
+            superuser.user_permissions.values_list("pk", flat=True)
+        )
+
+        call_command("normalize_staff_roles")
+
+        superuser.refresh_from_db()
+        self.assertEqual(
+            set(superuser.groups.values_list("pk", flat=True)),
+            before_groups,
+        )
+        self.assertEqual(
+            set(superuser.user_permissions.values_list("pk", flat=True)),
+            before_permissions,
+        )
