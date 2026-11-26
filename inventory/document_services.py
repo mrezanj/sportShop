@@ -636,6 +636,7 @@ def approve_inventory_document(*, user, document_id, note=""):
     is_executive = user.groups.filter(
         name__in=("مدیرعامل", "رئیس هیئت‌مدیره")
     ).exists()
+    is_ceo = user.groups.filter(name="مدیرعامل").exists()
     if document.reviewed_by_id == user.id and not is_executive:
         raise PermissionDenied("The reviewer cannot approve the same document.")
 
