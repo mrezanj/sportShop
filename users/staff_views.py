@@ -175,7 +175,25 @@ def staff_role_history(request):
         content_type=content_type,
         action_flag=CHANGE,
         change_message__contains='"event": "staff_role_changed"',
-    ).select_related("user").order_by("-action_time")[:50]
+    ).select_related("user__profile").order_by("-action_time")[:50]
+
+    entries = list(entries)
+    target_ids = [entry.object_id for entry in entries if str(entry.object_id).isdigit()]
+    target_users = {
+        str(user.pk): user
+        for user in User.objects.filter(pk__in=target_ids).select_related("profile")
+    }
+
+    def display_user(user):
+        if user is None:
+            return ""
+        full_name = user.get_full_name().strip()
+        if full_name:
+            return full_name
+        profile = getattr(user, "profile", None)
+        if profile and profile.mobile:
+            return profile.mobile
+        return user.username
 
     results = []
     for entry in entries:
@@ -185,10 +203,11 @@ def staff_role_history(request):
             continue
         if details.get("event") != "staff_role_changed":
             continue
+        target_user = target_users.get(str(entry.object_id))
         results.append({
             "id": entry.pk,
-            "actor": entry.user.get_full_name() or entry.user.username,
-            "target": entry.object_repr,
+            "actor": display_user(entry.user) or entry.user.username,
+            "target": display_user(target_user) or entry.object_repr,
             "previous_roles": details.get("previous_roles", []),
             "new_role": details.get("new_role"),
             "created_at": entry.action_time,
