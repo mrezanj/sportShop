@@ -310,6 +310,31 @@ class ProductVariantIdentityTests(ProductInventoryAPITests):
         self.assertEqual(variant.attributes, {"form": "پودر"})
         self.assertEqual(variant.variant_fingerprint, original_fingerprint)
 
+    def test_partial_identity_save_uses_only_fields_being_persisted(self):
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            flavor="شکلات",
+            weight="۱ کیلو",
+            servings=30,
+            attributes={"form": "پودر"},
+            price=100000,
+        )
+        original_fingerprint = variant.variant_fingerprint
+
+        # Change two identity values in memory, but persist only flavor.
+        variant.flavor = "وانیل"
+        variant.attributes = {"form": "کپسول"}
+        variant.save(update_fields=["flavor"])
+        variant.refresh_from_db()
+
+        self.assertEqual(variant.flavor, "وانیل")
+        self.assertEqual(variant.attributes, {"form": "پودر"})
+        self.assertNotEqual(variant.variant_fingerprint, original_fingerprint)
+        self.assertEqual(
+            variant.variant_fingerprint,
+            variant.build_variant_fingerprint(),
+        )
+
     def test_identical_variant_identity_is_rejected(self):
         from django.core.exceptions import ValidationError
 
