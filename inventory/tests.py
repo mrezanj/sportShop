@@ -2706,6 +2706,51 @@ class InventoryReportAPITests(TestCase):
         self.assertEqual(report["minimum_quantity"], 5)
         self.assertTrue(report["low_stock"])
 
+    def test_creator_without_report_permission_cannot_read_global_stock_panels(self):
+        create_permission = Permission.objects.get(
+            content_type__app_label="inventory",
+            codename="can_create_inventory_document",
+        )
+        self.user.user_permissions.add(create_permission)
+        self.client.force_authenticate(user=self.user)
+
+        summary = self.client.get("/api/inventory/summary/")
+        self.assertEqual(summary.status_code, 200)
+        self.assertFalse(summary.data["can_view_reports"])
+        self.assertFalse(summary.data["can_manage_threshold"])
+        self.assertEqual(summary.data["sku_count"], 0)
+        self.assertEqual(summary.data["physical_quantity"], 0)
+
+        self.assertEqual(self.client.get("/api/inventory/low-stock/").status_code, 403)
+        self.assertEqual(self.client.get("/api/inventory/thresholds/").status_code, 403)
+
+    def test_threshold_management_requires_dedicated_permission(self):
+        threshold_permission = Permission.objects.get(
+            content_type__app_label="inventory",
+            codename="can_manage_inventory_thresholds",
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.assertEqual(self.client.get("/api/inventory/thresholds/").status_code, 403)
+        self.assertEqual(
+            self.client.put(
+                f"/api/inventory/thresholds/{self.variant.id}/",
+                {"minimum_quantity": 7},
+                format="json",
+            ).status_code,
+            403,
+        )
+
+        self.user.user_permissions.add(threshold_permission)
+        self.assertEqual(self.client.get("/api/inventory/thresholds/").status_code, 200)
+        response = self.client.put(
+            f"/api/inventory/thresholds/{self.variant.id}/",
+            {"minimum_quantity": 7},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["minimum_quantity"], 7)
+
 
 class InventoryDocumentAPITests(TestCase):
     def setUp(self):
