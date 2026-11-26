@@ -9,6 +9,7 @@ from django.test import (
 )
 from django.db import close_old_connections, connections
 from django.contrib.auth.models import Group, User
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from django.core.cache import cache
@@ -1109,6 +1110,52 @@ class StaffRoleManagementAPITests(APITestCase):
         self.target.refresh_from_db()
         self.assertFalse(self.target.is_staff)
         self.assertFalse(self.target.is_superuser)
+
+    def test_assigning_customer_removes_legacy_groups_and_direct_permissions(self):
+        legacy_group = Group.objects.create(name="آزمایش انبار - مدیر")
+        permission = Permission.objects.filter(codename="add_user").first()
+        if permission is None:
+            permission = Permission.objects.create(
+                name="Test direct permission",
+                codename="test_direct_permission",
+                content_type=ContentType.objects.get_for_model(User),
+            )
+        legacy_group.permissions.add(permission)
+        self.target.groups.add(legacy_group)
+        self.target.user_permissions.add(permission)
+
+        response = self.client.patch(
+            f"/api/auth/staff/{self.target.pk}/role/",
+            {"role": "مشتری"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.target.refresh_from_db()
+        self.assertEqual(
+            list(self.target.groups.values_list("name", flat=True)),
+            ["مشتری"],
+        )
+        self.assertFalse(self.target.user_permissions.exists())
+        self.assertFalse(self.target.has_perm(f"{permission.content_type.app_label}.{permission.codename}"))
+
+    def test_assigning_staff_role_replaces_customer_and_legacy_groups(self):
+        customer = Group.objects.get(name="مشتری")
+        legacy = Group.objects.create(name="Inventory Creators")
+        self.target.groups.add(customer, legacy)
+
+        response = self.client.patch(
+            f"/api/auth/staff/{self.target.pk}/role/",
+            {"role": "حسابدار"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.target.refresh_from_db()
+        self.assertEqual(
+            list(self.target.groups.values_list("name", flat=True)),
+            ["حسابدار"],
+        )
 
     def test_role_assignment_is_idempotent_and_does_not_duplicate_audit(self):
         url = f"/api/auth/staff/{self.target.pk}/role/"
