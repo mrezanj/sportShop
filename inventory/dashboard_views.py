@@ -306,5 +306,6 @@ class InventorySummaryAPIView(APIView):
             "is_executive": request.user.groups.filter(
                 name__in=("مدیرعامل", "رئیس هیئت‌مدیره")
             ).exists(),
+            "is_ceo": request.user.groups.filter(name="مدیرعامل").exists(),
             "can_view_reports": can_view_reports,
         })
