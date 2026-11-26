@@ -26,7 +26,9 @@ BUSINESS_STAFF_GROUPS = (
 
 def _staff_flags(user):
     is_staff = bool(user.is_staff)
-    is_employee = is_staff or user.groups.filter(
+    # Django Admin access is reserved for the system superuser.
+    # Business employee status comes only from an official staff role.
+    is_employee = user.groups.filter(
         name__in=BUSINESS_STAFF_GROUPS
     ).exists()
     can_manage_staff = bool(
