@@ -117,7 +117,7 @@ export default function PricingAdminPage() {
   if (!user || !token) {
     return <main className="container mx-auto px-4 py-16 text-center">برای ورود به مدیریت قیمت ابتدا وارد حساب کاربری شوید.</main>;
   }
-  if (!user.is_employee) {
+  if (!user.is_superuser && !user.permissions.includes('catalog.can_manage_product_prices')) {
     return <main className="container mx-auto px-4 py-16 text-center text-amber-800">این بخش فقط برای کاربران داخلی فروشگاه است.</main>;
   }
 
