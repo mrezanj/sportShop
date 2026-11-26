@@ -103,7 +103,7 @@ class InventoryBatchReportAPIView(APIView):
                 "sku": batch.variant.sku,
                 "product_name": batch.variant.product.name_fa,
                 "brand_name": batch.variant.product.brand.name,
-                "batch_number": batch.batch_number,
+                "batch_number": batch.batch_number or "بدون بچ",
                 "expiration_date": batch.expiration_date,
                 "status": batch.status,
                 "status_display": batch.get_status_display(),
@@ -216,7 +216,7 @@ class InventoryMovementReportAPIView(APIView):
             rows.append({
                 "id": movement.id,
                 "batch_id": movement.batch_id,
-                "batch_number": movement.batch.batch_number,
+                "batch_number": movement.batch.batch_number or "بدون بچ",
                 "sku": movement.batch.variant.sku,
                 "product_name": movement.batch.variant.product.name_fa,
                 "movement_type": movement.movement_type,
