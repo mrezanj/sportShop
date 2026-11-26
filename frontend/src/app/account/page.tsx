@@ -46,6 +46,8 @@ export default function AccountPage() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [birthDate, setBirthDate] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -67,9 +69,15 @@ export default function AccountPage() {
     setProfileSuccess(null);
 
     try {
-      const updatedProfile = await updateProfile(birthDate, token);
+      const updatedProfile = await updateProfile(
+        { birth_date: birthDate || null, first_name: firstName, last_name: lastName },
+        token
+      );
       setProfile(updatedProfile);
       setBirthDate(updatedProfile.birth_date ?? '');
+      setFirstName(updatedProfile.first_name ?? '');
+      setLastName(updatedProfile.last_name ?? '');
+      window.dispatchEvent(new Event('profile-updated'));
       setProfileSuccess('اطلاعات پروفایل با موفقیت ذخیره شد.');
     } catch (err) {
       setProfileError(
@@ -98,6 +106,8 @@ export default function AccountPage() {
       .then((data) => {
         setProfile(data);
         setBirthDate(data.birth_date ?? '');
+        setFirstName(data.first_name ?? '');
+        setLastName(data.last_name ?? '');
       })
       .catch(() => {
         setProfileError('خطا در دریافت اطلاعات پروفایل.');
@@ -140,7 +150,7 @@ export default function AccountPage() {
           </h2>
 
           <p className="text-sm text-gray-600 mb-5">
-            برای خرید محصولاتی که محدودیت سنی دارند، ثبت تاریخ تولد الزامی است.
+            نام و نام خانوادگی شما در سربرگ سایت و به‌صورت پیش‌فرض در اطلاعات گیرنده سفارش نمایش داده می‌شود.
           </p>
 
           {profileError && (
@@ -156,6 +166,49 @@ export default function AccountPage() {
           )}
 
           <form onSubmit={handleProfileSave}>
+            <div className="grid sm:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label htmlFor="profile-first-name" className="block text-sm font-medium text-gray-700 mb-2">
+                  نام
+                </label>
+                <input
+                  id="profile-first-name"
+                  type="text"
+                  maxLength={150}
+                  value={firstName}
+                  onChange={(event) => {
+                    setFirstName(event.target.value);
+                    setProfileError(null);
+                    setProfileSuccess(null);
+                  }}
+                  disabled={profileLoading || profileSaving}
+                  autoComplete="given-name"
+                  placeholder="نام شما"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-800 disabled:bg-gray-100"
+                />
+              </div>
+              <div>
+                <label htmlFor="profile-last-name" className="block text-sm font-medium text-gray-700 mb-2">
+                  نام خانوادگی
+                </label>
+                <input
+                  id="profile-last-name"
+                  type="text"
+                  maxLength={150}
+                  value={lastName}
+                  onChange={(event) => {
+                    setLastName(event.target.value);
+                    setProfileError(null);
+                    setProfileSuccess(null);
+                  }}
+                  disabled={profileLoading || profileSaving}
+                  autoComplete="family-name"
+                  placeholder="نام خانوادگی شما"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-800 disabled:bg-gray-100"
+                />
+              </div>
+            </div>
+
             <div className="mb-4">
               <label
                 htmlFor="profile-mobile"
