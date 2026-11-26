@@ -327,6 +327,40 @@ class InventoryDashboardAPITests(TestCase):
         self.assertEqual(low_stock.data["count"], 1)
         self.assertEqual(low_stock.data["results"][0]["available"], 0)
 
+    def test_document_product_options_are_available_to_registrars_only(self):
+        self.client.force_authenticate(self.user)
+        denied = self.client.get("/api/inventory/document-products/")
+        self.assertEqual(denied.status_code, 403)
+
+        creator_permission = Permission.objects.get(
+            codename="can_create_inventory_document"
+        )
+        self.user.user_permissions.add(creator_permission)
+        inactive_variant = ProductVariant.objects.create(
+            product=self.product,
+            price=1200,
+            stock=0,
+            sku="DASH-INACTIVE",
+            is_active=False,
+        )
+        self.user = User.objects.get(pk=self.user.pk)
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get("/api/inventory/document-products/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data,
+            [{
+                "variant_id": self.variant.id,
+                "sku": self.variant.sku,
+                "product_name": self.product.name_fa,
+            }],
+        )
+        self.assertNotIn(
+            inactive_variant.id,
+            [row["variant_id"] for row in response.data],
+        )
+
     def test_threshold_list_requires_dedicated_management_permission(self):
         self.client.force_authenticate(self.user)
         denied = self.client.get("/api/inventory/thresholds/")

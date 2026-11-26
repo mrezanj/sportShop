@@ -183,6 +183,32 @@ class InventoryDocumentHistoryAPIView(APIView):
         return Response(InventoryDocumentLogSerializer(logs, many=True).data)
 
 
+class InventoryDocumentProductsAPIView(APIView):
+    """Return active SKU options to staff who can create inventory documents."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not (
+            request.user.is_superuser
+            or request.user.has_perm("inventory.can_create_inventory_document")
+        ):
+            raise PermissionDenied("شما مجوز انتخاب کالا برای اسناد انبار را ندارید.")
+
+        variants = ProductVariant.objects.select_related("product").filter(
+            is_active=True,
+            product__is_active=True,
+        ).order_by("sku")
+        return Response([
+            {
+                "variant_id": variant.id,
+                "sku": variant.sku,
+                "product_name": variant.product.name_fa,
+            }
+            for variant in variants
+        ])
+
+
 class InventoryThresholdListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 

@@ -739,6 +739,16 @@ export function fetchInventoryLowStock(token: string) {
   return inventoryRequest<{ count: number; results: InventoryStockRow[] }>('low-stock/', token);
 }
 
+export interface InventoryDocumentProductOption {
+  variant_id: number;
+  sku: string;
+  product_name: string;
+}
+
+export function fetchInventoryDocumentProducts(token: string) {
+  return inventoryRequest<InventoryDocumentProductOption[]>('document-products/', token);
+}
+
 export function fetchInventoryThresholds(token: string) {
   return inventoryRequest<InventoryStockRow[]>('thresholds/', token);
 }

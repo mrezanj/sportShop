@@ -8,6 +8,7 @@ import {
   createInventoryDocument,
   fetchInventoryDocumentDetail,
   fetchInventoryDocumentHistory,
+  fetchInventoryDocumentProducts,
   fetchInventoryDocuments,
   fetchInventoryLowStock,
   fetchInventorySummary,
@@ -19,6 +20,7 @@ import {
   updateInventoryThreshold,
   type InventoryDocumentDetail,
   type InventoryDocumentLog,
+  type InventoryDocumentProductOption,
   type InventoryDocumentRow,
   type InventoryStockRow,
   type InventorySummary,
@@ -61,6 +63,7 @@ export default function InventoryDashboardPage() {
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [lowStock, setLowStock] = useState<InventoryStockRow[]>([]);
   const [thresholds, setThresholds] = useState<InventoryStockRow[]>([]);
+  const [documentProducts, setDocumentProducts] = useState<InventoryDocumentProductOption[]>([]);
   const [documents, setDocuments] = useState<InventoryDocumentRow[]>([]);
   const [docCount, setDocCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -92,13 +95,16 @@ export default function InventoryDashboardPage() {
     setError('');
     try {
       const summaryData = await fetchInventorySummary(token);
-      const [lowData, thresholdData] = await Promise.all([
+      const [lowData, thresholdData, productOptions] = await Promise.all([
         summaryData.can_view_reports
           ? fetchInventoryLowStock(token)
           : Promise.resolve({ results: [] as InventoryStockRow[] }),
         summaryData.can_manage_threshold
           ? fetchInventoryThresholds(token)
           : Promise.resolve([] as InventoryStockRow[]),
+        summaryData.can_create_document
+          ? fetchInventoryDocumentProducts(token)
+          : Promise.resolve([] as InventoryDocumentProductOption[]),
       ]);
       const canViewDocuments = summaryData.can_create_document ||
         summaryData.can_review_document || summaryData.can_approve_document ||
@@ -109,6 +115,7 @@ export default function InventoryDashboardPage() {
       setSummary(summaryData);
       setLowStock(lowData.results);
       setThresholds(thresholdData);
+      setDocumentProducts(productOptions);
       setDocuments(docsData.results);
       setDocCount(docsData.count);
     } catch (err) {
@@ -354,8 +361,8 @@ export default function InventoryDashboardPage() {
             <select value={status} onChange={e => {setStatus(e.target.value);setPage(1);}} className={inputClass}><option value="">همه وضعیت‌ها</option>{Object.entries(STATUS_LABELS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
             <select value={type} onChange={e => {setType(e.target.value);setPage(1);}} className={inputClass}><option value="">همه انواع سند</option>{Object.entries(TYPE_LABELS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
           </div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="border-b border-gray-100 text-right text-gray-500"><th className="p-3">شماره سند</th><th className="p-3">نوع</th><th className="p-3">وضعیت</th><th className="p-3">ثبت‌کننده</th><th className="p-3">تعداد ردیف</th><th className="p-3">تاریخ</th><th className="p-3">جزئیات</th></tr></thead>
-            <tbody>{documents.map(doc=><tr key={doc.id} className="border-b border-gray-50 last:border-0"><td className="p-3 font-bold text-gray-800">{doc.document_number}</td><td className="p-3">{TYPE_LABELS[doc.document_type] ?? doc.document_type}</td><td className="p-3"><StatusPill status={doc.status} /></td><td className="p-3">{doc.created_by_display ?? doc.created_by_username ?? 'سیستم'}{doc.created_by_role ? ` — ${doc.created_by_role}` : ''}</td><td className="p-3 tabular-nums">{number(doc.item_count)}</td><td className="p-3 whitespace-nowrap">{date(doc.created_at)}</td><td className="p-3"><button onClick={() => void openDocument(doc.id)} className="font-bold text-pink-800 hover:text-pink-950">مشاهده و عملیات</button></td></tr>)}</tbody>
+          <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="border-b border-gray-100 text-center text-gray-500"><th className="p-3">شماره سند</th><th className="p-3">نوع</th><th className="p-3">وضعیت</th><th className="p-3">ثبت‌کننده</th><th className="p-3">تعداد ردیف</th><th className="p-3">تاریخ</th><th className="p-3">جزئیات</th></tr></thead>
+            <tbody>{documents.map(doc=><tr key={doc.id} className="border-b border-gray-50 last:border-0 text-center"><td className="p-3 font-bold text-gray-800">{doc.document_number}</td><td className="p-3">{TYPE_LABELS[doc.document_type] ?? doc.document_type}</td><td className="p-3"><StatusPill status={doc.status} /></td><td className="p-3">{doc.created_by_display ?? doc.created_by_username ?? 'سیستم'}{doc.created_by_role ? ` — ${doc.created_by_role}` : ''}</td><td className="p-3 tabular-nums">{number(doc.item_count)}</td><td className="p-3 whitespace-nowrap">{date(doc.created_at)}</td><td className="p-3"><button onClick={() => void openDocument(doc.id)} className="font-bold text-pink-800 hover:text-pink-950">مشاهده و عملیات</button></td></tr>)}</tbody>
           </table>{!documents.length && <p className="py-8 text-center text-sm text-gray-500">سندی با این مشخصات پیدا نشد.</p>}</div>
           <div className="mt-4 flex items-center justify-between text-sm"><span className="text-gray-500">مجموع {number(docCount)} سند</span><div className="flex gap-2"><button disabled={page<=1} onClick={()=>setPage(p=>p-1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">قبلی</button><span className="px-2 py-2">صفحه {number(page)}</span><button disabled={documents.length===0 || page*20>=docCount} onClick={()=>setPage(p=>p+1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">بعدی</button></div></div>
         </section>
@@ -376,11 +383,11 @@ export default function InventoryDashboardPage() {
 
       {(detailLoading || selected) && <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-8" onClick={()=>{setSelected(null);setHistory([]);}}><div role="dialog" aria-modal="true" aria-label="جزئیات و عملیات سند انبار" className="my-4 w-full max-w-5xl rounded-2xl bg-white p-5 shadow-2xl sm:p-7" onClick={e=>e.stopPropagation()}>
         {detailLoading ? <p className="py-12 text-center">در حال دریافت جزئیات...</p> : selected && <>
-          <div className="flex items-start justify-between gap-3"><div><p className="section-label">جزئیات و گردش سند انبار</p><h2 className="text-2xl font-bold">{selected.document_number}</h2><p className="mt-1 text-sm text-gray-500">{TYPE_LABELS[selected.document_type] ?? selected.document_type} · {date(selected.created_at)}</p></div><button onClick={()=>{setSelected(null);setHistory([]);}} className="rounded-lg border px-3 py-2 text-sm">بستن</button></div>
-          <div className="mt-5 flex flex-wrap items-center gap-3"><StatusPill status={selected.status}/><span className="text-sm text-gray-600">ثبت‌کننده: {selected.created_by_display ?? selected.created_by_username ?? 'سیستم'}{selected.created_by_role ? ` — ${selected.created_by_role}` : ''}</span><span className="text-sm text-gray-600">تعداد ردیف: {number(selected.items.length)}</span></div>
+          <div className="relative flex items-center justify-center gap-3 text-center"><div><p className="section-label">جزئیات و گردش سند انبار</p><h2 className="text-2xl font-bold">{selected.document_number}</h2><p className="mt-1 text-sm text-gray-500">{TYPE_LABELS[selected.document_type] ?? selected.document_type} · {date(selected.created_at)}</p></div><button onClick={()=>{setSelected(null);setHistory([]);}} className="rounded-lg border px-3 py-2 text-sm">بستن</button></div>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-center"><StatusPill status={selected.status}/><span className="text-sm text-gray-600">ثبت‌کننده: {selected.created_by_display ?? selected.created_by_username ?? 'سیستم'}{selected.created_by_role ? ` — ${selected.created_by_role}` : ''}</span><span className="text-sm text-gray-600">تعداد ردیف: {number(selected.items.length)}</span></div>
           {canEditDraft && <section className="mt-6 rounded-xl border border-pink-100 bg-pink-50/40 p-4"><h3 className="font-bold text-pink-950">افزودن کالا به پیش‌نویس</h3><p className="mt-1 text-xs text-gray-500">شماره بچ و تاریخ انقضا اختیاری هستند؛ در صورت نداشتن شماره بچ، موجودی با عنوان «بدون بچ» ثبت می‌شود. خروج کالا با تخصیص خودکار FEFO انجام می‌شود.</p>
             <form onSubmit={addItem} className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label="SKU / محصول *"><select required value={itemForm.variant} onChange={e=>setItemForm(p=>({...p,variant:e.target.value}))} className={inputClass}><option value="">انتخاب کالا</option>{thresholds.map(row=><option key={row.variant_id} value={row.variant_id}>{row.sku} — {row.product_name}</option>)}</select></Field>
+              <Field label="SKU / محصول *"><select required value={itemForm.variant} onChange={e=>setItemForm(p=>({...p,variant:e.target.value}))} className={inputClass}><option value="">انتخاب کالا</option>{documentProducts.map(row=><option key={row.variant_id} value={row.variant_id}>{row.sku} — {row.product_name}</option>)}</select></Field>
               <Field label="تعداد *"><input required type="number" min="1" step="1" value={itemForm.quantity} onChange={e=>setItemForm(p=>({...p,quantity:e.target.value}))} className={inputClass} /></Field>
               <Field label="جهت عملیات">{fixedDirection ? <input readOnly value={itemDirection==='inbound'?'ورودی':'خروجی'} className={inputClass+' bg-gray-50'} /> : <select value={itemForm.direction} onChange={e=>setItemForm(p=>({...p,direction:e.target.value}))} className={inputClass}><option value="inbound">ورودی</option><option value="outbound">خروجی</option></select>}</Field>
               {itemForm.direction==='inbound' && <><Field label="شماره بچ جدید (اختیاری)"><input value={itemForm.new_batch_number} onChange={e=>setItemForm(p=>({...p,new_batch_number:e.target.value}))} className={inputClass} /></Field><Field label="تاریخ انقضا"><input type="date" value={itemForm.new_batch_expiration_date} onChange={e=>setItemForm(p=>({...p,new_batch_expiration_date:e.target.value}))} className={inputClass} /></Field><Field label="بهای واحد (تومان)"><input type="number" min="0" step="1" value={itemForm.unit_cost} onChange={e=>setItemForm(p=>({...p,unit_cost:e.target.value}))} className={inputClass} /></Field></>}
