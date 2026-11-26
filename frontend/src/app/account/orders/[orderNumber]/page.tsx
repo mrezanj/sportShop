@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { createReturnRequest, fetchInvoice, fetchOrderDetail, fetchReturnRequests, type OrderDetail, type ReturnRequestRecord } from '@/lib/api';
+import { createReturnRequest, fetchInvoice, fetchOrderDetail, fetchReturnRequests, toAbsoluteUrl, type OrderDetail, type ReturnRequestRecord } from '@/lib/api';
 
 function formatOrderDate(value: string) {
   const date = new Date(value);
@@ -241,7 +241,7 @@ function OrderDetailContent() {
                 <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-pink-100">
                   {item.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.image_url} alt={item.product_name} className="h-full w-full object-cover" />
+                    <img src={toAbsoluteUrl(item.image_url) || undefined} alt={item.product_name} className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-xs text-pink-300">—</div>
                   )}
