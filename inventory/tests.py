@@ -1766,6 +1766,47 @@ class InventoryDocumentWorkflowTests(TestCase):
             ).exists()
         )
 
+    def test_inbound_document_accepts_optional_batch_and_expiration(self):
+        document = create_inventory_document(
+            user=self.creator,
+            document_number="INBOUND-NO-BATCH-001",
+            document_type="inbound",
+        )
+
+        add_inventory_document_item(
+            user=self.creator,
+            document_id=document.id,
+            variant=self.variant,
+            quantity=4,
+            direction="inbound",
+        )
+        add_inventory_document_item(
+            user=self.creator,
+            document_id=document.id,
+            variant=self.variant,
+            quantity=2,
+            direction="inbound",
+            new_batch_expiration_date=timezone.localdate() + timedelta(days=45),
+        )
+
+        submit_inventory_document(user=self.creator, document_id=document.id)
+        review_inventory_document(user=self.reviewer, document_id=document.id)
+        approve_inventory_document(user=self.approver, document_id=document.id)
+
+        movements = list(
+            InventoryMovement.objects.filter(document=document).select_related("batch")
+        )
+        self.assertEqual(len(movements), 2)
+        self.assertEqual({movement.batch.batch_number for movement in movements}, {""})
+        self.assertEqual(
+            {movement.batch.expiration_date for movement in movements},
+            {None, timezone.localdate() + timedelta(days=45)},
+        )
+        self.assertTrue(
+            all(movement.batch.status == "available" for movement in movements)
+        )
+        self.assertEqual(sum(movement.quantity_delta for movement in movements), 6)
+
     def test_return_document_creates_quarantined_batch(self):
         return_document = create_inventory_document(
             user=self.creator,
@@ -1779,7 +1820,6 @@ class InventoryDocumentWorkflowTests(TestCase):
             variant=self.variant,
             quantity=3,
             direction="inbound",
-            new_batch_number="RETURN-BATCH-001",
         )
 
         submit_inventory_document(
@@ -1801,6 +1841,7 @@ class InventoryDocumentWorkflowTests(TestCase):
 
         self.assertEqual(movement.movement_type, "return")
         self.assertEqual(movement.quantity_delta, 3)
+        self.assertEqual(movement.batch.batch_number, "")
         self.assertEqual(movement.batch.status, "quarantined")
 
         from .services import get_batch_available_quantity
