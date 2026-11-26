@@ -2785,7 +2785,7 @@ class InventoryDocumentAPITests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_complete_inbound_document_workflow(self):
+    def test_complete_unbatched_inbound_document_workflow(self):
         self.client.force_authenticate(user=self.creator)
 
         response = self.client.post(
@@ -2808,7 +2808,6 @@ class InventoryDocumentAPITests(TestCase):
                 "variant": self.variant.id,
                 "quantity": 5,
                 "direction": "inbound",
-                "new_batch_number": "API-BATCH-001",
             },
             format="json",
         )
@@ -2854,7 +2853,7 @@ class InventoryDocumentAPITests(TestCase):
 
         batch = InventoryBatch.objects.get(
             variant=self.variant,
-            batch_number="API-BATCH-001",
+            batch_number="",
         )
 
         movement = InventoryMovement.objects.get(document=document)
