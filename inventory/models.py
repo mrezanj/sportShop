@@ -638,7 +638,8 @@ class InventoryMovement(models.Model):
         raise ValidationError("Inventory movements cannot be deleted.")
 
     def __str__(self):
-        return f"{self.batch.batch_number} - " f"{self.quantity_delta:+d}"
+        batch_label = self.batch.batch_number or "بدون بچ"
+        return f"{batch_label} - {self.quantity_delta:+d}"
 
 
 class ReservationAllocation(models.Model):
@@ -683,9 +684,10 @@ class ReservationAllocation(models.Model):
         ]
 
     def __str__(self):
+        batch_label = self.batch.batch_number or "بدون بچ"
         return (
             f"{self.reservation.order.order_number} - "
-            f"{self.batch.batch_number} - {self.quantity}"
+            f"{batch_label} - {self.quantity}"
         )
 
 
