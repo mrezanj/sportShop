@@ -49,7 +49,7 @@ export default function PricingAdminPage() {
   }, [token, historySku]);
 
   useEffect(() => {
-    if (token && user?.is_employee) void loadHistory();
+    if (token && user && (user.is_superuser || user.permissions.includes('catalog.can_manage_product_prices'))) void loadHistory();
   }, [token, user, loadHistory]);
 
   const submitBulk = async (event: FormEvent<HTMLFormElement>) => {
