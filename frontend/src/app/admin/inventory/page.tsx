@@ -302,7 +302,7 @@ export default function InventoryDashboardPage() {
           </div>
         </header>
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
-        {notice && <div role="status" className="rounded-xl border border-pink-200 bg-white px-4 py-3 text-sm text-pink-900">{notice}</div>}
+        {notice && <div role="status" className="rounded-xl border border-pink-200 bg-pink-50 px-4 py-3 text-sm text-pink-900">{notice}</div>}
 
         {summary && <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Metric title="تعداد SKU فعال" value={summary.sku_count} detail="تنوع کالای فعال" />
@@ -320,7 +320,7 @@ export default function InventoryDashboardPage() {
           <StockTable rows={lowStock} />
         </section>
 
-        <section className="rounded-2xl border border-pink-100 bg-white p-4 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm sm:p-6">
           <div className="mb-4"><h2 className="text-xl">مدیریت حداقل موجودی SKU</h2><p className="mt-1 text-xs text-gray-500">تغییر حداقل موجودی با مجوز مدیر انجام می‌شود.</p></div>
           <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b border-gray-100 text-right text-gray-500"><th className="p-3">SKU / محصول</th><th className="p-3">قابل فروش</th><th className="p-3">حداقل فعلی</th><th className="p-3">حداقل جدید</th><th className="p-3">عملیات</th></tr></thead>
             <tbody>{thresholds.slice(0, 30).map(row => <tr key={row.variant_id} className="border-b border-gray-50 last:border-0"><td className="p-3"><strong className="block text-gray-800">{row.sku}</strong><span className="text-xs text-gray-500">{row.product_name}</span></td><td className="p-3 tabular-nums">{number(row.available)}</td><td className="p-3 tabular-nums">{number(row.minimum_quantity)}</td><td className="p-3"><input aria-label={`حداقل موجودی ${row.sku}`} inputMode="numeric" value={thresholdDrafts[row.variant_id] ?? String(row.minimum_quantity)} onChange={e => setThresholdDrafts(prev => ({...prev, [row.variant_id]: e.target.value}))} className="w-24 rounded-lg border border-gray-200 px-3 py-2 outline-none focus:border-pink-500" /></td><td className="p-3"><button disabled={!canManageThreshold || savingThreshold === row.variant_id} onClick={() => void saveThreshold(row)} className="rounded-lg bg-pink-800 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{savingThreshold === row.variant_id ? 'در حال ذخیره' : 'ذخیره'}</button></td></tr>)}</tbody>
@@ -394,7 +394,7 @@ function Field({label,children}:{label:string;children:ReactNode}) {
   return <label className="block text-sm"><span className="mb-1.5 block text-xs font-semibold text-gray-600">{label}</span>{children}</label>;
 }
 function Metric({title,value,detail,warning=false}:{title:string;value:number;detail:string;warning?:boolean}) {
-  return <div className={`rounded-2xl border bg-white p-4 shadow-sm sm:p-5 ${warning?'border-amber-200':'border-pink-100'}`}><p className="text-xs font-semibold text-gray-500">{title}</p><p className={`mt-2 text-3xl font-extrabold tabular-nums ${warning?'text-amber-700':'text-pink-950'}`}>{number(value)}</p><p className="mt-1 text-[11px] text-gray-400">{detail}</p></div>;
+  return <div className={`rounded-2xl border bg-gradient-to-br from-white to-rose-50 p-4 shadow-sm sm:p-5 ${warning?'border-amber-200':'border-rose-200'}`}><p className="text-xs font-semibold text-gray-500">{title}</p><p className={`mt-2 text-3xl font-extrabold tabular-nums ${warning?'text-amber-700':'text-pink-950'}`}>{number(value)}</p><p className="mt-1 text-[11px] text-gray-400">{detail}</p></div>;
 }
 function StatusPill({status}:{status:string}) {
   const tone = status==='approved'?'bg-emerald-50 text-emerald-800':status==='rejected'||status==='cancelled'?'bg-red-50 text-red-700':status==='draft'?'bg-gray-100 text-gray-700':'bg-amber-50 text-amber-800';
