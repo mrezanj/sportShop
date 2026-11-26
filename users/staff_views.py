@@ -145,11 +145,15 @@ def assign_staff_role(request, user_id):
             len(existing_groups) == 1
             and existing_groups[0].pk == selected_group.pk
             and not target.user_permissions.exists()
+            and not target.is_staff
         ):
             return Response({"success": True, "changed": False, "user": _user_role_data(target)})
 
         target.groups.clear()
         target.groups.add(selected_group)
+        # Django Admin access is reserved for the system superuser.
+        target.is_staff = False
+        target.save(update_fields=["is_staff"])
         # Individual grants are not part of the official role model either.
         target.user_permissions.clear()
 
