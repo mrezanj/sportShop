@@ -146,6 +146,8 @@ def assign_staff_role(request, user_id):
 
         target.groups.clear()
         target.groups.add(selected_group)
+        # Individual grants are not part of the official role model either.
+        target.user_permissions.clear()
 
         content_type = ContentType.objects.get_for_model(User)
         LogEntry.objects.create(
