@@ -67,7 +67,7 @@ export default function CartPage() {
             {items.map((item) => (
               <div
                 key={item.variantId}
-                className="border border-rose-200 rounded-2xl p-4 flex gap-4 bg-rose-50/60 shadow-sm transition-colors hover:border-rose-300"
+                className="border border-pink-300/90 rounded-2xl p-4 flex gap-4 bg-[#f8d8e6] shadow-[0_6px_20px_rgba(131,24,67,0.08)] transition-all hover:bg-[#f5c2d8] hover:border-pink-400"
               >
                 <div className="w-24 h-24 bg-white border border-rose-100 rounded-xl overflow-hidden flex-shrink-0">
                   {item.imageUrl ? (
@@ -142,7 +142,7 @@ export default function CartPage() {
             ))}
           </div>
 
-          <aside className="bg-rose-50/80 border border-rose-200 rounded-2xl p-6 h-fit sticky top-24 shadow-sm">
+          <aside className="bg-[#fff0f6] border border-pink-200 rounded-2xl p-6 h-fit sticky top-24 shadow-[0_6px_20px_rgba(131,24,67,0.06)]">
             <h2 className="font-bold text-pink-900 mb-4">خلاصه سفارش</h2>
 
             <div className="space-y-3 text-sm">
