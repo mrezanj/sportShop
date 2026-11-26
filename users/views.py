@@ -35,8 +35,20 @@ def _staff_flags(user):
     )
     return {
         "is_staff": is_staff,
+        "is_superuser": bool(user.is_superuser),
         "is_employee": is_employee,
         "can_manage_staff": can_manage_staff,
+        "roles": sorted(
+            user.groups.filter(name__in=(
+                "مدیرعامل",
+                "رئیس هیئت‌مدیره",
+                "مدیر داخلی",
+                "حسابدار",
+                "مشاور",
+                "مشتری",
+            )).values_list("name", flat=True)
+        ),
+        "permissions": sorted(user.get_all_permissions()),
     }
 
 
