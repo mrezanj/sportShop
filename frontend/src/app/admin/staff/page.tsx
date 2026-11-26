@@ -97,7 +97,7 @@ export default function StaffManagementPage() {
     }
   }, [token, page, search, request]);
 
-  useEffect(() => { if (token) void load(); }, [token, load]);
+  useEffect(() => { if (token && user?.can_manage_staff) void load(); }, [token, user, load]);
 
   const saveRole = async (row: StaffUser) => {
     const role = draftRoles[row.id];
