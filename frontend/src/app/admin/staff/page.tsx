@@ -127,6 +127,7 @@ export default function StaffManagementPage() {
 
   if (authLoading) return <main className="grid min-h-[50vh] place-items-center">در حال بررسی دسترسی...</main>;
   if (!user || !token) return <main className="container mx-auto px-4 py-16 text-center">برای مدیریت کارکنان وارد حساب شوید.</main>;
+  if (!user.can_manage_staff) return <main className="container mx-auto px-4 py-16 text-center text-amber-800">فقط مدیرعامل یا رئیس هیئت‌مدیره مجاز به مدیریت کارکنان هستند.</main>;
 
   return (
     <main className="min-h-screen bg-page py-8" dir="rtl">
