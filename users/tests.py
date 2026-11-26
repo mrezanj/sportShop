@@ -1395,6 +1395,8 @@ class NormalizeStaffRolesCommandTests(TestCase):
         call_command("normalize_staff_roles")
 
         superuser.refresh_from_db()
+        self.assertTrue(superuser.is_superuser)
+        self.assertTrue(superuser.is_staff)
         self.assertEqual(
             set(superuser.groups.values_list("pk", flat=True)),
             before_groups,
