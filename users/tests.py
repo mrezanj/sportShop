@@ -1020,3 +1020,105 @@ class StaffRoleSetupCommandTests(TestCase):
         self.assertFalse(accountant.permissions.filter(codename="can_approve_inventory_document").exists())
         self.assertTrue(internal.permissions.filter(codename="can_approve_inventory_document").exists())
         self.assertFalse(internal.permissions.filter(codename="can_review_inventory_document").exists())
+
+
+class StaffRoleManagementAPITests(APITestCase):
+    def setUp(self):
+        call_command("setup_staff_roles")
+        self.executive = User.objects.create_user(
+            username="staff-executive",
+            password="test-password",
+        )
+        self.executive.groups.add(Group.objects.get(name="مدیرعامل"))
+        self.token = Token.objects.create(user=self.executive)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+        self.target = User.objects.create_user(
+            username="09120000001",
+            password="test-password",
+        )
+        Profile.objects.create(user=self.target, mobile="09120000001")
+
+    def test_executive_can_list_users_and_assign_business_role(self):
+        response = self.client.get("/api/auth/staff/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(any(row["id"] == self.target.pk for row in response.data["results"]))
+
+        response = self.client.patch(
+            f"/api/auth/staff/{self.target.pk}/role/",
+            {"role": "حسابدار"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["changed"])
+        self.assertEqual(response.data["user"]["roles"], ["حسابدار"])
+        self.target.refresh_from_db()
+        self.assertFalse(self.target.is_staff)
+        self.assertFalse(self.target.is_superuser)
+
+    def test_role_assignment_is_idempotent_and_does_not_duplicate_audit(self):
+        url = f"/api/auth/staff/{self.target.pk}/role/"
+        first = self.client.patch(url, {"role": "مشاور"}, format="json")
+        self.assertEqual(first.status_code, 200)
+        second = self.client.patch(url, {"role": "مشاور"}, format="json")
+        self.assertEqual(second.status_code, 200)
+        self.assertFalse(second.data["changed"])
+        self.assertEqual(
+            self.client.get("/api/auth/staff/history/").data.__len__(),
+            1,
+        )
+
+    def test_executive_cannot_change_own_role(self):
+        response = self.client.patch(
+            f"/api/auth/staff/{self.executive.pk}/role/",
+            {"role": "مشتری"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(self.executive.groups.filter(name="مدیرعامل").exists())
+
+    def test_superuser_role_cannot_be_changed(self):
+        target = User.objects.create_superuser(
+            username="protected-superuser",
+            email="root@example.com",
+            password="test-password",
+        )
+        response = self.client.patch(
+            f"/api/auth/staff/{target.pk}/role/",
+            {"role": "مشتری"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_non_executive_cannot_list_or_assign_staff_roles(self):
+        accountant = User.objects.create_user(
+            username="staff-accountant",
+            password="test-password",
+        )
+        accountant.groups.add(Group.objects.get(name="حسابدار"))
+        token = Token.objects.create(user=accountant)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        self.assertEqual(self.client.get("/api/auth/staff/").status_code, 403)
+        self.assertEqual(
+            self.client.patch(
+                f"/api/auth/staff/{self.target.pk}/role/",
+                {"role": "مشتری"},
+                format="json",
+            ).status_code,
+            403,
+        )
+
+    def test_role_history_records_actor_and_previous_role(self):
+        self.target.groups.add(Group.objects.get(name="مشتری"))
+        response = self.client.patch(
+            f"/api/auth/staff/{self.target.pk}/role/",
+            {"role": "مدیر داخلی"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        history = self.client.get("/api/auth/staff/history/")
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(len(history.data), 1)
+        self.assertEqual(history.data[0]["previous_roles"], ["مشتری"])
+        self.assertEqual(history.data[0]["new_role"], "مدیر داخلی")
