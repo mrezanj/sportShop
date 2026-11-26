@@ -132,17 +132,19 @@ def assign_staff_role(request, user_id):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        previous_roles = list(
-            target.groups.filter(name__in=STAFF_ROLE_NAMES)
-            .order_by("name")
-            .values_list("name", flat=True)
+        existing_groups = list(target.groups.all())
+        previous_group_names = sorted(group.name for group in existing_groups)
+        previous_roles = sorted(
+            group.name for group in existing_groups
+            if group.name in STAFF_ROLE_NAMES
         )
-        if previous_roles == [role_name]:
+
+        # Assigning an official role is authoritative: remove legacy/test groups
+        # too, so their permissions cannot survive a role change.
+        if len(existing_groups) == 1 and existing_groups[0].pk == selected_group.pk:
             return Response({"success": True, "changed": False, "user": _user_role_data(target)})
 
-        existing_groups = list(target.groups.filter(name__in=STAFF_ROLE_NAMES))
-        if existing_groups:
-            target.groups.remove(*existing_groups)
+        target.groups.clear()
         target.groups.add(selected_group)
 
         content_type = ContentType.objects.get_for_model(User)
@@ -155,6 +157,7 @@ def assign_staff_role(request, user_id):
             change_message=json.dumps({
                 "event": "staff_role_changed",
                 "previous_roles": previous_roles,
+                "previous_groups": previous_group_names,
                 "new_role": role_name,
                 "target_user_id": target.pk,
             }, ensure_ascii=False),
