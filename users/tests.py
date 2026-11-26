@@ -1258,7 +1258,7 @@ class StaffRoleManagementAPITests(APITestCase):
         actor.refresh_from_db()
         self.assertTrue(actor.is_superuser)
 
-    def test_last_active_superuser_cannot_be_demoted(self):
+    def test_inactive_superuser_can_be_demoted_without_affecting_last_active_admin(self):
         last_admin = User.objects.create_superuser(
             username="last-system-admin",
             email="last-admin@example.com",
@@ -1271,9 +1271,10 @@ class StaffRoleManagementAPITests(APITestCase):
 
         response = self.client.post(f"/api/auth/staff/{self.executive.pk}/revoke-superuser/")
 
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 200)
         self.executive.refresh_from_db()
-        self.assertTrue(self.executive.is_superuser)
+        self.assertFalse(self.executive.is_superuser)
+        self.assertFalse(self.executive.is_staff)
 
     def test_non_superuser_cannot_revoke_superuser_access(self):
         target = User.objects.create_superuser(
