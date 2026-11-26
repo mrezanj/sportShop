@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.contrib.auth.models import Permission, User
+from django.contrib.auth.models import Group, Permission, User
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -24,8 +24,13 @@ class InventoryDashboardAPITests(TestCase):
         self.manager = User.objects.create_user(username="dashboard_manager", password="test-pass")
         permission = Permission.objects.get(codename="can_view_inventory_reports")
         self.user.user_permissions.add(permission)
-        manager_permission = Permission.objects.get(codename="can_approve_inventory_document")
-        self.manager.user_permissions.add(manager_permission)
+        manager_permissions = Permission.objects.filter(
+            codename__in=[
+                "can_approve_inventory_document",
+                "can_manage_inventory_thresholds",
+            ]
+        )
+        self.manager.user_permissions.add(*manager_permissions)
 
         self.brand = Brand.objects.create(name="Dashboard Brand", slug="dashboard-brand")
         self.category = Category.objects.create(name="Dashboard Category", slug="dashboard-category")
@@ -137,16 +142,8 @@ class InventoryDashboardAPITests(TestCase):
             last_name="رضایی",
             is_staff=True,
         )
-        create_permission = Permission.objects.get(
-            codename="can_create_inventory_document"
-        )
-        review_permission = Permission.objects.get(
-            codename="can_review_inventory_document"
-        )
-        employee.user_permissions.add(
-            create_permission,
-            review_permission,
-        )
+        registrar_group, _ = Group.objects.get_or_create(name="ثبت‌کننده")
+        employee.groups.add(registrar_group)
 
         employee_document = InventoryDocument.objects.create(
             document_number="EMPLOYEE-DISPLAY-001",
@@ -184,7 +181,7 @@ class InventoryDashboardAPITests(TestCase):
         )
         self.assertEqual(
             employee_row["created_by_role"],
-            "ثبت‌کننده / حسابدار",
+            "ثبت‌کننده",
         )
         self.assertEqual(
             employee_row["created_by_username"],
@@ -218,7 +215,7 @@ class InventoryDashboardAPITests(TestCase):
         )
         self.assertEqual(
             history.data[0]["actor_role"],
-            "ثبت‌کننده / حسابدار",
+            "ثبت‌کننده",
         )
         self.assertEqual(
             history.data[0]["actor_username"],
@@ -253,16 +250,15 @@ class InventoryDashboardAPITests(TestCase):
             response.data["created_by_display"],
             employee.username,
         )
-        self.assertEqual(
-            response.data["created_by_role"],
-            "مدیر",
-        )
+        self.assertIsNone(response.data["created_by_role"])
 
     def test_document_history_returns_immutable_log_entries(self):
         self.user.user_permissions.add(
             Permission.objects.get(codename="can_create_inventory_document")
         )
         self.user = User.objects.get(pk=self.user.pk)
+        registrar_group, _ = Group.objects.get_or_create(name="ثبت‌کننده")
+        self.user.groups.add(registrar_group)
         InventoryDocumentLog.objects.create(
             document=self.document,
             action="created",
@@ -278,8 +274,7 @@ class InventoryDashboardAPITests(TestCase):
             response.data[0]["actor_display"],
             self.user.username,
         )
-        # This user has both report-view and document-creation permissions.
-        # The operational creator role takes precedence in the actor label.
+        # The official role label comes from the user's assigned staff group.
         self.assertEqual(
             response.data[0]["actor_role"],
             "ثبت‌کننده",
@@ -332,11 +327,15 @@ class InventoryDashboardAPITests(TestCase):
         self.assertEqual(low_stock.data["count"], 1)
         self.assertEqual(low_stock.data["results"][0]["available"], 0)
 
-    def test_threshold_list_requires_inventory_permission(self):
+    def test_threshold_list_requires_dedicated_management_permission(self):
         self.client.force_authenticate(self.user)
-        response = self.client.get("/api/inventory/thresholds/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data[0]["minimum_quantity"], 0)
+        denied = self.client.get("/api/inventory/thresholds/")
+        self.assertEqual(denied.status_code, 403)
+
+        self.client.force_authenticate(self.manager)
+        allowed = self.client.get("/api/inventory/thresholds/")
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(allowed.data[0]["minimum_quantity"], 0)
 
     def test_summary_reports_threshold_management_permission(self):
         self.client.force_authenticate(self.user)
