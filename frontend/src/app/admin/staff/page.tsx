@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '@/context/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
-const ROLES = ['مدیرعامل', 'رئیس هیئت‌مدیره', 'مدیر داخلی', 'حسابدار', 'مشاور', 'مشتری'] as const;
+const ROLES = ['مدیرعامل', 'رئیس هیئت‌مدیره', 'مدیر داخلی', 'حسابدار', 'ثبت‌کننده', 'مشاور', 'مشتری'] as const;
 type Role = typeof ROLES[number];
 type StaffUser = {
   id: number; mobile: string | null; username: string; first_name: string; last_name: string;
@@ -160,7 +160,7 @@ export default function StaffManagementPage() {
           <div>
             <p className="section-label">مدیریت فروشگاه</p>
             <h1 className="text-3xl font-bold text-pink-950">کارکنان و نقش‌ها</h1>
-            <p className="mt-2 text-sm text-slate-600">تخصیص یکی از شش نقش استاندارد و مشاهده سوابق تغییر نقش</p>
+            <p className="mt-2 text-sm text-slate-600">تخصیص یکی از هفت نقش استاندارد و مشاهده سوابق تغییر نقش</p>
           </div>
           <a href="/admin/inventory" className={buttonClass}>داشبورد انبار</a>
         </header>
