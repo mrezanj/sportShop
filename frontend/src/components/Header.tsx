@@ -170,7 +170,15 @@ export default function Header({ categories }: { categories: Category[] }) {
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-            {user?.is_staff && (
+            {user?.can_manage_staff && (
+              <Link
+                href="/admin/staff"
+                className="hidden md:inline-flex rounded-lg border border-pink-200 px-3 py-2 text-sm font-semibold text-pink-900 hover:bg-pink-50"
+              >
+                مدیریت کارکنان
+              </Link>
+            )}
+            {user?.is_employee && (
               <Link
                 href="/admin/inventory"
                 className="hidden md:inline-flex rounded-lg border border-pink-200 px-3 py-2 text-sm font-semibold text-pink-900 hover:bg-pink-50"
@@ -293,7 +301,14 @@ export default function Header({ categories }: { categories: Category[] }) {
                 ))}
               </div>
 
-              {user?.is_staff && (
+              {user?.can_manage_staff && (
+                <div className="pt-4 mt-4 border-t border-pink-100">
+                  <MobileLink href="/admin/staff" active={pathname.startsWith('/admin/staff')}>
+                    مدیریت کارکنان
+                  </MobileLink>
+                </div>
+              )}
+              {user?.is_employee && (
                 <div className="pt-4 mt-4 border-t border-pink-100">
                   <MobileLink href="/admin/inventory" active={pathname === '/admin/inventory'}>
                     داشبورد انبار
