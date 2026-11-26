@@ -128,7 +128,7 @@ export default function InventoryReportsPage() {
           <button onClick={() => changeTab('movements')} className={tab === 'movements' ? 'rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white' : 'rounded-xl border bg-white px-4 py-2.5 text-sm'}>گردش‌های دفترکل</button>
         </div>
 
-        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm sm:p-6">
           <div className="mb-4 grid gap-3 sm:grid-cols-3">
             <input className={inputClass} value={search} onChange={e => {setSearch(e.target.value);setPage(1);}} placeholder={tab === 'batches' ? 'جست‌وجوی SKU، کالا یا شماره بچ' : 'جست‌وجوی SKU، بچ، سند یا توضیحات'} />
             {tab === 'batches' ? (
