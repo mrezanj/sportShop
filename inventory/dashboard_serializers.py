@@ -43,7 +43,10 @@ def _person_info(user):
     except Profile.DoesNotExist:
         profile = None
 
-    return (profile.mobile if profile and profile.mobile else user.username), None
+    display = user.get_full_name().strip()
+    if not display:
+        display = profile.mobile if profile and profile.mobile else user.username
+    return display, None
 
 
 class InventoryDocumentListSerializer(serializers.ModelSerializer):
