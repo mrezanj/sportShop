@@ -44,6 +44,16 @@ const number = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 const date = (value: string) => new Date(value).toLocaleString('fa-IR', {
   year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
 });
+const dateOnly = (value: string | null | undefined) => {
+  if (!value) return '—';
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(value);
+  const parsed = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12)
+    : new Date(value);
+  return new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(parsed);
+};
 const inputClass = 'w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:border-pink-600 focus:ring-2 focus:ring-pink-100';
 
 export default function InventoryDashboardPage() {
@@ -372,7 +382,7 @@ export default function InventoryDashboardPage() {
             </form>
           </section>}
           <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead><tr className="border-b text-right text-gray-500"><th className="p-3">SKU / کالا</th><th className="p-3">بچ</th><th className="p-3">جهت</th><th className="p-3">تعداد</th><th className="p-3">بهای واحد</th><th className="p-3">تاریخ انقضا</th>{canEditDraft&&<th className="p-3">عملیات</th>}</tr></thead>
-            <tbody>{selected.items.map(item=><tr key={item.id} className="border-b border-gray-50"><td className="p-3"><strong>{item.sku}</strong><span className="block text-xs text-gray-500">{item.product_name}</span></td><td className="p-3">{item.batch_number ?? '—'}{item.new_batch_number ? ` · ${item.new_batch_number}` : ''}</td><td className="p-3">{item.direction==='inbound'?'ورودی':'خروجی'}</td><td className="p-3 tabular-nums">{number(item.quantity)}</td><td className="p-3 tabular-nums">{item.unit_cost===null?'—':number(Number(item.unit_cost))}</td><td className="p-3">{item.batch_expiration_date ?? item.new_batch_expiration_date ?? '—'}</td>{canEditDraft&&<td className="p-3"><button disabled={saving} onClick={()=>void removeItem(item.id)} className="font-bold text-red-700 disabled:opacity-40">حذف</button></td>}</tr>)}</tbody>
+            <tbody>{selected.items.map(item=><tr key={item.id} className="border-b border-gray-50"><td className="p-3"><strong>{item.sku}</strong><span className="block text-xs text-gray-500">{item.product_name}</span></td><td className="p-3">{item.batch_number ?? '—'}{item.new_batch_number ? ` · ${item.new_batch_number}` : ''}</td><td className="p-3">{item.direction==='inbound'?'ورودی':'خروجی'}</td><td className="p-3 tabular-nums">{number(item.quantity)}</td><td className="p-3 tabular-nums">{item.unit_cost===null?'—':number(Number(item.unit_cost))}</td><td className="p-3">{dateOnly(item.batch_expiration_date ?? item.new_batch_expiration_date)}</td>{canEditDraft&&<td className="p-3"><button disabled={saving} onClick={()=>void removeItem(item.id)} className="font-bold text-red-700 disabled:opacity-40">حذف</button></td>}</tr>)}</tbody>
           </table>{!selected.items.length&&<p className="py-6 text-center text-sm text-gray-500">هنوز کالایی به سند اضافه نشده است.</p>}</div>
           {(canEditDraft || canReview || canApprove || canReject) && <section className="mt-6 rounded-xl border border-pink-200 bg-pink-50/70 p-4"><h3 className="font-bold">اقدام روی سند</h3>
             {(canReview || canApprove || canReject) && <div className="mt-3"><label className="mb-1 block text-xs text-gray-600">یادداشت بررسی / دلیل رد</label><textarea rows={2} value={workflowNote} onChange={e=>setWorkflowNote(e.target.value)} className={inputClass} placeholder="برای رد سند، توضیح الزامی است." /></div>}
