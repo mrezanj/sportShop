@@ -72,7 +72,7 @@ export default function StaffManagementPage() {
     return data as T;
   }, [token]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (preserveDrafts = false) => {
     if (!token) return;
     setLoading(true);
     setError('');
@@ -86,9 +86,9 @@ export default function StaffManagementPage() {
       setRows(staff.results);
       setCount(staff.count);
       setHistory(events);
-      setDraftRoles(Object.fromEntries(staff.results.map(row => [
+      setDraftRoles(prev => Object.fromEntries(staff.results.map(row => [
         row.id,
-        (row.roles.length === 1 ? row.roles[0] : 'مشتری') as Role,
+        (preserveDrafts && prev[row.id] ? prev[row.id] : (row.roles.length === 1 ? row.roles[0] : 'مشتری')) as Role,
       ])));
     } catch (err) {
       setError(getRequestErrorMessage(err, 'دریافت اطلاعات کارکنان ناموفق بود.'));
@@ -111,7 +111,7 @@ export default function StaffManagementPage() {
         body: JSON.stringify({ role }),
       });
       setNotice(`نقش ${row.full_name || row.mobile || row.username} به «${role}» تغییر کرد.`);
-      await load();
+      await load(true);
     } catch (err) {
       setError(getRequestErrorMessage(err, 'تغییر نقش انجام نشد.'));
     } finally {
@@ -155,6 +155,9 @@ export default function StaffManagementPage() {
             <input className={inputClass} value={search} onChange={event => setSearch(event.target.value)} placeholder="جست‌وجو با نام، نام خانوادگی یا شماره موبایل" />
             <button className="rounded-xl bg-pink-800 px-5 py-2.5 text-sm font-bold text-white hover:bg-pink-900">جست‌وجو</button>
           </form>
+          <p className="mb-4 text-xs text-slate-600">
+            هر بار ثبت نقش فقط روی همان حساب اعمال می‌شود؛ انتخاب‌های ذخیره‌نشده سایر حساب‌ها پس از ثبت حفظ می‌شوند.
+          </p>
 
           {loading ? <p className="py-10 text-center text-slate-600">در حال دریافت اطلاعات...</p> : error ? (
             <div className="rounded-xl border border-red-200 bg-white p-8 text-center text-sm text-red-800">
