@@ -91,7 +91,7 @@ export default function ReturnsRefundsAdminPage() {
   }, [token]);
 
   useEffect(() => {
-    if (token && user?.is_employee) void load();
+    if (token && user && (user.is_superuser || user.permissions.some((permission) => ['orders.can_review_return_requests', 'orders.can_manage_order_discrepancies', 'payments.can_manage_refunds'].includes(permission)))) void load();
   }, [token, user, load]);
 
   const run = async (key: string, action: () => Promise<unknown>, message: string) => {
@@ -154,12 +154,15 @@ export default function ReturnsRefundsAdminPage() {
 
   if (authLoading) return <main className="grid min-h-[60vh] place-items-center">در حال بررسی دسترسی...</main>;
   if (!user || !token) return <main className="container mx-auto px-4 py-16 text-center">برای ورود به پنل عملیاتی ابتدا وارد حساب کاربری شوید.</main>;
-  if (!user.is_employee) return <main className="container mx-auto px-4 py-16 text-center text-amber-800">این بخش فقط برای کاربران داخلی فروشگاه است.</main>;
+  const canReviewReturns = user.is_superuser || user.permissions.includes('orders.can_review_return_requests');
+  const canReviewRefunds = user.is_superuser || user.permissions.includes('payments.can_manage_refunds');
+  const canReviewDiscrepancies = user.is_superuser || user.permissions.includes('orders.can_manage_order_discrepancies');
+  if (!canReviewReturns && !canReviewRefunds && !canReviewDiscrepancies) return <main className="container mx-auto px-4 py-16 text-center text-amber-800">برای رسیدگی به مرجوعی، بازپرداخت یا مغایرت سفارش مجوز لازم را ندارید.</main>;
 
   const tabs: { id: Tab; label: string; count: number }[] = [
-    { id: 'returns', label: 'درخواست‌های مرجوعی', count: returns.length },
-    { id: 'refunds', label: 'بازپرداخت‌ها', count: refunds.length },
-    { id: 'discrepancies', label: 'مغایرت سفارش‌ها', count: discrepancies.length },
+    ...(canReviewReturns ? [{ id: 'returns' as const, label: 'درخواست‌های مرجوعی', count: returns.length }] : []),
+    ...(canReviewRefunds ? [{ id: 'refunds' as const, label: 'بازپرداخت‌ها', count: refunds.length }] : []),
+    ...(canReviewDiscrepancies ? [{ id: 'discrepancies' as const, label: 'مغایرت سفارش‌ها', count: discrepancies.length }] : []),
   ];
 
   return (
