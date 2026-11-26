@@ -56,6 +56,44 @@ const dateOnly = (value: string | null | undefined) => {
     year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(parsed);
 };
+
+const normalizeDigits = (value: string) => value
+  .replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+  .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+
+const jalaliDateToIso = (value: string): string | null => {
+  const normalized = normalizeDigits(value.trim()).replace(/-/g, '/');
+  const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(normalized);
+  if (!match) return null;
+  const [year, month, day] = match.slice(1).map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  const formatter = new Intl.DateTimeFormat('en-US-u-ca-persian-nu-latn', {
+    year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'UTC',
+  });
+  const candidate = new Date(Date.UTC(year + 621, 2, 20));
+  for (let offset = -3; offset <= 3; offset += 1) {
+    const date = new Date(candidate.getTime() + offset * 86400000);
+    const parts = Object.fromEntries(
+      formatter.formatToParts(date).map(part => [part.type, part.value]),
+    );
+    if (Number(parts.year) === year && Number(parts.month) === month && Number(parts.day) === day) {
+      return date.toISOString().slice(0, 10);
+    }
+  }
+  return null;
+};
+
+const isoToJalaliDate = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return '';
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  const parts = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}/${values.month}/${values.day}`;
+};
 const inputClass = 'w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:border-pink-600 focus:ring-2 focus:ring-pink-100';
 
 export default function InventoryDashboardPage() {
@@ -88,6 +126,7 @@ export default function InventoryDashboardPage() {
     new_batch_expiration_date: '', unit_cost: '', reason: '',
   });
   const [workflowNote, setWorkflowNote] = useState('');
+  const [expirationDateInput, setExpirationDateInput] = useState('');
 
   const loadDashboard = useCallback(async () => {
     if (!token) return;
@@ -147,6 +186,7 @@ export default function InventoryDashboardPage() {
         direction: ['outbound', 'waste'].includes(detail.document_type) ? 'outbound' : 'inbound',
         new_batch_number: '', new_batch_expiration_date: '', unit_cost: '', reason: '',
       });
+      setExpirationDateInput('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطا در دریافت جزئیات سند.');
     } finally {
@@ -210,6 +250,10 @@ export default function InventoryDashboardPage() {
       return;
     }
     const inbound = itemForm.direction === 'inbound';
+    if (inbound && expirationDateInput.trim() && !itemForm.new_batch_expiration_date) {
+      setNotice('تاریخ انقضا را به‌صورت شمسی و با قالب سال/ماه/روز وارد کنید؛ نمونه: ۱۴۰۵/۰۹/۰۶');
+      return;
+    }
     setSaving(true);
     setNotice('');
     try {
@@ -228,6 +272,7 @@ export default function InventoryDashboardPage() {
         ...prev, variant: '', quantity: '1', new_batch_number: '',
         new_batch_expiration_date: '', unit_cost: '', reason: '',
       }));
+      setExpirationDateInput('');
       await refreshSelected();
       setNotice('ردیف به پیش‌نویس اضافه شد.');
     } catch (err) {
@@ -287,10 +332,10 @@ export default function InventoryDashboardPage() {
     !!summary?.can_review_document && selected.created_by_id !== user?.id;
   const canApprove = !!selected && selected.status === 'pending_approval' &&
     !!summary?.can_approve_document && selected.created_by_id !== user?.id &&
-    selected.reviewed_by_id !== user?.id;
+    (!!summary?.is_executive || selected.reviewed_by_id !== user?.id);
   const canReject = canReview || (!!selected && selected.status === 'pending_approval' &&
     !!summary?.can_approve_document && selected.created_by_id !== user?.id &&
-    selected.reviewed_by_id !== user?.id);
+    (!!summary?.is_executive || selected.reviewed_by_id !== user?.id));
   const fixedDirection = selected && selected.document_type !== 'adjustment';
   const itemDirection = selected && ['outbound', 'waste'].includes(selected.document_type)
     ? 'outbound' : 'inbound';
@@ -383,14 +428,14 @@ export default function InventoryDashboardPage() {
 
       {(detailLoading || selected) && <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-8" onClick={()=>{setSelected(null);setHistory([]);}}><div role="dialog" aria-modal="true" aria-label="جزئیات و عملیات سند انبار" className="my-4 w-full max-w-5xl rounded-2xl bg-white p-5 shadow-2xl sm:p-7" onClick={e=>e.stopPropagation()}>
         {detailLoading ? <p className="py-12 text-center">در حال دریافت جزئیات...</p> : selected && <>
-          <div className="relative flex items-center justify-center gap-3 text-center"><div><p className="section-label">جزئیات و گردش سند انبار</p><h2 className="text-2xl font-bold">{selected.document_number}</h2><p className="mt-1 text-sm text-gray-500">{TYPE_LABELS[selected.document_type] ?? selected.document_type} · {date(selected.created_at)}</p></div><button onClick={()=>{setSelected(null);setHistory([]);}} className="rounded-lg border px-3 py-2 text-sm">بستن</button></div>
+          <div className="relative flex min-h-16 items-center justify-center text-center"><div><p className="section-label">جزئیات و گردش سند انبار</p><h2 className="text-2xl font-bold">{selected.document_number}</h2><p className="mt-1 text-sm text-gray-500">{TYPE_LABELS[selected.document_type] ?? selected.document_type} · {date(selected.created_at)}</p></div><button aria-label="بستن پنجره" onClick={()=>{setSelected(null);setHistory([]);}} className="absolute left-0 top-0 rounded-lg border px-3 py-2 text-sm">بستن</button></div>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-center"><StatusPill status={selected.status}/><span className="text-sm text-gray-600">ثبت‌کننده: {selected.created_by_display ?? selected.created_by_username ?? 'سیستم'}{selected.created_by_role ? ` — ${selected.created_by_role}` : ''}</span><span className="text-sm text-gray-600">تعداد ردیف: {number(selected.items.length)}</span></div>
           {canEditDraft && <section className="mt-6 rounded-xl border border-pink-100 bg-pink-50/40 p-4"><h3 className="font-bold text-pink-950">افزودن کالا به پیش‌نویس</h3><p className="mt-1 text-xs text-gray-500">شماره بچ و تاریخ انقضا اختیاری هستند؛ در صورت نداشتن شماره بچ، موجودی با عنوان «بدون بچ» ثبت می‌شود. خروج کالا با تخصیص خودکار FEFO انجام می‌شود.</p>
             <form onSubmit={addItem} className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="SKU / محصول *"><select required value={itemForm.variant} onChange={e=>setItemForm(p=>({...p,variant:e.target.value}))} className={inputClass}><option value="">انتخاب کالا</option>{documentProducts.map(row=><option key={row.variant_id} value={row.variant_id}>{row.sku} — {row.product_name}</option>)}</select></Field>
               <Field label="تعداد *"><input required type="number" min="1" step="1" value={itemForm.quantity} onChange={e=>setItemForm(p=>({...p,quantity:e.target.value}))} className={inputClass} /></Field>
               <Field label="جهت عملیات">{fixedDirection ? <input readOnly value={itemDirection==='inbound'?'ورودی':'خروجی'} className={inputClass+' bg-gray-50'} /> : <select value={itemForm.direction} onChange={e=>setItemForm(p=>({...p,direction:e.target.value}))} className={inputClass}><option value="inbound">ورودی</option><option value="outbound">خروجی</option></select>}</Field>
-              {itemForm.direction==='inbound' && <><Field label="شماره بچ جدید (اختیاری)"><input value={itemForm.new_batch_number} onChange={e=>setItemForm(p=>({...p,new_batch_number:e.target.value}))} className={inputClass} /></Field><Field label="تاریخ انقضا"><input type="date" value={itemForm.new_batch_expiration_date} onChange={e=>setItemForm(p=>({...p,new_batch_expiration_date:e.target.value}))} className={inputClass} /></Field><Field label="بهای واحد (تومان)"><input type="number" min="0" step="1" value={itemForm.unit_cost} onChange={e=>setItemForm(p=>({...p,unit_cost:e.target.value}))} className={inputClass} /></Field></>}
+              {itemForm.direction==='inbound' && <><Field label="شماره بچ جدید (اختیاری)"><input value={itemForm.new_batch_number} onChange={e=>setItemForm(p=>({...p,new_batch_number:e.target.value}))} className={inputClass} /></Field><Field label="تاریخ انقضا (شمسی)"><input type="text" inputMode="numeric" dir="ltr" placeholder="۱۴۰۵/۰۹/۰۶" value={expirationDateInput} onChange={e=>{const value=e.target.value;setExpirationDateInput(value);setItemForm(p=>({...p,new_batch_expiration_date:jalaliDateToIso(value) ?? ''}));}} className={inputClass} /><span className="mt-1 block text-[11px] text-gray-500">قالب شمسی: سال/ماه/روز</span></Field><Field label="بهای واحد (تومان)"><input type="number" min="0" step="1" value={itemForm.unit_cost} onChange={e=>setItemForm(p=>({...p,unit_cost:e.target.value}))} className={inputClass} /></Field></>}
               <Field label="دلیل ردیف"><input value={itemForm.reason} onChange={e=>setItemForm(p=>({...p,reason:e.target.value}))} className={inputClass} /></Field>
               <div className="flex items-end"><button disabled={saving} className="w-full rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving?'در حال ثبت...':'افزودن ردیف'}</button></div>
             </form>
