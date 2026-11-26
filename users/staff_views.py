@@ -119,12 +119,6 @@ def assign_staff_role(request, user_id):
                 {"detail": "برای جلوگیری از قطع دسترسی مدیریتی، تغییر نقش حساب خودتان از این صفحه مجاز نیست."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if target.is_superuser:
-            return Response(
-                {"detail": "نقش حساب‌های دارای دسترسی سیستمی از این بخش قابل تغییر نیست."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         selected_group = Group.objects.filter(name=role_name).first()
         if selected_group is None:
             return Response(
@@ -177,6 +171,81 @@ def assign_staff_role(request, user_id):
     return Response({"success": True, "changed": True, "user": _user_role_data(target)})
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def revoke_superuser_access(request, user_id):
+    if not request.user.is_superuser:
+        return Response(
+            {"detail": "فقط مدیر سیستمی می‌تواند دسترسی مدیر سیستمی حساب دیگری را لغو کند."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    with transaction.atomic():
+        try:
+            target = User.objects.select_for_update().get(pk=user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "کاربر موردنظر یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+
+        if target.pk == request.user.pk:
+            return Response(
+                {"detail": "لغو دسترسی حسابی که با آن وارد شده‌اید مجاز نیست."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not target.is_superuser:
+            return Response(
+                {"detail": "این حساب در حال حاضر دسترسی مدیر سیستمی ندارد."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        active_superuser_ids = list(
+            User.objects.select_for_update()
+            .filter(is_superuser=True, is_active=True)
+            .values_list("pk", flat=True)
+        )
+        if target.is_active and len(active_superuser_ids) <= 1:
+            return Response(
+                {"detail": "دسترسی آخرین مدیر سیستمی فعال قابل لغو نیست. ابتدا یک مدیر سیستمی دیگر ایجاد کنید."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        selected_group = Group.objects.filter(name="مشتری").first()
+        if selected_group is None:
+            return Response(
+                {"detail": "گروه‌های استاندارد ساخته نشده‌اند. ابتدا فرمان setup_staff_roles را اجرا کنید."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        previous_groups = list(target.groups.values_list("name", flat=True))
+        previous_roles = sorted(name for name in previous_groups if name in STAFF_ROLE_NAMES)
+
+        target.is_superuser = False
+        target.is_staff = False
+        target.groups.clear()
+        target.groups.add(selected_group)
+        target.user_permissions.clear()
+        target.save(update_fields=["is_superuser", "is_staff"])
+
+        content_type = ContentType.objects.get_for_model(User)
+        LogEntry.objects.create(
+            user=request.user,
+            content_type=content_type,
+            object_id=str(target.pk),
+            object_repr=str(target),
+            action_flag=CHANGE,
+            change_message=json.dumps({
+                "event": "superuser_access_revoked",
+                "previous_roles": previous_roles,
+                "previous_groups": sorted(previous_groups),
+                "previous_is_superuser": True,
+                "new_role": "مشتری",
+                "target_user_id": target.pk,
+            }, ensure_ascii=False),
+        )
+
+    target.refresh_from_db()
+    return Response({"success": True, "changed": True, "user": _user_role_data(target)})
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def staff_role_history(request):
@@ -187,7 +256,9 @@ def staff_role_history(request):
     entries = LogEntry.objects.filter(
         content_type=content_type,
         action_flag=CHANGE,
-        change_message__contains='"event": "staff_role_changed"',
+    ).filter(
+        Q(change_message__contains='"event": "staff_role_changed"')
+        | Q(change_message__contains='"event": "superuser_access_revoked"')
     ).select_related("user__profile").order_by("-action_time")[:50]
 
     entries = list(entries)
@@ -214,7 +285,7 @@ def staff_role_history(request):
             details = json.loads(entry.change_message)
         except (TypeError, ValueError):
             continue
-        if details.get("event") != "staff_role_changed":
+        if details.get("event") not in ("staff_role_changed", "superuser_access_revoked"):
             continue
         target_user = target_users.get(str(entry.object_id))
         results.append({
