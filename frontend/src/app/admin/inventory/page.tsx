@@ -432,8 +432,18 @@ export default function InventoryDashboardPage() {
 
       {(detailLoading || selected) && <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-8" onClick={()=>{setSelected(null);setHistory([]);}}><div role="dialog" aria-modal="true" aria-label="جزئیات و عملیات سند انبار" className="my-4 w-full max-w-5xl rounded-2xl bg-white p-5 shadow-2xl sm:p-7" onClick={e=>e.stopPropagation()}>
         {detailLoading ? <p className="py-12 text-center">در حال دریافت جزئیات...</p> : selected && <>
-          <div className="relative flex min-h-16 items-center justify-center text-center"><div><p className="section-label">جزئیات و گردش سند انبار</p><h2 className="text-2xl font-bold">{selected.document_number}</h2><p className="mt-1 text-sm text-gray-500">{TYPE_LABELS[selected.document_type] ?? selected.document_type} · {date(selected.created_at)}</p></div><button aria-label="بستن پنجره" onClick={()=>{setSelected(null);setHistory([]);}} className="absolute left-0 top-0 rounded-lg border px-3 py-2 text-sm">بستن</button></div>
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-center"><StatusPill status={selected.status}/><span className="text-sm text-gray-600">ثبت‌کننده: {selected.created_by_display ?? selected.created_by_username ?? 'سیستم'}{selected.created_by_role ? ` — ${selected.created_by_role}` : ''}</span><span className="text-sm text-gray-600">تعداد ردیف: {number(selected.items.length)}</span></div>
+          <div className="relative flex min-h-16 items-start justify-between gap-4 text-right">
+            <div className="flex-1 text-right">
+              <p className="section-label">جزئیات و گردش سند انبار</p>
+              <h2 className="text-2xl font-bold">{selected.document_number}</h2>
+              <p className="mt-1 text-sm text-gray-500">{TYPE_LABELS[selected.document_type] ?? selected.document_type} · {date(selected.created_at)}</p>
+            </div>
+            <button aria-label="بستن پنجره" onClick={()=>{setSelected(null);setHistory([]);}} className="absolute left-0 top-0 rounded-lg border px-3 py-2 text-sm">بستن</button>
+          </div>
+          <div className="mt-5 flex flex-col items-start gap-2 text-right">
+            <StatusPill status={selected.status}/>
+            <p className="text-sm text-gray-600">ثبت‌کننده: {selected.created_by_display ?? selected.created_by_username ?? 'سیستم'}{selected.created_by_role ? ` — ${selected.created_by_role}` : ''}</p>
+          </div>
           {canEditDraft && <section className="mt-6 rounded-xl border border-pink-100 bg-pink-50/40 p-4"><h3 className="font-bold text-pink-950">افزودن کالا به پیش‌نویس</h3><p className="mt-1 text-xs text-gray-500">شماره بچ و تاریخ انقضا اختیاری هستند؛ در صورت نداشتن شماره بچ، موجودی با عنوان «بدون بچ» ثبت می‌شود. خروج کالا با تخصیص خودکار FEFO انجام می‌شود.</p>
             <form onSubmit={addItem} className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="SKU / محصول *"><select required value={itemForm.variant} onChange={e=>setItemForm(p=>({...p,variant:e.target.value}))} className={inputClass}><option value="">انتخاب کالا</option>{documentProducts.map(row=><option key={row.variant_id} value={row.variant_id}>{row.sku} — {row.product_name}</option>)}</select></Field>
