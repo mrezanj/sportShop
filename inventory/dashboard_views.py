@@ -303,5 +303,8 @@ class InventorySummaryAPIView(APIView):
             "can_create_document": request.user.has_perm("inventory.can_create_inventory_document"),
             "can_review_document": request.user.has_perm("inventory.can_review_inventory_document"),
             "can_approve_document": request.user.has_perm("inventory.can_approve_inventory_document"),
+            "is_executive": request.user.groups.filter(
+                name__in=("مدیرعامل", "رئیس هیئت‌مدیره")
+            ).exists(),
             "can_view_reports": can_view_reports,
         })
