@@ -2824,6 +2824,15 @@ class InventoryDocumentAPITests(TestCase):
         self.assertEqual(response.data["status"], "pending_review")
 
         self.client.force_authenticate(user=self.reviewer)
+        response = self.client.get("/api/inventory/documents/")
+        self.assertEqual(response.status_code, 200)
+        listed_document = next(
+            item for item in response.data["results"]
+            if item["id"] == document_id
+        )
+        self.assertEqual(listed_document["item_count"], 1)
+
+        self.client.force_authenticate(user=self.reviewer)
 
         response = self.client.post(
             f"/api/inventory/documents/{document_id}/review/",
@@ -2833,6 +2842,14 @@ class InventoryDocumentAPITests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], "pending_approval")
+
+        response = self.client.get("/api/inventory/documents/")
+        self.assertEqual(response.status_code, 200)
+        listed_document = next(
+            item for item in response.data["results"]
+            if item["id"] == document_id
+        )
+        self.assertEqual(listed_document["item_count"], 1)
 
         self.client.force_authenticate(user=self.approver)
 
