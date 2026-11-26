@@ -117,6 +117,15 @@ function InvoicePageContent() {
             <h2 className="mb-3 font-bold text-gray-900">اقلام فاکتور</h2>
             <div className="invoice-items-scroll overflow-x-auto">
               <table className="invoice-items-table w-full min-w-[760px] border-collapse text-sm">
+                <colgroup>
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '27%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '17%' }} />
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-100 text-gray-700">
                     <th className="border border-gray-200 p-2">ردیف</th>
@@ -168,82 +177,169 @@ function InvoicePageContent() {
       </div>
       <style jsx global>{`
         @media print {
-          @page { size: A4 landscape; margin: 8mm; }
-          html, body {
-            background: #fff !important;
-            margin: 0 !important;
-            min-height: 0 !important;
+          @page {
+            size: A4 landscape;
+            margin: 7mm;
           }
+
+          html,
           body {
-            display: block !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          .site-header, .site-footer, .invoice-screen-actions {
-            display: none !important;
-          }
-          .invoice-page-root {
-            display: block !important;
+            width: 100% !important;
+            min-width: 0 !important;
             min-height: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #fff !important;
           }
+
+          body:has(.invoice-page-root) {
+            display: block !important;
+            position: static !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          body:has(.invoice-page-root) .site-header,
+          body:has(.invoice-page-root) .site-footer,
+          body:has(.invoice-page-root) .invoice-screen-actions {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          .invoice-page-root {
+            display: block !important;
+            width: 100% !important;
+            min-height: 0 !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: #fff !important;
+          }
+
           .invoice-page-shell {
+            display: block !important;
             width: 100% !important;
             max-width: none !important;
             margin: 0 !important;
             padding: 0 !important;
           }
+
           .invoice-paper {
+            display: block !important;
             width: 100% !important;
+            max-width: none !important;
             margin: 0 !important;
-            padding: 2mm 0 !important;
+            padding: 0 !important;
             border: 0 !important;
             border-radius: 0 !important;
             background: #fff !important;
             box-shadow: none !important;
-            -webkit-box-decoration-break: clone;
-            box-decoration-break: clone;
           }
+
+          .invoice-paper > header {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            justify-content: space-between !important;
+            gap: 8mm !important;
+            padding-bottom: 4mm !important;
+          }
+
           .invoice-party-grid {
+            display: grid !important;
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             gap: 4mm !important;
           }
+
           .invoice-party-card {
+            min-width: 0 !important;
+            padding: 3mm !important;
             break-inside: avoid;
             page-break-inside: avoid;
-            padding: 3mm !important;
           }
+
           .invoice-notice {
-            margin: 4mm 0 !important;
+            margin: 3mm 0 !important;
             padding: 2mm 3mm !important;
             background: #fff !important;
           }
-          .invoice-items-section { margin-top: 5mm !important; }
-          .invoice-items-scroll { overflow: visible !important; }
+
+          .invoice-items-section {
+            width: 100% !important;
+            margin-top: 4mm !important;
+          }
+
+          .invoice-items-scroll {
+            width: 100% !important;
+            overflow: visible !important;
+          }
+
           .invoice-items-table {
+            display: table !important;
             width: 100% !important;
             min-width: 0 !important;
+            max-width: 100% !important;
             table-layout: fixed !important;
-            font-size: 7pt !important;
+            border-collapse: collapse !important;
+            font-size: 7.5pt !important;
           }
-          .invoice-items-table th, .invoice-items-table td {
-            padding: 1.5mm !important;
+
+          .invoice-items-table th,
+          .invoice-items-table td {
+            box-sizing: border-box !important;
+            padding: 1.6mm 1mm !important;
             white-space: normal !important;
             overflow-wrap: anywhere !important;
+            word-break: normal !important;
+            line-height: 1.45 !important;
+            vertical-align: middle !important;
           }
+
+          .invoice-items-table th {
+            font-weight: 700 !important;
+          }
+
+          .invoice-items-table th:nth-child(5),
+          .invoice-items-table th:nth-child(6),
+          .invoice-items-table th:nth-child(7),
+          .invoice-items-table td:nth-child(5),
+          .invoice-items-table td:nth-child(6),
+          .invoice-items-table td:nth-child(7) {
+            direction: ltr !important;
+            text-align: right !important;
+            font-variant-numeric: tabular-nums;
+          }
+
           .invoice-items-table tr {
             break-inside: avoid;
             page-break-inside: avoid;
           }
-          .invoice-totals, .invoice-print-footer {
+
+          .invoice-totals {
+            width: 100% !important;
+            max-width: 85mm !important;
+            margin-top: 4mm !important;
+            margin-right: auto !important;
             break-inside: avoid;
             page-break-inside: avoid;
           }
-          .invoice-totals { margin-top: 5mm !important; }
-          .invoice-print-footer { margin-top: 6mm !important; }
-          a { color: inherit !important; text-decoration: none !important; }
+
+          .invoice-print-footer {
+            margin-top: 5mm !important;
+            padding-top: 2mm !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+
+          a {
+            color: inherit !important;
+            text-decoration: none !important;
+          }
         }
       `}</style>
     </main>
