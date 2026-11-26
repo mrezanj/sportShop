@@ -112,7 +112,7 @@ export default function InventoryReportsPage() {
 
   if (authLoading) return <div className="min-h-[50vh] grid place-items-center">در حال بررسی دسترسی...</div>;
   if (!user || !token) return <main className="container mx-auto px-4 py-16 text-center">برای مشاهده گزارش انبار وارد حساب شوید. <a className="text-pink-800 underline" href="/login">ورود</a></main>;
-  if (!user.is_employee) return <main className="container mx-auto px-4 py-16 text-center">این بخش فقط برای کارکنان فروشگاه در دسترس است.</main>;
+  if (!user.is_superuser && !user.permissions.includes('inventory.can_view_inventory_reports')) return <main className="container mx-auto px-4 py-16 text-center">برای مشاهده گزارش انبار مجوز لازم را ندارید.</main>;
 
   const currentCount = tab === 'batches' ? batchData?.count ?? 0 : movementData?.count ?? 0;
   const hasPrevious = tab === 'batches' ? !!batchData?.previous : !!movementData?.previous;
