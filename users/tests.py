@@ -1227,6 +1227,26 @@ class StaffRoleManagementAPITests(APITestCase):
             403,
         )
 
+    def test_customer_cannot_access_staff_management_apis(self):
+        customer = User.objects.create_user(
+            username="staff-customer",
+            password="test-password",
+        )
+        customer.groups.add(Group.objects.get(name="مشتری"))
+        token = Token.objects.create(user=customer)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        self.assertEqual(self.client.get("/api/auth/staff/").status_code, 403)
+        self.assertEqual(self.client.get("/api/auth/staff/history/").status_code, 403)
+        self.assertEqual(
+            self.client.patch(
+                f"/api/auth/staff/{self.target.pk}/role/",
+                {"role": "حسابدار"},
+                format="json",
+            ).status_code,
+            403,
+        )
+
     def test_role_history_records_actor_and_previous_role(self):
         self.target.groups.add(Group.objects.get(name="مشتری"))
         response = self.client.patch(
