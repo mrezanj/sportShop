@@ -51,6 +51,7 @@ export default function StaffManagementPage() {
   const [draftRoles, setDraftRoles] = useState<Record<number, Role>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<number | null>(null);
+  const [revoking, setRevoking] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -118,6 +119,29 @@ export default function StaffManagementPage() {
       setSaving(null);
     }
   };
+
+  const revokeSuperuser = async (row: StaffUser) => {
+    if (!user?.is_superuser || !row.is_superuser || row.id === user.id) return;
+    const label = row.full_name || row.mobile || row.username;
+    const confirmed = window.confirm(
+      `آیا مطمئن هستید دسترسی مدیر سیستمی حساب «${label}» لغو شود؟ این حساب به مشتری عادی تبدیل می‌شود و دسترسی‌های مدیریتی آن حذف خواهد شد.`
+    );
+    if (!confirmed) return;
+
+    setRevoking(row.id);
+    setError('');
+    setNotice('');
+    try {
+      await request(`staff/${row.id}/revoke-superuser/`, { method: 'POST' });
+      setNotice(`دسترسی مدیر سیستمی حساب ${label} لغو شد و نقش آن به مشتری تغییر کرد.`);
+      await load(true);
+    } catch (err) {
+      setError(getRequestErrorMessage(err, 'لغو دسترسی مدیر سیستمی انجام نشد.'));
+    } finally {
+      setRevoking(null);
+    }
+  };
+
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -188,7 +212,17 @@ export default function StaffManagementPage() {
                           {ROLES.map(role => <option key={role} value={role}>{role}</option>)}
                         </select>
                       </td>
-                      <td><button type="button" className="rounded-lg bg-pink-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-40" disabled={saving === row.id || row.is_superuser || row.id === user.id || (row.roles.length === 1 && row.roles[0] === draftRoles[row.id])} onClick={() => void saveRole(row)}>{saving === row.id ? 'در حال ذخیره...' : 'ثبت نقش'}</button></td>
+                      <td className="space-y-2">
+                        {row.is_superuser ? (
+                          user.is_superuser && row.id !== user.id ? (
+                            <button type="button" className="block rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40" disabled={revoking === row.id} onClick={() => void revokeSuperuser(row)}>
+                              {revoking === row.id ? 'در حال لغو دسترسی...' : 'لغو دسترسی ادمین'}
+                            </button>
+                          ) : <span className="text-xs text-slate-500">حساب مدیر سیستمی محافظت‌شده</span>
+                        ) : (
+                          <button type="button" className="rounded-lg bg-pink-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-40" disabled={saving === row.id || row.id === user.id || (row.roles.length === 1 && row.roles[0] === draftRoles[row.id])} onClick={() => void saveRole(row)}>{saving === row.id ? 'در حال ذخیره...' : 'ثبت نقش'}</button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
