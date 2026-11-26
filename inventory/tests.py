@@ -2776,6 +2776,10 @@ class InventoryReportAPITests(TestCase):
         )
 
         self.user.user_permissions.add(threshold_permission)
+        # Django caches permissions on the User instance after the first has_perm() call.
+        # Reload it so the newly assigned permission is visible to the next request.
+        self.user = User.objects.get(pk=self.user.pk)
+        self.client.force_authenticate(user=self.user)
         self.assertEqual(self.client.get("/api/inventory/thresholds/").status_code, 200)
         response = self.client.put(
             f"/api/inventory/thresholds/{self.variant.id}/",
