@@ -61,6 +61,7 @@ class Command(BaseCommand):
                 len(current_groups) == 1
                 and current_groups[0].pk == selected_role.pk
                 and not user.user_permissions.exists()
+                and not user.is_staff
             )
             if already_normalized:
                 unchanged += 1
@@ -68,6 +69,9 @@ class Command(BaseCommand):
 
             user.groups.set([selected_role])
             user.user_permissions.clear()
+            # Only superusers retain Django Admin access.
+            user.is_staff = False
+            user.save(update_fields=["is_staff"])
             normalized += 1
 
         self.stdout.write(
