@@ -286,7 +286,7 @@ export default async function HomePage() {
       {/* ===== CATEGORIES ===== */}
       {data.categories.length > 0 && (
         <section className="container mx-auto px-4 py-6 md:py-8">
-          <div className="rounded-3xl border border-pink-300/90 bg-[#f8d8e6] shadow-[0_10px_30px_rgba(131,24,67,0.12)] px-4 md:px-7 py-8 md:py-10">
+          <div className="rounded-3xl border border-pink-300/90 bg-[#f1b6cf] shadow-[0_10px_30px_rgba(131,24,67,0.12)] px-4 md:px-7 py-8 md:py-10">
           <div className="flex items-end justify-between mb-8">
             <div>
               <p className="section-label">دسته‌بندی</p>
