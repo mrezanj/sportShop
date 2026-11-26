@@ -5,14 +5,38 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
-import type { Category } from '@/lib/api';
+import { fetchProfile, type Category } from '@/lib/api';
 
 export default function Header({ categories }: { categories: Category[] }) {
   const pathname = usePathname();
   const { totalItems } = useCart();
-  const { user, loading, isAuthenticated, logout } = useAuth();
+  const { user, token, loading, isAuthenticated, logout } = useAuth();
+  const [profileName, setProfileName] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+
+  useEffect(() => {
+    if (!token) {
+      setProfileName('');
+      return;
+    }
+    let active = true;
+    const loadProfileName = () => {
+      fetchProfile(token)
+        .then((profile) => {
+          if (active) setProfileName([profile.first_name, profile.last_name].filter(Boolean).join(' '));
+        })
+        .catch(() => {
+          if (active) setProfileName('');
+        });
+    };
+    loadProfileName();
+    window.addEventListener('profile-updated', loadProfileName);
+    return () => {
+      active = false;
+      window.removeEventListener('profile-updated', loadProfileName);
+    };
+  }, [token]);
 
   // Auto-close mobile menu on route change
   useEffect(() => {
@@ -163,7 +187,7 @@ export default function Header({ categories }: { categories: Category[] }) {
                   className="text-sm text-gray-700 hover:text-pink-800 px-2 sm:px-3 py-2 rounded-lg hover:bg-pink-50 transition-colors hidden sm:inline-flex items-center gap-1.5"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  <span className="hidden md:inline">{user.mobile}</span>
+                  <span className="hidden md:inline">{profileName || user.mobile}</span>
                   <span className="md:hidden">حساب</span>
                 </Link>
                 <button
@@ -294,7 +318,7 @@ export default function Header({ categories }: { categories: Category[] }) {
               {isAuthenticated && user ? (
                 <>
                   <p className="text-xs text-gray-500 mb-2">
-                    وارد شده با {user.mobile}
+                    {profileName || 'وارد شده با ' + user.mobile}
                   </p>
                   <button
                     onClick={() => {
