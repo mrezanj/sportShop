@@ -117,7 +117,7 @@ export default function AccountPage() {
     <div className="min-h-screen bg-page" dir="rtl">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Profile header */}
-        <div className="bg-pink-50 rounded-xl p-6 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-6 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
           <div>
             <p className="text-xs text-gray-600 mb-1">حساب کاربری</p>
             <p className="text-lg font-bold text-pink-900">
@@ -134,7 +134,7 @@ export default function AccountPage() {
         </div>
 
         {/* Profile form */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-8">
+        <div className="rounded-2xl border border-rose-200 bg-white p-6 mb-8 shadow-sm">
           <h2 className="text-lg font-bold text-pink-900 mb-2">
             اطلاعات پروفایل
           </h2>
@@ -212,7 +212,7 @@ export default function AccountPage() {
         </div>
 
         {/* Orders */}
-        <div>
+        <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm sm:p-6">
           <h1 className="text-xl font-bold text-pink-900 mb-4">
             سفارش‌های من
           </h1>
@@ -224,7 +224,7 @@ export default function AccountPage() {
           )}
 
           {!orders || orders.results.length === 0 ? (
-            <div className="text-center py-16 bg-gray-50 rounded-xl">
+            <div className="text-center py-16 rounded-xl border border-dashed border-rose-200 bg-white">
               <div className="text-5xl mb-3">📦</div>
 
               <p className="text-gray-700 mb-4">
@@ -244,7 +244,7 @@ export default function AccountPage() {
                 <Link
                   key={order.id}
                   href={`/account/orders/${order.order_number}`}
-                  className="block border border-gray-200 rounded-xl p-4 hover:border-pink-300 hover:shadow-sm transition-all bg-white"
+                  className="block rounded-xl border border-rose-200 bg-white p-4 shadow-sm hover:border-pink-400 hover:shadow-md transition-all"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                     <div>
@@ -291,7 +291,7 @@ export default function AccountPage() {
               ))}
             </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );
