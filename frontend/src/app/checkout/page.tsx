@@ -10,6 +10,7 @@ import {
   fetchProvinces,
   fetchCities,
   fetchShippingMethods,
+  fetchProfile,
   createOrder,
   type Province,
   type City,
@@ -64,6 +65,28 @@ export default function CheckoutPage() {
   useEffect(() => {
     fetchProvinces().then(setProvinces);
   }, []);
+
+  // Pre-fill recipient details from the saved customer profile.
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    fetchProfile(token)
+      .then((profile) => {
+        if (!active) return;
+        setForm((current) => ({
+          ...current,
+          first_name: current.first_name || profile.first_name || '',
+          last_name: current.last_name || profile.last_name || '',
+          mobile: current.mobile || profile.mobile,
+        }));
+      })
+      .catch(() => {
+        // Profile defaults are optional; the customer can enter the details manually.
+      });
+    return () => {
+      active = false;
+    };
+  }, [token]);
 
   // Pre-fill mobile.
   useEffect(() => {
