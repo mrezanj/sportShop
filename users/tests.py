@@ -1266,6 +1266,10 @@ class StaffRoleManagementAPITests(APITestCase):
         response = self.client.get("/api/auth/me/")
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["can_manage_staff"])
+        self.assertTrue(response.data["is_superuser"] is False)
+        self.assertEqual(response.data["roles"], ["مدیرعامل"])
+        self.assertIn("catalog.can_manage_catalog", response.data["permissions"])
+        self.assertIn("catalog.can_manage_product_prices", response.data["permissions"])
 
         accountant = User.objects.create_user(
             username="staff-accountant-me",
@@ -1277,7 +1281,12 @@ class StaffRoleManagementAPITests(APITestCase):
         response = self.client.get("/api/auth/me/")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.data["can_manage_staff"])
-
+        self.assertFalse(response.data["is_superuser"])
+        self.assertEqual(response.data["roles"], ["حسابدار"])
+        self.assertIn("inventory.can_create_inventory_document", response.data["permissions"])
+        self.assertIn("inventory.can_review_inventory_document", response.data["permissions"])
+        self.assertNotIn("inventory.can_approve_inventory_document", response.data["permissions"])
+        self.assertNotIn("catalog.can_manage_catalog", response.data["permissions"])
 
 class NormalizeStaffRolesCommandTests(TestCase):
     def setUp(self):
