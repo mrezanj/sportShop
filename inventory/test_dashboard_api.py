@@ -341,6 +341,7 @@ class InventoryDashboardAPITests(TestCase):
             price=1200,
             stock=0,
             sku="DASH-INACTIVE",
+            color="inactive-test-color",
             is_active=False,
         )
         self.user = User.objects.get(pk=self.user.pk)
