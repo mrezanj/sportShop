@@ -6,6 +6,7 @@ ROLE_PERMISSIONS = {
     "مدیر داخلی": [
         "inventory.can_approve_inventory_document",
         "inventory.can_view_inventory_reports",
+        "inventory.can_manage_inventory_thresholds",
         "orders.can_manage_order_status",
         "orders.can_manage_order_shipping_cost",
         "orders.can_manage_order_discrepancies",
