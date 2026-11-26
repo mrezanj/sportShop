@@ -1123,6 +1123,8 @@ class StaffRoleManagementAPITests(APITestCase):
         legacy_group.permissions.add(permission)
         self.target.groups.add(legacy_group)
         self.target.user_permissions.add(permission)
+        self.target.is_staff = True
+        self.target.save(update_fields=["is_staff"])
 
         response = self.client.patch(
             f"/api/auth/staff/{self.target.pk}/role/",
@@ -1138,6 +1140,7 @@ class StaffRoleManagementAPITests(APITestCase):
         )
         self.assertFalse(self.target.user_permissions.exists())
         self.assertFalse(self.target.has_perm(f"{permission.content_type.app_label}.{permission.codename}"))
+        self.assertFalse(self.target.is_staff)
 
     def test_reassigning_same_role_still_clears_direct_permissions(self):
         customer = Group.objects.get(name="مشتری")
@@ -1227,6 +1230,22 @@ class StaffRoleManagementAPITests(APITestCase):
             403,
         )
 
+    def test_is_staff_alone_does_not_make_a_customer_an_employee(self):
+        customer = User.objects.create_user(
+            username="staff-flag-customer",
+            password="test-password",
+            is_staff=True,
+        )
+        customer.groups.add(Group.objects.get(name="مشتری"))
+        token = Token.objects.create(user=customer)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["is_staff"])
+        self.assertFalse(response.data["is_employee"])
+        self.assertFalse(response.data["can_manage_staff"])
+
     def test_customer_cannot_access_staff_management_apis(self):
         customer = User.objects.create_user(
             username="staff-customer",
@@ -1308,6 +1327,8 @@ class NormalizeStaffRolesCommandTests(TestCase):
         legacy.permissions.add(permission)
         user.groups.add(legacy)
         user.user_permissions.add(permission)
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
 
         call_command("normalize_staff_roles")
 
@@ -1317,6 +1338,7 @@ class NormalizeStaffRolesCommandTests(TestCase):
             ["مشتری"],
         )
         self.assertFalse(user.user_permissions.exists())
+        self.assertFalse(user.is_staff)
         self.assertFalse(Group.objects.get(name="مشتری").permissions.exists())
 
     def test_single_official_role_is_preserved_and_legacy_groups_are_removed(self):
