@@ -155,6 +155,62 @@ class InventoryServiceTests(TestCase):
             subtotal=100000 * reservation.quantity,
         )
 
+    def test_unbatched_stock_can_be_reserved_and_sold(self):
+        unbatched = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="",
+            created_by=self.user,
+        )
+        self.create_movement(unbatched, 8)
+
+        inventory = get_variant_inventory(
+            self.variant,
+            today=self.today,
+            now=self.now,
+        )
+        self.assertEqual(inventory["physical"], 8)
+        self.assertEqual(inventory["available"], 8)
+
+        reservation = self.create_reservation(quantity=3)
+        allocate_stock_reservation(reservation, now=self.now)
+
+        allocation = ReservationAllocation.objects.get(reservation=reservation)
+        self.assertEqual(allocation.batch_id, unbatched.id)
+        self.assertEqual(allocation.quantity, 3)
+
+        self.create_order_item(reservation)
+        document = record_order_sale(
+            reservation.order,
+            reservations=[reservation],
+            now=self.now,
+        )
+
+        sale_movement = InventoryMovement.objects.get(document=document)
+        self.assertEqual(sale_movement.batch_id, unbatched.id)
+        self.assertEqual(sale_movement.quantity_delta, -3)
+        self.assertEqual(get_batch_physical_quantity(unbatched), 5)
+
+    def test_multiple_unbatched_lots_are_allowed_but_named_batches_stay_unique(self):
+        first = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="",
+            created_by=self.user,
+        )
+        second = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="",
+            created_by=self.user,
+        )
+        self.assertNotEqual(first.id, second.id)
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InventoryBatch.objects.create(
+                    variant=self.variant,
+                    batch_number="BATCH-001",
+                    created_by=self.user,
+                )
+
     def test_get_variants_inventory_returns_grouped_ledger_inventory(self):
         self.create_movement(self.batch, 10)
 
