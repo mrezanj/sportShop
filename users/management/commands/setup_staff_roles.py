@@ -12,9 +12,11 @@ ROLE_PERMISSIONS = {
         "orders.can_review_return_requests",
     ],
     "حسابدار": [
-        "inventory.can_create_inventory_document",
         "inventory.can_review_inventory_document",
         "inventory.can_view_inventory_reports",
+    ],
+    "ثبت‌کننده": [
+        "inventory.can_create_inventory_document",
     ],
     "مشاور": [],
     "مشتری": [],
