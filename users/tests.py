@@ -1139,6 +1139,23 @@ class StaffRoleManagementAPITests(APITestCase):
         self.assertFalse(self.target.user_permissions.exists())
         self.assertFalse(self.target.has_perm(f"{permission.content_type.app_label}.{permission.codename}"))
 
+    def test_reassigning_same_role_still_clears_direct_permissions(self):
+        customer = Group.objects.get(name="مشتری")
+        permission = Permission.objects.filter(codename="add_user").first()
+        self.target.groups.add(customer)
+        self.target.user_permissions.add(permission)
+
+        response = self.client.patch(
+            f"/api/auth/staff/{self.target.pk}/role/",
+            {"role": "مشتری"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["changed"])
+        self.target.refresh_from_db()
+        self.assertFalse(self.target.user_permissions.exists())
+
     def test_assigning_staff_role_replaces_customer_and_legacy_groups(self):
         customer = Group.objects.get(name="مشتری")
         legacy = Group.objects.create(name="Inventory Creators")
