@@ -119,7 +119,7 @@ class InventoryDocumentListAPIView(APIView):
         _require_any_permission(request.user, INVENTORY_OVERVIEW_PERMISSIONS)
         queryset = _visible_documents(request.user).select_related(
             "created_by", "created_by__profile", "reviewed_by", "reviewed_by__profile", "approved_by", "approved_by__profile", "source_order"
-        ).annotate(item_count=Count("items")).order_by("-created_at", "-pk")
+        ).annotate(item_count=Count("items", distinct=True)).order_by("-created_at", "-pk")
 
         status_filter = request.query_params.get("status")
         type_filter = request.query_params.get("type")
