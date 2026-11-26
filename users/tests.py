@@ -1227,6 +1227,7 @@ class StaffRoleManagementAPITests(APITestCase):
         target.groups.add(legacy)
         if permission:
             target.user_permissions.add(permission)
+        target_token = Token.objects.create(user=target)
         token = Token.objects.create(user=actor)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
 
@@ -1238,6 +1239,7 @@ class StaffRoleManagementAPITests(APITestCase):
         self.assertFalse(target.is_staff)
         self.assertEqual(list(target.groups.values_list("name", flat=True)), ["مشتری"])
         self.assertFalse(target.user_permissions.exists())
+        self.assertFalse(Token.objects.filter(pk=target_token.pk).exists())
         self.assertEqual(response.data["user"]["roles"], ["مشتری"])
         history = self.client.get("/api/auth/staff/history/")
         self.assertEqual(history.status_code, 200)
