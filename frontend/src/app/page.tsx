@@ -258,8 +258,8 @@ export default async function HomePage() {
       </section>
 
       {/* ===== TRUST BAR (upgraded) ===== */}
-      <section className="border-y border-pink-200 bg-pink-100 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-7">
+      <section className="container mx-auto px-4 py-4 md:py-6">
+        <div className="rounded-3xl border border-pink-200/80 bg-white shadow-[0_8px_28px_rgba(131,24,67,0.07)] px-4 md:px-7 py-5 md:py-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             <TrustItem
               icon={<ShieldIcon />}
@@ -287,8 +287,8 @@ export default async function HomePage() {
 
       {/* ===== CATEGORIES ===== */}
       {data.categories.length > 0 && (
-        <section className="bg-rose-100 border-y border-rose-200">
-          <div className="container mx-auto px-4 py-14">
+        <section className="container mx-auto px-4 py-6 md:py-8">
+          <div className="rounded-3xl border border-pink-200/80 bg-[#fff7fa] shadow-[0_10px_30px_rgba(131,24,67,0.08)] px-4 md:px-7 py-8 md:py-10">
           <div className="flex items-end justify-between mb-8">
             <div>
               <p className="section-label">دسته‌بندی</p>
@@ -461,8 +461,8 @@ export default async function HomePage() {
 
       {/* ===== BRANDS ===== */}
       {data.brands.length > 0 && (
-        <section className="bg-pink-100 border-y border-pink-200">
-          <div className="container mx-auto px-4 py-14">
+        <section className="container mx-auto px-4 py-6 md:py-8">
+          <div className="rounded-3xl border border-pink-200/80 bg-[#fff7fa] shadow-[0_10px_30px_rgba(131,24,67,0.08)] px-4 md:px-7 py-8 md:py-10">
           <div className="text-center mb-8">
             <p className="section-label">برندها</p>
             <h2 className="text-2xl md:text-3xl font-extrabold text-pink-950">
@@ -500,8 +500,8 @@ export default async function HomePage() {
 
       {/* ===== TESTIMONIALS ===== */}
       {data.testimonials.length > 0 && (
-        <section className="bg-rose-100 border-y border-rose-200 py-16 my-6">
-          <div className="container mx-auto px-4">
+        <section className="container mx-auto px-4 py-6 md:py-8">
+          <div className="rounded-3xl border border-pink-200/80 bg-[#fceaf2] shadow-[0_10px_30px_rgba(131,24,67,0.08)] px-4 md:px-7 py-10 md:py-12">
             <div className="text-center mb-10">
               <p className="section-label">نظرات مشتریان</p>
               <h2 className="text-2xl md:text-3xl font-extrabold text-pink-950">
@@ -625,8 +625,8 @@ function ProductSection({
   products: Product[];
 }) {
   return (
-    <section className="bg-rose-100 border-y border-rose-200">
-      <div className="container mx-auto px-4 py-14">
+    <section className="container mx-auto px-4 py-6 md:py-8">
+      <div className="rounded-3xl border border-pink-200/80 bg-[#fceaf2] shadow-[0_10px_30px_rgba(131,24,67,0.08)] px-4 md:px-7 py-8 md:py-10">
       <div className="flex items-end justify-between mb-8">
         <div>
           <p className="section-label">{label}</p>
