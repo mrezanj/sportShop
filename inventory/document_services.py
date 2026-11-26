@@ -339,8 +339,10 @@ def review_inventory_document(
     if document.status != "pending_review":
         raise ValidationError("Only documents pending review can be reviewed.")
 
-    is_ceo = user.groups.filter(name="مدیرعامل").exists()
-    if document.created_by_id == user.id and not is_ceo:
+    is_executive = user.groups.filter(
+        name__in=("مدیرعامل", "رئیس هیئت‌مدیره")
+    ).exists()
+    if document.created_by_id == user.id and not is_executive:
         raise PermissionDenied("The document creator cannot review the same document.")
 
     document.status = "pending_approval"
@@ -640,7 +642,7 @@ def approve_inventory_document(*, user, document_id, note=""):
     if document.reviewed_by_id == user.id and not is_executive:
         raise PermissionDenied("The reviewer cannot approve the same document.")
 
-    if document.created_by_id == user.id and not is_ceo:
+    if document.created_by_id == user.id and not is_executive:
         raise PermissionDenied("The document creator cannot approve the same document.")
 
     items = list(
