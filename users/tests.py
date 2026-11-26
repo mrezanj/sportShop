@@ -208,6 +208,58 @@ class OTPAPITests(APITestCase):
         self.assertTrue(otp.is_used)
         user = User.objects.get(username=self.mobile)
         self.assertTrue(Profile.objects.filter(user=user, mobile=self.mobile).exists())
+        customer_group = Group.objects.get(name="مشتری")
+        self.assertTrue(user.groups.filter(pk=customer_group.pk).exists())
+        self.assertFalse(customer_group.permissions.exists())
+
+    def test_existing_user_otp_login_preserves_existing_roles(self):
+        user = User.objects.create_user(
+            username=self.mobile,
+            password="test-password",
+        )
+        Profile.objects.create(user=user, mobile=self.mobile)
+        legacy_group = Group.objects.create(name="آزمایش انبار - مدیر")
+        accountant_group = Group.objects.create(name="حسابدار")
+        user.groups.add(legacy_group, accountant_group)
+        otp = self.create_otp()
+
+        response = self.client.post(
+            "/api/auth/verify-otp/",
+            {"mobile": self.mobile, "code": self.raw_code},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertQuerySetEqual(
+            user.groups.order_by("name").values_list("name", flat=True),
+            sorted(["آزمایش انبار - مدیر", "حسابدار"]),
+            transform=lambda value: value,
+        )
+        self.assertFalse(user.groups.filter(name="مشتری").exists())
+        otp.refresh_from_db()
+        self.assertTrue(otp.is_used)
+
+    def test_existing_username_without_profile_is_not_reclassified_as_customer(self):
+        user = User.objects.create_user(
+            username=self.mobile,
+            password="test-password",
+        )
+        legacy_group = Group.objects.create(name="آزمایش انبار - ثبت کننده")
+        user.groups.add(legacy_group)
+        self.create_otp()
+
+        response = self.client.post(
+            "/api/auth/verify-otp/",
+            {"mobile": self.mobile, "code": self.raw_code},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertTrue(user.groups.filter(pk=legacy_group.pk).exists())
+        self.assertFalse(user.groups.filter(name="مشتری").exists())
+        self.assertTrue(Profile.objects.filter(user=user, mobile=self.mobile).exists())
 
     def test_wrong_otp_increments_attempt_count(self):
         otp = self.create_otp()
@@ -997,6 +1049,8 @@ class StaffRoleSetupCommandTests(TestCase):
         expected = {"مدیرعامل", "رئیس هیئت‌مدیره", "مدیر داخلی", "حسابدار", "مشاور", "مشتری"}
         self.assertTrue(expected.issubset(set(Group.objects.values_list("name", flat=True))))
         self.assertEqual(Group.objects.filter(name__in=expected).count(), len(expected))
+        customer = Group.objects.get(name="مشتری")
+        self.assertFalse(customer.permissions.exists())
 
     def test_executives_have_equal_business_permissions_without_auth_admin(self):
         call_command("setup_staff_roles")
