@@ -643,21 +643,64 @@ class InventoryDashboardAPITests(TestCase):
         )
 
     def test_executive_can_approve_after_personally_reviewing_document(self):
-        document_id, _accountant = self._create_pending_approval_purchase(
-            "DASH-EXECUTIVE-SELF-REVIEW"
+        creator_permission = Permission.objects.get(
+            codename="can_create_inventory_document"
+        )
+        self.user.user_permissions.add(creator_permission)
+        self.manager.user_permissions.add(
+            Permission.objects.get(codename="can_review_inventory_document")
         )
         self.manager.groups.add(Group.objects.create(name="مدیرعامل"))
+
+        self.client.force_authenticate(self.user)
+        created = self.client.post(
+            "/api/inventory/documents/create/",
+            {
+                "document_number": "DASH-EXECUTIVE-SELF-REVIEW",
+                "document_type": "purchase",
+                "reason": "Executive override test",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201)
+        document_id = created.data["id"]
+
+        added = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 3,
+                "direction": "inbound",
+                "new_batch_number": "DASH-EXECUTIVE-SELF-REVIEW-BATCH",
+            },
+            format="json",
+        )
+        self.assertEqual(added.status_code, 201)
+        submitted = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(submitted.status_code, 200)
+
         self.client.force_authenticate(self.manager)
+        reviewed = self.client.post(
+            f"/api/inventory/documents/{document_id}/review/",
+            {"note": "بررسی استثنایی مدیرعامل"},
+            format="json",
+        )
+        self.assertEqual(reviewed.status_code, 200)
 
         approved = self.client.post(
             f"/api/inventory/documents/{document_id}/approve/",
-            {"note": "مدیریت ارشد؛ تأیید استثنایی"},
+            {"note": "تأیید مدیریتی مدیرعامل"},
             format="json",
         )
 
         self.assertEqual(approved.status_code, 200)
         document = InventoryDocument.objects.get(pk=document_id)
         self.assertEqual(document.status, "approved")
+        self.assertEqual(document.reviewed_by_id, self.manager.id)
         self.assertEqual(document.approved_by_id, self.manager.id)
         self.assertEqual(
             InventoryDocumentLog.objects.filter(
