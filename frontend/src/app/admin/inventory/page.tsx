@@ -329,11 +329,15 @@ export default function InventoryDashboardPage() {
   const canEditDraft = !!selected && selected.status === 'draft' &&
     selected.created_by_id === user?.id && !!summary?.can_create_document;
   const canReview = !!selected && selected.status === 'pending_review' &&
-    !!summary?.can_review_document && selected.created_by_id !== user?.id;
+    !!summary?.can_review_document &&
+    (selected.created_by_id !== user?.id || !!summary?.is_ceo);
   const canApprove = !!selected && selected.status === 'pending_approval' &&
-    !!summary?.can_approve_document && selected.created_by_id !== user?.id &&
+    !!summary?.can_approve_document &&
+    (selected.created_by_id !== user?.id || !!summary?.is_ceo) &&
     (!!summary?.is_executive || selected.reviewed_by_id !== user?.id);
-  const canReject = canReview || (!!selected && selected.status === 'pending_approval' &&
+  const canReject = (!!selected && selected.status === 'pending_review' &&
+    !!summary?.can_review_document && selected.created_by_id !== user?.id) ||
+    (!!selected && selected.status === 'pending_approval' &&
     !!summary?.can_approve_document && selected.created_by_id !== user?.id &&
     (!!summary?.is_executive || selected.reviewed_by_id !== user?.id));
   const fixedDirection = selected && selected.document_type !== 'adjustment';
