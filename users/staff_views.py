@@ -5,6 +5,7 @@ from django.contrib.auth.models import Group, User
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import Q
+from rest_framework.authtoken.models import Token
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -230,6 +231,8 @@ def revoke_superuser_access(request, user_id):
         target.groups.add(selected_group)
         target.user_permissions.clear()
         target.save(update_fields=["is_superuser", "is_staff"])
+        # Invalidate existing sessions/tokens for the transferred account.
+        Token.objects.filter(user=target).delete()
 
         content_type = ContentType.objects.get_for_model(User)
         LogEntry.objects.create(
