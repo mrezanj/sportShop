@@ -265,10 +265,10 @@ export default function Footer({ categories }: { categories: Category[] }) {
 
         {/* Bottom bar */}
         <div className="mt-12 pt-6 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-pink-200/70">
-          <p>© {persianYear} مادوان (Madone). تمامی حقوق محفوظ است.</p>
+          <p>© {persianYear} فروشگاه ورزشی مادوان. تمامی حقوق محفوظ است.</p>
           <p className="flex items-center gap-1">
             ساخته شده با <span className="text-pink-400">♥</span> برای
-            ورزشکاران ایران
+            مادوانیای ایران
           </p>
         </div>
       </div>
