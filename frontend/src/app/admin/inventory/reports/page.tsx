@@ -12,7 +12,7 @@ import {
 const number = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 const date = (value: string | null) => {
   if (!value) return '—';
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   const parsed = match
     ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12)
     : new Date(value);
