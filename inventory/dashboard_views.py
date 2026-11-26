@@ -30,6 +30,8 @@ DOCUMENT_VIEW_PERMISSIONS = (
 )
 
 INVENTORY_OVERVIEW_PERMISSIONS = DOCUMENT_VIEW_PERMISSIONS
+INVENTORY_REPORT_PERMISSIONS = ("inventory.can_view_inventory_reports",)
+THRESHOLD_MANAGEMENT_PERMISSION = "inventory.can_manage_inventory_thresholds"
 
 
 def _require_any_permission(user, permissions):
@@ -185,7 +187,11 @@ class InventoryThresholdListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _require_any_permission(request.user, INVENTORY_OVERVIEW_PERMISSIONS)
+        if not (
+            request.user.is_superuser
+            or request.user.has_perm(THRESHOLD_MANAGEMENT_PERMISSION)
+        ):
+            raise PermissionDenied("شما مجوز مشاهده و مدیریت حداقل موجودی را ندارید.")
         variants = ProductVariant.objects.select_related(
             "product", "product__brand"
         ).order_by("sku")
@@ -197,8 +203,11 @@ class InventoryThresholdDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def put(self, request, variant_id):
-        if not request.user.has_perm("inventory.can_approve_inventory_document"):
-            raise PermissionDenied("فقط مدیر دارای مجوز تأیید می‌تواند حداقل موجودی را تغییر دهد.")
+        if not (
+            request.user.is_superuser
+            or request.user.has_perm(THRESHOLD_MANAGEMENT_PERMISSION)
+        ):
+            raise PermissionDenied("شما مجوز مدیریت حداقل موجودی را ندارید.")
         value = request.data.get("minimum_quantity")
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ValidationError({
@@ -223,7 +232,7 @@ class InventoryLowStockAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        _require_any_permission(request.user, INVENTORY_OVERVIEW_PERMISSIONS)
+        _require_any_permission(request.user, INVENTORY_REPORT_PERMISSIONS)
         variants = list(
             ProductVariant.objects.select_related(
                 "product", "product__brand"
@@ -241,12 +250,20 @@ class InventorySummaryAPIView(APIView):
 
     def get(self, request):
         _require_any_permission(request.user, INVENTORY_OVERVIEW_PERMISSIONS)
-        variants = list(
-            ProductVariant.objects.select_related(
-                "product", "product__brand"
-            ).filter(is_active=True)
+        can_view_reports = request.user.is_superuser or request.user.has_perm(
+            "inventory.can_view_inventory_reports"
         )
-        rows = _inventory_snapshot(variants)
+        can_manage_threshold = request.user.is_superuser or request.user.has_perm(
+            THRESHOLD_MANAGEMENT_PERMISSION
+        )
+        rows = []
+        if can_view_reports:
+            variants = list(
+                ProductVariant.objects.select_related(
+                    "product", "product__brand"
+                ).filter(is_active=True)
+            )
+            rows = _inventory_snapshot(variants)
         visible_documents = _visible_documents(request.user)
         return Response({
             "sku_count": len(rows),
@@ -256,9 +273,9 @@ class InventorySummaryAPIView(APIView):
             "available_quantity": sum(row["available"] for row in rows),
             "pending_review_count": visible_documents.filter(status="pending_review").count(),
             "pending_approval_count": visible_documents.filter(status="pending_approval").count(),
-            "can_manage_threshold": request.user.has_perm("inventory.can_approve_inventory_document"),
+            "can_manage_threshold": can_manage_threshold,
             "can_create_document": request.user.has_perm("inventory.can_create_inventory_document"),
             "can_review_document": request.user.has_perm("inventory.can_review_inventory_document"),
             "can_approve_document": request.user.has_perm("inventory.can_approve_inventory_document"),
-            "can_view_reports": request.user.has_perm("inventory.can_view_inventory_reports"),
+            "can_view_reports": can_view_reports,
         })
