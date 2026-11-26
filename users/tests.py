@@ -1264,17 +1264,22 @@ class StaffRoleManagementAPITests(APITestCase):
             email="last-admin@example.com",
             password="test-password",
         )
-        self.executive.is_active = False
-        self.executive.save(update_fields=["is_active"])
+        inactive_admin = User.objects.create_superuser(
+            username="inactive-system-admin",
+            email="inactive-admin@example.com",
+            password="test-password",
+        )
+        inactive_admin.is_active = False
+        inactive_admin.save(update_fields=["is_active"])
         token = Token.objects.create(user=last_admin)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
 
-        response = self.client.post(f"/api/auth/staff/{self.executive.pk}/revoke-superuser/")
+        response = self.client.post(f"/api/auth/staff/{inactive_admin.pk}/revoke-superuser/")
 
         self.assertEqual(response.status_code, 200)
-        self.executive.refresh_from_db()
-        self.assertFalse(self.executive.is_superuser)
-        self.assertFalse(self.executive.is_staff)
+        inactive_admin.refresh_from_db()
+        self.assertFalse(inactive_admin.is_superuser)
+        self.assertFalse(inactive_admin.is_staff)
 
     def test_non_superuser_cannot_revoke_superuser_access(self):
         target = User.objects.create_superuser(
