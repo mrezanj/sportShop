@@ -287,7 +287,8 @@ export default async function HomePage() {
 
       {/* ===== CATEGORIES ===== */}
       {data.categories.length > 0 && (
-        <section className="container mx-auto px-4 py-14">
+        <section className="bg-rose-50/60 border-y border-rose-100">
+          <div className="container mx-auto px-4 py-14">
           <div className="flex items-end justify-between mb-8">
             <div>
               <p className="section-label">دسته‌بندی</p>
@@ -346,6 +347,7 @@ export default async function HomePage() {
                 </div>
               </Link>
             ))}
+          </div>
           </div>
         </section>
       )}
@@ -459,7 +461,8 @@ export default async function HomePage() {
 
       {/* ===== BRANDS ===== */}
       {data.brands.length > 0 && (
-        <section className="container mx-auto px-4 py-14">
+        <section className="bg-pink-50/60 border-y border-pink-100">
+          <div className="container mx-auto px-4 py-14">
           <div className="text-center mb-8">
             <p className="section-label">برندها</p>
             <h2 className="text-2xl md:text-3xl font-extrabold text-pink-950">
@@ -491,12 +494,13 @@ export default async function HomePage() {
               );
             })}
           </div>
+          </div>
         </section>
       )}
 
       {/* ===== TESTIMONIALS ===== */}
       {data.testimonials.length > 0 && (
-        <section className="py-16 my-6">
+        <section className="bg-rose-50/70 border-y border-rose-100 py-16 my-6">
           <div className="container mx-auto px-4">
             <div className="text-center mb-10">
               <p className="section-label">نظرات مشتریان</p>
@@ -621,7 +625,8 @@ function ProductSection({
   products: Product[];
 }) {
   return (
-    <section className="container mx-auto px-4 py-14">
+    <section className="bg-rose-50/60 border-y border-rose-100">
+      <div className="container mx-auto px-4 py-14">
       <div className="flex items-end justify-between mb-8">
         <div>
           <p className="section-label">{label}</p>
@@ -653,6 +658,7 @@ function ProductSection({
         {products.map((product) => (
           <ProductCard key={product.id} product={product} />
         ))}
+      </div>
       </div>
     </section>
   );
