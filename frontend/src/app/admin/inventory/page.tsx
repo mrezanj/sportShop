@@ -41,9 +41,9 @@ const ACTION_LABELS: Record<string, string> = {
   approved: 'تأیید نهایی', rejected: 'رد سند', cancelled: 'لغو سند',
 };
 const number = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
-const date = (value: string) => new Date(value).toLocaleString('fa-IR', {
+const date = (value: string) => new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
   year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-});
+}).format(new Date(value));
 const dateOnly = (value: string | null | undefined) => {
   if (!value) return '—';
   const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(value);
