@@ -642,6 +642,36 @@ class InventoryDashboardAPITests(TestCase):
             1,
         )
 
+    def test_executive_can_approve_after_personally_reviewing_document(self):
+        document_id, _accountant = self._create_pending_approval_purchase(
+            "DASH-EXECUTIVE-SELF-REVIEW"
+        )
+        self.manager.groups.add(Group.objects.create(name="مدیرعامل"))
+        self.client.force_authenticate(self.manager)
+
+        approved = self.client.post(
+            f"/api/inventory/documents/{document_id}/approve/",
+            {"note": "مدیریت ارشد؛ تأیید استثنایی"},
+            format="json",
+        )
+
+        self.assertEqual(approved.status_code, 200)
+        document = InventoryDocument.objects.get(pk=document_id)
+        self.assertEqual(document.status, "approved")
+        self.assertEqual(document.approved_by_id, self.manager.id)
+        self.assertEqual(
+            InventoryDocumentLog.objects.filter(
+                document=document,
+                action="approved",
+                actor=self.manager,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            InventoryMovement.objects.filter(document=document).count(),
+            1,
+        )
+
     def test_rejected_document_does_not_change_inventory(self):
         creator_permission = Permission.objects.get(
             codename="can_create_inventory_document"
