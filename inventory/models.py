@@ -103,7 +103,7 @@ class InventoryDocument(models.Model):
     STATUS_CHOICES = [
         ("draft", "پیش‌نویس"),
         ("pending_review", "در انتظار بررسی حسابدار"),
-        ("pending_approval", "در انتظار تأیید مدیر داخلی"),
+        ("pending_approval", "در انتظار تأیید مدیریتی"),
         ("approved", "تأیید نهایی"),
         ("rejected", "رد شده"),
         ("cancelled", "لغو شده"),
@@ -181,7 +181,7 @@ class InventoryDocument(models.Model):
         null=True,
         blank=True,
         related_name="approved_inventory_documents",
-        verbose_name="تأییدکننده مدیر داخلی",
+        verbose_name="تأییدکننده مدیریتی",
     )
 
     reviewed_at = models.DateTimeField(
