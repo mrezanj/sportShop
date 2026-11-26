@@ -639,6 +639,7 @@ export interface InventorySummary {
   can_review_document: boolean;
   can_approve_document: boolean;
   is_executive: boolean;
+  is_ceo: boolean;
   can_view_reports: boolean;
 }
 
