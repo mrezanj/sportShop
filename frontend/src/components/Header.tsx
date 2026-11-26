@@ -178,7 +178,7 @@ export default function Header({ categories }: { categories: Category[] }) {
                 مدیریت کارکنان
               </Link>
             )}
-            {user?.is_employee && (
+            {(user?.is_superuser || user?.is_employee) && (
               <Link
                 href="/admin/inventory"
                 className="hidden md:inline-flex rounded-lg border border-pink-200 px-3 py-2 text-sm font-semibold text-pink-900 hover:bg-pink-50"
@@ -308,7 +308,7 @@ export default function Header({ categories }: { categories: Category[] }) {
                   </MobileLink>
                 </div>
               )}
-              {user?.is_employee && (
+              {(user?.is_superuser || user?.is_employee) && (
                 <div className="pt-4 mt-4 border-t border-pink-100">
                   <MobileLink href="/admin/inventory" active={pathname === '/admin/inventory'}>
                     داشبورد انبار
