@@ -351,15 +351,16 @@ class ProductVariant(models.Model):
         )
         return " - ".join(parts)
 
-    def build_variant_fingerprint(self):
-        identity = {
-            "flavor": self.flavor or "",
-            "weight": self.weight or "",
-            "servings": self.servings,
-            "size": self.size or "",
-            "color": self.color or "",
-            "attributes": self.attributes or {},
-        }
+    def build_variant_fingerprint(self, identity=None):
+        if identity is None:
+            identity = {
+                "flavor": self.flavor or "",
+                "weight": self.weight or "",
+                "servings": self.servings,
+                "size": self.size or "",
+                "color": self.color or "",
+                "attributes": self.attributes or {},
+            }
         serialized = json.dumps(
             identity,
             ensure_ascii=False,
@@ -391,10 +392,33 @@ class ProductVariant(models.Model):
             "color",
             "attributes",
         }
-        if update_fields is None or identity_fields.intersection(update_fields):
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            kwargs["update_fields"] = update_fields
+
+        if update_fields is None:
             self.variant_fingerprint = self.build_variant_fingerprint()
-            if update_fields is not None:
-                kwargs["update_fields"] = set(update_fields) | {"variant_fingerprint"}
+        elif identity_fields.intersection(update_fields):
+            # Partial saves must fingerprint the values that will actually be
+            # persisted, not unrelated dirty attributes left on this instance.
+            persisted_identity = {}
+            if self.pk:
+                persisted_identity = (
+                    type(self).objects.filter(pk=self.pk)
+                    .values(*identity_fields)
+                    .first()
+                    or {}
+                )
+            identity = {
+                field: (
+                    getattr(self, field)
+                    if field in update_fields or field not in persisted_identity
+                    else persisted_identity[field]
+                )
+                for field in identity_fields
+            }
+            self.variant_fingerprint = self.build_variant_fingerprint(identity)
+            update_fields.add("variant_fingerprint")
 
         # Auto-generate SKU if empty or a temporary admin-form placeholder.
         if not self.sku or self.sku.startswith("__TMP__"):
