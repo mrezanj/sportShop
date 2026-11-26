@@ -11,15 +11,47 @@ from datetime import timedelta
 
 
 class ProfileSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(
+        source="user.first_name",
+        max_length=150,
+        required=False,
+        allow_blank=True,
+    )
+    last_name = serializers.CharField(
+        source="user.last_name",
+        max_length=150,
+        required=False,
+        allow_blank=True,
+    )
+
     class Meta:
         model = Profile
-        fields = ["mobile", "birth_date"]
+        fields = ["mobile", "birth_date", "first_name", "last_name"]
         read_only_fields = ["mobile"]
+
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop("user", {})
+        user = instance.user
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if validated_data:
+            instance.save(update_fields=list(validated_data.keys()))
+        if "first_name" in user_data or "last_name" in user_data:
+            for attr, value in user_data.items():
+                setattr(user, attr, value.strip())
+            user.save(update_fields=list(user_data.keys()))
+        return instance
 
     def validate_birth_date(self, value):
         if value and value > timezone.localdate():
             raise serializers.ValidationError("تاریخ تولد نمی‌تواند در آینده باشد.")
         return value
+
+    def validate_first_name(self, value):
+        return value.strip()
+
+    def validate_last_name(self, value):
+        return value.strip()
 
 
 class RequestOTPSerializer(serializers.Serializer):
