@@ -330,10 +330,10 @@ export default function InventoryDashboardPage() {
     selected.created_by_id === user?.id && !!summary?.can_create_document;
   const canReview = !!selected && selected.status === 'pending_review' &&
     !!summary?.can_review_document &&
-    (selected.created_by_id !== user?.id || !!summary?.is_ceo);
+    (selected.created_by_id !== user?.id || !!summary?.is_executive);
   const canApprove = !!selected && selected.status === 'pending_approval' &&
     !!summary?.can_approve_document &&
-    (selected.created_by_id !== user?.id || !!summary?.is_ceo) &&
+    (selected.created_by_id !== user?.id || !!summary?.is_executive) &&
     (!!summary?.is_executive || selected.reviewed_by_id !== user?.id);
   const canReject = (!!selected && selected.status === 'pending_review' &&
     !!summary?.can_review_document && selected.created_by_id !== user?.id) ||
