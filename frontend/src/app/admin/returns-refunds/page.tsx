@@ -164,6 +164,7 @@ export default function ReturnsRefundsAdminPage() {
     ...(canReviewRefunds ? [{ id: 'refunds' as const, label: 'بازپرداخت‌ها', count: refunds.length }] : []),
     ...(canReviewDiscrepancies ? [{ id: 'discrepancies' as const, label: 'مغایرت سفارش‌ها', count: discrepancies.length }] : []),
   ];
+  const activeTab = tabs.some((item) => item.id === tab) ? tab : tabs[0].id;
 
   return (
     <main className="min-h-screen bg-page py-8" dir="rtl">
@@ -189,12 +190,12 @@ export default function ReturnsRefundsAdminPage() {
 
         {notice && <div role="status" className="rounded-xl border border-pink-200 bg-white p-3 text-sm text-pink-900">{notice}</div>}
         <div className="flex flex-wrap gap-2 border-b border-pink-100 pb-3">
-          {tabs.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={`rounded-xl px-4 py-2.5 text-sm font-bold ${tab === item.id ? 'bg-pink-800 text-white' : 'border border-pink-100 bg-white text-pink-900'}`}>{item.label} <span className="mr-1 opacity-75">({number(item.count)})</span></button>)}
+          {tabs.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={`rounded-xl px-4 py-2.5 text-sm font-bold ${activeTab === item.id ? 'bg-pink-800 text-white' : 'border border-pink-100 bg-white text-pink-900'}`}>{item.label} <span className="mr-1 opacity-75">({number(item.count)})</span></button>)}
         </div>
 
-        {errors[tab] && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{errors[tab]}</div>}
+        {errors[activeTab] && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{errors[activeTab]}</div>}
 
-        {tab === 'returns' && <section className="space-y-3">
+        {activeTab === 'returns' && <section className="space-y-3">
           {returns.map((item) => <article key={item.id} className="rounded-2xl border border-pink-100 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div><h2 className="text-lg font-bold text-gray-900">درخواست #{number(item.id)} · سفارش داخلی #{number(item.order_id)}</h2><p className="mt-1 text-xs text-gray-500">ثبت: {date(item.created_at)}</p></div>
@@ -203,7 +204,7 @@ export default function ReturnsRefundsAdminPage() {
             <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-gray-700">{item.reason}</p>
             <div className="mt-3 flex flex-wrap gap-2">{item.items.map((row) => <span key={row.order_item_id} className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-700">قلم سفارش #{number(row.order_item_id)} · تعداد {number(row.quantity)}</span>)}</div>
             {item.staff_note && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">یادداشت قبلی: {item.staff_note}</p>}
-            {['requested', 'approved'].includes(item.status) && <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
+            {canReviewReturns && ['requested', 'approved'].includes(item.status) && <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
               <textarea rows={2} className={inputClass} value={notes[`return-${item.id}`] || ''} onChange={(event) => setNotes((current) => ({ ...current, [`return-${item.id}`]: event.target.value }))} placeholder="یادداشت بررسی (اختیاری)" />
               <div className="flex flex-wrap gap-2">
                 {item.status === 'requested' && <>
@@ -213,7 +214,7 @@ export default function ReturnsRefundsAdminPage() {
                 {item.status === 'approved' && <button disabled={!!busy} onClick={() => receiveReturn(item)} className="rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">ثبت دریافت و بررسی کالا</button>}
               </div>
             </div>}
-            {item.status === 'received' && <div className="mt-4 grid gap-2 border-t border-gray-100 pt-4 sm:grid-cols-[1fr_auto]">
+            {canReviewRefunds && item.status === 'received' && <div className="mt-4 grid gap-2 border-t border-gray-100 pt-4 sm:grid-cols-[1fr_auto]">
               <input className={inputClass} inputMode="numeric" value={refundAmounts[item.id] || ''} onChange={(event) => setRefundAmounts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="مبلغ بازپرداخت به تومان" />
               <button disabled={!!busy} onClick={() => createRefund(item)} className="rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">ایجاد درخواست بازپرداخت</button>
             </div>}
@@ -221,7 +222,7 @@ export default function ReturnsRefundsAdminPage() {
           {!returns.length && !errors.returns && <Empty text="درخواستی برای مرجوعی ثبت نشده است." />}
         </section>}
 
-        {tab === 'refunds' && <section className="space-y-3">
+        {activeTab === 'refunds' && <section className="space-y-3">
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-7 text-amber-900">اتصال خودکار به درگاه بازپرداخت هنوز انجام نشده است. وضعیت «انجام‌شده» فقط پس از انجام واقعی انتقال وجه توسط اپراتور و ثبت شناسه پیگیری و مستند معتبر مجاز است.</div>
           {refunds.map((item) => <article key={item.id} className="rounded-2xl border border-pink-100 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-bold">بازپرداخت #{number(item.id)} · سفارش {item.order_number}</h2><p className="mt-1 text-sm text-gray-600">مبلغ: <strong>{number(item.amount)} تومان</strong> · درخواست مرجوعی #{number(item.return_request_id)}</p><p className="mt-1 text-xs text-gray-500">ثبت: {date(item.created_at)} · پرداخت مبنا #{number(item.payment_id)}</p></div><Status status={item.status} label={refundLabels[item.status] || item.status} /></div>
@@ -249,7 +250,7 @@ export default function ReturnsRefundsAdminPage() {
           {!refunds.length && !errors.refunds && <Empty text="درخواستی برای بازپرداخت وجود ندارد." />}
         </section>}
 
-        {tab === 'discrepancies' && <section className="space-y-3">
+        {activeTab === 'discrepancies' && <section className="space-y-3">
           {discrepancies.map((item) => <article key={item.id} className="rounded-2xl border border-pink-100 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-bold">پرونده #{number(item.id)} · سفارش {item.order_number}</h2><p className="mt-1 text-xs text-gray-500">ثبت: {date(item.created_at)} · وضعیت قبلی سفارش: {item.previous_order_status}</p></div><Status status={item.status} label={discrepancyLabels[item.status] || item.status} /></div>
             <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-gray-700">{item.reason}</p>
