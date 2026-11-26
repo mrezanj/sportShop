@@ -258,9 +258,8 @@ export default async function HomePage() {
       </section>
 
       {/* ===== TRUST BAR (upgraded) ===== */}
-      <section className="container mx-auto px-4 py-4 md:py-6">
-        <div className="rounded-3xl border border-pink-200/80 bg-white shadow-[0_8px_28px_rgba(131,24,67,0.07)] px-4 md:px-7 py-5 md:py-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+      <section className="container mx-auto px-4 py-5 md:py-7">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             <TrustItem
               icon={<ShieldIcon />}
               title="اصالت کالا"
@@ -281,14 +280,13 @@ export default async function HomePage() {
               title="مشاوره تخصصی"
               sub="رایگان توسط کارشناس"
             />
-          </div>
         </div>
       </section>
 
       {/* ===== CATEGORIES ===== */}
       {data.categories.length > 0 && (
         <section className="container mx-auto px-4 py-6 md:py-8">
-          <div className="rounded-3xl border border-pink-200/80 bg-[#fff7fa] shadow-[0_10px_30px_rgba(131,24,67,0.08)] px-4 md:px-7 py-8 md:py-10">
+          <div className="rounded-3xl border border-pink-300/90 bg-[#f8d8e6] shadow-[0_10px_30px_rgba(131,24,67,0.12)] px-4 md:px-7 py-8 md:py-10">
           <div className="flex items-end justify-between mb-8">
             <div>
               <p className="section-label">دسته‌بندی</p>
@@ -461,8 +459,8 @@ export default async function HomePage() {
 
       {/* ===== BRANDS ===== */}
       {data.brands.length > 0 && (
-        <section className="container mx-auto px-4 py-6 md:py-8">
-          <div className="rounded-3xl border border-pink-200/80 bg-[#fff7fa] shadow-[0_10px_30px_rgba(131,24,67,0.08)] px-4 md:px-7 py-8 md:py-10">
+        <section className="py-8 md:py-10">
+          <div className="contents">
           <div className="text-center mb-8">
             <p className="section-label">برندها</p>
             <h2 className="text-2xl md:text-3xl font-extrabold text-pink-950">
@@ -500,8 +498,8 @@ export default async function HomePage() {
 
       {/* ===== TESTIMONIALS ===== */}
       {data.testimonials.length > 0 && (
-        <section className="container mx-auto px-4 py-6 md:py-8">
-          <div className="rounded-3xl border border-pink-200/80 bg-[#fceaf2] shadow-[0_10px_30px_rgba(131,24,67,0.08)] px-4 md:px-7 py-10 md:py-12">
+        <section className="py-10 md:py-14">
+          <div className="contents">
             <div className="text-center mb-10">
               <p className="section-label">نظرات مشتریان</p>
               <h2 className="text-2xl md:text-3xl font-extrabold text-pink-950">
@@ -626,7 +624,7 @@ function ProductSection({
 }) {
   return (
     <section className="container mx-auto px-4 py-6 md:py-8">
-      <div className="rounded-3xl border border-pink-200/80 bg-[#fceaf2] shadow-[0_10px_30px_rgba(131,24,67,0.08)] px-4 md:px-7 py-8 md:py-10">
+      <div className="rounded-3xl border border-pink-300/90 bg-[#f5c2d8] shadow-[0_10px_30px_rgba(131,24,67,0.14)] px-4 md:px-7 py-8 md:py-10">
       <div className="flex items-end justify-between mb-8">
         <div>
           <p className="section-label">{label}</p>
