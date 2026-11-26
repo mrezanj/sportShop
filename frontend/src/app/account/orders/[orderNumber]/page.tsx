@@ -163,7 +163,7 @@ function OrderDetailContent() {
         </nav>
 
         {/* Header */}
-        <div className="bg-pink-50 rounded-xl p-5 mb-6">
+        <div className="mb-6 rounded-2xl border border-pink-200 bg-gradient-to-l from-pink-200/80 via-rose-100 to-pink-100 p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs text-gray-600 mb-1">شماره سفارش</p>
@@ -216,7 +216,7 @@ function OrderDetailContent() {
         )}
 
         {invoiceAvailable && (
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-pink-200 bg-pink-50/70 p-4 shadow-sm">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-pink-200 bg-pink-100 p-4 shadow-sm">
             <div>
               <p className="font-semibold text-gray-900">فاکتور فروش</p>
               <p className="mt-1 text-sm text-gray-600">فاکتور داخلی سفارش را مشاهده یا چاپ کنید.</p>
@@ -231,13 +231,13 @@ function OrderDetailContent() {
         )}
 
         {/* Items */}
-        <section className="mb-6 overflow-hidden rounded-2xl border border-pink-200 bg-white shadow-sm">
-          <div className="border-b border-pink-100 bg-pink-50/80 px-4 py-3">
+        <section className="mb-6 overflow-hidden rounded-2xl border border-pink-300 bg-pink-100 shadow-sm">
+          <div className="border-b border-pink-200 bg-pink-200/80 px-4 py-3">
             <h2 className="font-bold text-pink-950">اقلام سفارش</h2>
           </div>
-          <div className="space-y-3 bg-pink-50/40 p-3 sm:p-4">
+          <div className="space-y-3 bg-pink-100/90 p-3 sm:p-4">
             {order.items.map((item) => (
-              <article key={item.id} className="flex gap-3 rounded-xl border border-pink-100 bg-white p-3 shadow-sm sm:p-4">
+              <article key={item.id} className="flex gap-3 rounded-xl border border-pink-200 bg-white p-3 shadow-md sm:p-4">
                 <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-pink-100">
                   {item.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -278,8 +278,8 @@ function OrderDetailContent() {
 
         <div className="grid md:grid-cols-2 gap-4">
           {/* Address */}
-          <div className="rounded-2xl border border-pink-200 bg-white p-4 shadow-sm">
-            <h2 className="mb-3 border-b border-pink-100 pb-2 font-bold text-pink-950">اطلاعات ارسال</h2>
+          <div className="rounded-2xl border border-rose-200 bg-rose-100/80 p-4 shadow-sm">
+            <h2 className="mb-3 border-b border-rose-200 pb-2 font-bold text-pink-950">اطلاعات ارسال</h2>
             <div className="text-sm text-gray-700 space-y-1.5">
               <p>
                 <span className="text-gray-500">گیرنده: </span>
@@ -311,8 +311,8 @@ function OrderDetailContent() {
           </div>
 
           {/* Financial */}
-          <div className="rounded-2xl border border-pink-200 bg-white p-4 shadow-sm">
-            <h2 className="mb-3 border-b border-pink-100 pb-2 font-bold text-pink-950">خلاصه مالی</h2>
+          <div className="rounded-2xl border border-pink-300 bg-pink-100 p-4 shadow-sm">
+            <h2 className="mb-3 border-b border-pink-200 pb-2 font-bold text-pink-950">خلاصه مالی</h2>
             <div className="text-sm space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-600">جمع کالاها</span>
@@ -354,7 +354,7 @@ function OrderDetailContent() {
                     : `${order.packaging_cost.toLocaleString('fa-IR')} تومان`}
                 </span>
               </div>
-              <div className="mt-2 flex justify-between rounded-xl border border-pink-100 bg-pink-50 px-3 py-3">
+              <div className="mt-2 flex justify-between rounded-xl border border-pink-200 bg-pink-200/70 px-3 py-3">
                 <span className="font-bold text-pink-950">مبلغ نهایی</span>
                 <span className="font-bold text-pink-900">
                   {order.total_amount.toLocaleString('fa-IR')} تومان
@@ -365,8 +365,8 @@ function OrderDetailContent() {
         </div>
 
         {['paid', 'processing', 'shipped', 'delivered'].includes(order.status) && (
-          <section className="mt-6 rounded-2xl border border-pink-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-2 border-b border-pink-100 pb-3 font-bold text-pink-950">درخواست مرجوعی</h2>
+          <section className="mt-6 rounded-2xl border border-rose-200 bg-rose-100/90 p-5 shadow-sm">
+            <h2 className="mb-3 border-b border-rose-200 pb-3 font-bold text-pink-950">درخواست مرجوعی</h2>
             <p className="text-sm text-gray-600 mb-4">
               اقلام و تعداد موردنظر را مشخص کنید. درخواست پس از ثبت توسط پشتیبانی بررسی می‌شود.
             </p>
@@ -378,7 +378,7 @@ function OrderDetailContent() {
               <>
                 <div className="space-y-3 mb-4">
                   {order.items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-pink-100 bg-pink-50/60 px-3 py-2 text-sm">
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/80 bg-white/90 px-3 py-2 text-sm shadow-sm">
                       <span className="text-gray-800">{item.product_name} (حداکثر {item.quantity.toLocaleString('fa-IR')})</span>
                       <input
                         type="text"
