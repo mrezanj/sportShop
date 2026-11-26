@@ -29,9 +29,14 @@ def _staff_flags(user):
     is_employee = is_staff or user.groups.filter(
         name__in=BUSINESS_STAFF_GROUPS
     ).exists()
+    can_manage_staff = bool(
+        user.is_superuser
+        or user.groups.filter(name__in=("مدیرعامل", "رئیس هیئت‌مدیره")).exists()
+    )
     return {
         "is_staff": is_staff,
         "is_employee": is_employee,
+        "can_manage_staff": can_manage_staff,
     }
 
 
