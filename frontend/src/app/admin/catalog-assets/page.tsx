@@ -141,7 +141,7 @@ export default function CatalogAssetsPage() {
 
   if(loading)return <main className="p-12 text-center">در حال بررسی دسترسی...</main>;
   if(!user||!token)return <main className="p-12 text-center">برای دسترسی وارد حساب شوید.</main>;
-  if(!user.is_staff)return <main className="p-12 text-center text-amber-700">این صفحه فقط برای کارکنان است.</main>;
+  if(!user.is_superuser && !user.permissions.includes('catalog.can_manage_catalog'))return <main className="p-12 text-center text-amber-700">برای مدیریت تصاویر و تنوع‌ها مجوز لازم را ندارید.</main>;
 
   return <main dir="rtl" className="min-h-screen bg-page py-8"><div className="mx-auto max-w-7xl space-y-6 px-4">
     <header><p className="section-label">مدیریت فروشگاه</p><h1 className="text-3xl font-bold text-pink-950">تنوع‌ها و گالری تصاویر</h1>

@@ -5,14 +5,38 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
-import type { Category } from '@/lib/api';
+import { fetchProfile, type Category } from '@/lib/api';
 
 export default function Header({ categories }: { categories: Category[] }) {
   const pathname = usePathname();
   const { totalItems } = useCart();
-  const { user, loading, isAuthenticated, logout } = useAuth();
+  const { user, token, loading, isAuthenticated, logout } = useAuth();
+  const [profileName, setProfileName] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+
+  useEffect(() => {
+    if (!token) {
+      setProfileName('');
+      return;
+    }
+    let active = true;
+    const loadProfileName = () => {
+      fetchProfile(token)
+        .then((profile) => {
+          if (active) setProfileName([profile.first_name, profile.last_name].filter(Boolean).join(' '));
+        })
+        .catch(() => {
+          if (active) setProfileName('');
+        });
+    };
+    loadProfileName();
+    window.addEventListener('profile-updated', loadProfileName);
+    return () => {
+      active = false;
+      window.removeEventListener('profile-updated', loadProfileName);
+    };
+  }, [token]);
 
   // Auto-close mobile menu on route change
   useEffect(() => {
@@ -42,7 +66,7 @@ export default function Header({ categories }: { categories: Category[] }) {
 
   return (
     <>
-      <header className="bg-white/95 backdrop-blur-md border-b border-pink-100 shadow-[var(--shadow-header)] sticky top-0 z-40">
+      <header className="site-header bg-white/95 backdrop-blur-md border-b border-pink-100 shadow-[var(--shadow-header)] sticky top-0 z-40">
         <div className="container mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2 sm:gap-4">
           {/* Mobile hamburger */}
           <button
@@ -68,8 +92,8 @@ export default function Header({ categories }: { categories: Category[] }) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logo.png"
-              alt="فروشگاه ورزشی"
-              className="h-10 sm:h-11 w-auto object-contain group-hover:scale-105 transition-transform"
+              alt="مادوان | Madone"
+              className="h-12 sm:h-14 w-auto max-w-[180px] object-contain group-hover:scale-105 transition-transform"
             />
           </Link>
 
@@ -146,7 +170,15 @@ export default function Header({ categories }: { categories: Category[] }) {
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-            {user?.is_staff && (
+            {user?.can_manage_staff && (
+              <Link
+                href="/admin/staff"
+                className="hidden md:inline-flex rounded-lg border border-pink-200 px-3 py-2 text-sm font-semibold text-pink-900 hover:bg-pink-50"
+              >
+                مدیریت کارکنان
+              </Link>
+            )}
+            {(user?.is_superuser || user?.is_employee) && (
               <Link
                 href="/admin/inventory"
                 className="hidden md:inline-flex rounded-lg border border-pink-200 px-3 py-2 text-sm font-semibold text-pink-900 hover:bg-pink-50"
@@ -163,7 +195,7 @@ export default function Header({ categories }: { categories: Category[] }) {
                   className="text-sm text-gray-700 hover:text-pink-800 px-2 sm:px-3 py-2 rounded-lg hover:bg-pink-50 transition-colors hidden sm:inline-flex items-center gap-1.5"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  <span className="hidden md:inline">{user.mobile}</span>
+                  <span className="hidden md:inline">{profileName || user.mobile}</span>
                   <span className="md:hidden">حساب</span>
                 </Link>
                 <button
@@ -216,7 +248,7 @@ export default function Header({ categories }: { categories: Category[] }) {
 
       {/* Mobile drawer */}
       {menuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden print:hidden">
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => setMenuOpen(false)}
@@ -269,7 +301,14 @@ export default function Header({ categories }: { categories: Category[] }) {
                 ))}
               </div>
 
-              {user?.is_staff && (
+              {user?.can_manage_staff && (
+                <div className="pt-4 mt-4 border-t border-pink-100">
+                  <MobileLink href="/admin/staff" active={pathname.startsWith('/admin/staff')}>
+                    مدیریت کارکنان
+                  </MobileLink>
+                </div>
+              )}
+              {(user?.is_superuser || user?.is_employee) && (
                 <div className="pt-4 mt-4 border-t border-pink-100">
                   <MobileLink href="/admin/inventory" active={pathname === '/admin/inventory'}>
                     داشبورد انبار
@@ -294,7 +333,7 @@ export default function Header({ categories }: { categories: Category[] }) {
               {isAuthenticated && user ? (
                 <>
                   <p className="text-xs text-gray-500 mb-2">
-                    وارد شده با {user.mobile}
+                    {profileName || 'وارد شده با ' + user.mobile}
                   </p>
                   <button
                     onClick={() => {

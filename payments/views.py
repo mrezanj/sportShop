@@ -19,6 +19,7 @@ from orders.services import (
     consume_order_discount_redemptions,
     transition_order_status,
 )
+from .invoice_services import issue_invoice
 from datetime import timedelta
 
 # Maximum time to wait before considering an operation stale.
@@ -139,6 +140,7 @@ def _complete_successful_payment(
         changed_by=None,
         note="پرداخت سفارش با موفقیت تأیید شد.",
     )
+    issue_invoice(order, payment)
     return True
 
 

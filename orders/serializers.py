@@ -89,6 +89,16 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
+    created_at = serializers.SerializerMethodField()
+
+    def get_created_at(self, obj):
+        value = obj.created_at
+        if value is None:
+            return None
+        to_gregorian = getattr(value, "togregorian", None)
+        if callable(to_gregorian):
+            value = to_gregorian()
+        return value.isoformat()
     province_display = serializers.CharField(
         source="get_province_display",
         read_only=True,

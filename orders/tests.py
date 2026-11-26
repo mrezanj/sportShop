@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
+from django.contrib import admin
 from orders.admin import OrderAdmin
 from django.contrib.auth.models import User, Permission
 from users.models import Profile
@@ -32,7 +33,7 @@ from orders.models import (
     ShippingRate,
     StockReservation,
 )
-from orders.serializers import CreateOrderSerializer
+from orders.serializers import CreateOrderSerializer, OrderSerializer
 from orders.shipping_preview import ShippingPreviewSerializer
 from locations.testing import get_test_tehran_city
 from payments.models import Payment
@@ -49,6 +50,30 @@ from inventory.models import (
     InventoryDocumentItem,
     InventoryMovement,
 )
+
+
+class OrderDateSerializationTests(TestCase):
+    def test_created_at_is_serialized_as_gregorian_iso_timestamp(self):
+        user = User.objects.create_user(
+            username="order-date-user",
+            password="test-password",
+        )
+        order = Order.objects.create(
+            user=user,
+            first_name="Test",
+            last_name="Customer",
+            mobile="09123456789",
+            province="tehran",
+            city="Tehran",
+            address="Test address",
+            subtotal=Decimal("100000"),
+            vat_amount=Decimal("10000"),
+            total_amount=Decimal("110000"),
+        )
+        serialized_created_at = OrderSerializer(order).data["created_at"]
+        expected_created_at = order.created_at.togregorian().isoformat()
+        self.assertEqual(serialized_created_at, expected_created_at)
+        self.assertRegex(serialized_created_at, r"^20\d{2}-\d{2}-\d{2}T")
 
 
 class CreateOrderReservationTests(TestCase):
@@ -1540,6 +1565,33 @@ class OrderAdminStatusActionTests(TestCase):
             OrderStatusHistory.objects.filter(order=self.order).count(),
             0,
         )
+
+    def test_shipping_cost_is_readonly_without_dedicated_permission(self):
+        request = SimpleNamespace(user=self.user)
+        model_admin = OrderAdmin(Order, admin.site)
+
+        readonly_fields = model_admin.get_readonly_fields(request)
+
+        self.assertIn("shipping_cost", readonly_fields)
+        self.assertIn("mobile", readonly_fields)
+        self.assertIn("address", readonly_fields)
+        self.assertIn("total_amount", readonly_fields)
+
+    def test_shipping_cost_is_editable_with_dedicated_permission(self):
+        permission = Permission.objects.get(
+            content_type__app_label="orders",
+            codename="can_manage_order_shipping_cost",
+        )
+        self.user.user_permissions.add(permission)
+        request = SimpleNamespace(user=self.user)
+        model_admin = OrderAdmin(Order, admin.site)
+
+        readonly_fields = model_admin.get_readonly_fields(request)
+
+        self.assertNotIn("shipping_cost", readonly_fields)
+        self.assertIn("mobile", readonly_fields)
+        self.assertIn("address", readonly_fields)
+        self.assertIn("total_amount", readonly_fields)
 
     def test_invalid_admin_transition_does_not_change_order(self):
         self.client.force_login(self.user)

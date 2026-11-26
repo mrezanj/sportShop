@@ -1,10 +1,13 @@
 from datetime import timedelta
+from types import SimpleNamespace
 from orders.models import Order, StockReservation
-from django.contrib.auth.models import User
+from django.contrib import admin
+from django.contrib.auth.models import User, Permission
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-from .models import Brand, Category, Product, ProductVariant
+from .models import Brand, Category, Product, ProductVariant, DiscountCampaign, DiscountRedemption
+from .admin import ProductVariantInline, DiscountCampaignAdmin, DiscountRedemptionAdmin
 from inventory.models import (
     InventoryBatch,
     InventoryDocument,
@@ -307,6 +310,31 @@ class ProductVariantIdentityTests(ProductInventoryAPITests):
         self.assertEqual(variant.attributes, {"form": "پودر"})
         self.assertEqual(variant.variant_fingerprint, original_fingerprint)
 
+    def test_partial_identity_save_uses_only_fields_being_persisted(self):
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            flavor="شکلات",
+            weight="۱ کیلو",
+            servings=30,
+            attributes={"form": "پودر"},
+            price=100000,
+        )
+        original_fingerprint = variant.variant_fingerprint
+
+        # Change two identity values in memory, but persist only flavor.
+        variant.flavor = "وانیل"
+        variant.attributes = {"form": "کپسول"}
+        variant.save(update_fields=["flavor"])
+        variant.refresh_from_db()
+
+        self.assertEqual(variant.flavor, "وانیل")
+        self.assertEqual(variant.attributes, {"form": "پودر"})
+        self.assertNotEqual(variant.variant_fingerprint, original_fingerprint)
+        self.assertEqual(
+            variant.variant_fingerprint,
+            variant.build_variant_fingerprint(),
+        )
+
     def test_identical_variant_identity_is_rejected(self):
         from django.core.exceptions import ValidationError
 
@@ -397,7 +425,7 @@ class CatalogManagementAPITests(TestCase):
         from rest_framework.test import APIClient
         self.client = APIClient()
         self.staff = User.objects.create_user(
-            username="catalog_manager_test", password="password", is_staff=True
+            username="catalog_manager_test", password="password", is_staff=False
         )
         self.client.force_authenticate(self.staff)
 
@@ -515,7 +543,7 @@ class CatalogVariantAndGalleryManagementAPITests(TestCase):
 
         self.client = APIClient()
         self.staff = User.objects.create_user(
-            username="catalog_assets_manager", password="password", is_staff=True
+            username="catalog_assets_manager", password="password", is_staff=False
         )
         self.client.force_authenticate(self.staff)
         self.brand = Brand.objects.create(name="Asset Brand", slug="asset-brand")
@@ -743,3 +771,82 @@ class InventoryBatchPrivacyAPITests(TestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertIn(response.status_code, (401, 403))
+
+
+class CatalogAdminPermissionBoundaryTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="catalog-admin-auditor",
+            password="test-password",
+            is_staff=True,
+        )
+        self.variant_inline = ProductVariantInline(ProductVariant, admin.site)
+        self.discount_admin = DiscountCampaignAdmin(DiscountCampaign, admin.site)
+        self.redemption_admin = DiscountRedemptionAdmin(DiscountRedemption, admin.site)
+
+    def test_variant_price_is_readonly_without_price_permission(self):
+        request = SimpleNamespace(user=self.user)
+        self.assertIn("price", self.variant_inline.get_readonly_fields(request))
+
+    def test_variant_price_is_editable_with_dedicated_price_permission(self):
+        permission = Permission.objects.get(
+            content_type__app_label="catalog",
+            codename="can_manage_product_prices",
+        )
+        self.user.user_permissions.add(permission)
+        self.user = User.objects.get(pk=self.user.pk)
+        request = SimpleNamespace(user=self.user)
+
+        self.assertNotIn("price", self.variant_inline.get_readonly_fields(request))
+
+    def test_discount_campaign_management_requires_dedicated_permission(self):
+        request = SimpleNamespace(user=self.user)
+        self.assertFalse(self.discount_admin.has_add_permission(request))
+        self.assertFalse(self.discount_admin.has_change_permission(request))
+
+        permission = Permission.objects.get(
+            content_type__app_label="catalog",
+            codename="can_manage_discounts",
+        )
+        self.user.user_permissions.add(permission)
+        self.user = User.objects.get(pk=self.user.pk)
+        request.user = self.user
+
+        self.assertTrue(self.discount_admin.has_add_permission(request))
+        self.assertTrue(self.discount_admin.has_change_permission(request))
+        self.assertFalse(self.discount_admin.has_delete_permission(request))
+
+    def test_discount_redemptions_are_read_only(self):
+        request = SimpleNamespace(user=self.user)
+        self.assertFalse(self.redemption_admin.has_add_permission(request))
+        self.assertFalse(self.redemption_admin.has_change_permission(request))
+        self.assertFalse(self.redemption_admin.has_delete_permission(request))
+
+
+class DiscountCampaignManagementAPITests(TestCase):
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from django.contrib.auth.models import Permission
+
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="discount_manager_api", password="password", is_staff=False
+        )
+        self.client.force_authenticate(self.user)
+        self.permission = Permission.objects.get(
+            content_type__app_label="catalog",
+            codename="can_manage_discounts",
+        )
+
+    def test_authenticated_user_without_discount_permission_is_forbidden(self):
+        response = self.client.get("/api/discounts/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_discount_permission_works_without_django_staff_flag(self):
+        self.user.user_permissions.add(self.permission)
+        self.user = User.objects.get(pk=self.user.pk)
+        self.client.force_authenticate(self.user)
+
+        self.assertFalse(self.user.is_staff)
+        response = self.client.get("/api/discounts/")
+        self.assertEqual(response.status_code, 200)

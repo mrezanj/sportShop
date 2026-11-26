@@ -20,7 +20,10 @@ class InventoryBatch(models.Model):
     )
     batch_number = models.CharField(
         max_length=100,
+        blank=True,
+        default="",
         verbose_name="شماره بچ",
+        help_text="در صورت نداشتن شماره بچ واقعی، این فیلد خالی می‌ماند.",
     )
     expiration_date = models.DateField(
         null=True,
@@ -50,6 +53,7 @@ class InventoryBatch(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["variant", "batch_number"],
+                condition=~models.Q(batch_number=""),
                 name="unique_variant_batch_number",
             ),
         ]
@@ -66,7 +70,8 @@ class InventoryBatch(models.Model):
         ordering = ["expiration_date", "id"]
 
     def __str__(self):
-        return f"{self.variant.sku} - {self.batch_number}"
+        batch_label = self.batch_number or "بدون بچ"
+        return f"{self.variant.sku} - {batch_label}"
 
 
 class InventoryDocumentQuerySet(models.QuerySet):
@@ -98,7 +103,7 @@ class InventoryDocument(models.Model):
     STATUS_CHOICES = [
         ("draft", "پیش‌نویس"),
         ("pending_review", "در انتظار بررسی حسابدار"),
-        ("pending_approval", "در انتظار تأیید مدیر داخلی"),
+        ("pending_approval", "در انتظار تأیید مدیریتی"),
         ("approved", "تأیید نهایی"),
         ("rejected", "رد شده"),
         ("cancelled", "لغو شده"),
@@ -176,7 +181,7 @@ class InventoryDocument(models.Model):
         null=True,
         blank=True,
         related_name="approved_inventory_documents",
-        verbose_name="تأییدکننده مدیر داخلی",
+        verbose_name="تأییدکننده مدیریتی",
     )
 
     reviewed_at = models.DateTimeField(
@@ -218,6 +223,10 @@ class InventoryDocument(models.Model):
             (
                 "can_view_inventory_reports",
                 "Can view inventory reports",
+            ),
+            (
+                "can_manage_inventory_thresholds",
+                "Can manage inventory stock thresholds",
             ),
         ]
         constraints = [
@@ -633,7 +642,8 @@ class InventoryMovement(models.Model):
         raise ValidationError("Inventory movements cannot be deleted.")
 
     def __str__(self):
-        return f"{self.batch.batch_number} - " f"{self.quantity_delta:+d}"
+        batch_label = self.batch.batch_number or "بدون بچ"
+        return f"{batch_label} - {self.quantity_delta:+d}"
 
 
 class ReservationAllocation(models.Model):
@@ -678,9 +688,10 @@ class ReservationAllocation(models.Model):
         ]
 
     def __str__(self):
+        batch_label = self.batch.batch_number or "بدون بچ"
         return (
             f"{self.reservation.order.order_number} - "
-            f"{self.batch.batch_number} - {self.quantity}"
+            f"{batch_label} - {self.quantity}"
         )
 
 

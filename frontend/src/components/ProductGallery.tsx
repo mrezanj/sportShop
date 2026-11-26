@@ -149,7 +149,7 @@ export default function ProductGallery({ images, productName }: Props) {
       {/* Main image */}
       <div
         ref={containerRef}
-        className={`relative aspect-square bg-gradient-to-br from-pink-50 via-pink-50 to-pink-100/60 rounded-2xl overflow-hidden border border-gray-100 select-none touch-none ${
+        className={`relative aspect-square bg-white rounded-2xl overflow-hidden border border-pink-100 shadow-[0_8px_24px_rgba(131,24,67,0.10)] select-none touch-none ${
           isZoomed
             ? dragging
               ? 'cursor-grabbing'

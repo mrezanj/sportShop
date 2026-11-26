@@ -47,7 +47,7 @@ export default async function HomePage() {
             <div>
               <p className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-1.5 text-[11px] font-bold tracking-widest uppercase mb-6 animate-gentle-pulse">
                 <span className="w-1.5 h-1.5 rounded-full bg-pink-300" />
-                مرجع تخصصی ورزش ایران
+               تنها مرجع فروش محصولات ورزشی
               </p>
 
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-black leading-[1.15] mb-6">
@@ -258,9 +258,8 @@ export default async function HomePage() {
       </section>
 
       {/* ===== TRUST BAR (upgraded) ===== */}
-      <section className="border-b border-pink-100 bg-white/90 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-7">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+      <section className="container mx-auto px-4 py-5 md:py-7">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             <TrustItem
               icon={<ShieldIcon />}
               title="اصالت کالا"
@@ -281,13 +280,13 @@ export default async function HomePage() {
               title="مشاوره تخصصی"
               sub="رایگان توسط کارشناس"
             />
-          </div>
         </div>
       </section>
 
       {/* ===== CATEGORIES ===== */}
       {data.categories.length > 0 && (
-        <section className="container mx-auto px-4 py-14">
+        <section className="container mx-auto px-4 py-6 md:py-8">
+          <div className="rounded-3xl border border-pink-300/90 bg-[#f1b6cf] shadow-[0_10px_30px_rgba(131,24,67,0.12)] px-4 md:px-7 py-8 md:py-10">
           <div className="flex items-end justify-between mb-8">
             <div>
               <p className="section-label">دسته‌بندی</p>
@@ -346,6 +345,7 @@ export default async function HomePage() {
                 </div>
               </Link>
             ))}
+          </div>
           </div>
         </section>
       )}
@@ -459,7 +459,8 @@ export default async function HomePage() {
 
       {/* ===== BRANDS ===== */}
       {data.brands.length > 0 && (
-        <section className="container mx-auto px-4 py-14">
+        <section className="py-8 md:py-10">
+          <div className="container mx-auto px-4">
           <div className="text-center mb-8">
             <p className="section-label">برندها</p>
             <h2 className="text-2xl md:text-3xl font-extrabold text-pink-950">
@@ -491,12 +492,13 @@ export default async function HomePage() {
               );
             })}
           </div>
+          </div>
         </section>
       )}
 
       {/* ===== TESTIMONIALS ===== */}
       {data.testimonials.length > 0 && (
-        <section className="py-16 my-6">
+        <section className="py-10 md:py-14">
           <div className="container mx-auto px-4">
             <div className="text-center mb-10">
               <p className="section-label">نظرات مشتریان</p>
@@ -621,7 +623,8 @@ function ProductSection({
   products: Product[];
 }) {
   return (
-    <section className="container mx-auto px-4 py-14">
+    <section className="container mx-auto px-4 py-6 md:py-8">
+      <div className="rounded-3xl border border-pink-300/90 bg-[#f5c2d8] shadow-[0_10px_30px_rgba(131,24,67,0.14)] px-4 md:px-7 py-8 md:py-10">
       <div className="flex items-end justify-between mb-8">
         <div>
           <p className="section-label">{label}</p>
@@ -653,6 +656,7 @@ function ProductSection({
         {products.map((product) => (
           <ProductCard key={product.id} product={product} />
         ))}
+      </div>
       </div>
     </section>
   );

@@ -64,7 +64,10 @@ export default function InventoryImportPage() {
 
   if (authLoading) return <main className="grid min-h-[60vh] place-items-center">در حال بررسی دسترسی...</main>;
   if (!user || !token) return <main className="container mx-auto px-4 py-16 text-center">برای ورود به مدیریت انبار ابتدا وارد حساب کاربری شوید.</main>;
-  if (!user.is_staff) return <main className="container mx-auto px-4 py-16 text-center text-amber-800">این بخش فقط برای کاربران داخلی فروشگاه است.</main>;
+  if (!user.is_superuser && !user.permissions.includes('inventory.can_create_inventory_document')) return <main className="container mx-auto px-4 py-16 text-center text-amber-800">برای ورود گروهی موجودی مجوز ثبت سند انبار لازم است.</main>;
+  const canManageCatalog = user.is_superuser ||
+    (user.permissions.includes('catalog.can_manage_catalog') &&
+      user.permissions.includes('catalog.can_manage_product_prices'));
 
   return (
     <main className="min-h-screen bg-page py-8" dir="rtl">
@@ -75,7 +78,7 @@ export default function InventoryImportPage() {
           <p className="mt-2 text-sm text-gray-600">ثبت چند SKU و بچ در قالب یک سند پیش‌نویس انبار</p>
           <nav className="mt-4 flex flex-wrap gap-2">
             <a href="/admin/inventory" className="rounded-xl border border-pink-200 bg-white px-4 py-2 text-sm font-bold text-pink-900">داشبورد انبار</a>
-            <a href="/admin/catalog-import" className="rounded-xl border border-pink-200 bg-white px-4 py-2 text-sm font-bold text-pink-900">ورود کاتالوگ</a>
+            {canManageCatalog && <a href="/admin/catalog-import" className="rounded-xl border border-pink-200 bg-white px-4 py-2 text-sm font-bold text-pink-900">ورود کاتالوگ</a>}
           </nav>
         </header>
 

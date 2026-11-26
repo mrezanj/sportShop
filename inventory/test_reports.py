@@ -106,7 +106,7 @@ class InventoryReportsAPITests(TestCase):
         self.assertEqual(row["reserved"], 0)
         self.assertEqual(row["available"], 7)
         self.assertEqual(row["document_created_by_display"], self.viewer.get_full_name() or self.viewer.username)
-        self.assertEqual(row["document_created_by_role"], "مشاهده‌گر انبار")
+        self.assertIsNone(row["document_created_by_role"])
         self.assertFalse(row["is_expired"])
 
     def test_batch_report_distributes_unallocated_reservations_by_fefo(self):
@@ -210,7 +210,7 @@ class InventoryReportsAPITests(TestCase):
         self.assertEqual(row["document_item_id"], self.movement.document_item_id)
         self.assertEqual(str(row["unit_cost"]), "150000")
         self.assertEqual(row["document_created_by_display"], self.viewer.get_full_name() or self.viewer.username)
-        self.assertEqual(row["document_created_by_role"], "مشاهده‌گر انبار")
+        self.assertIsNone(row["document_created_by_role"])
 
     def test_movement_report_filters_and_validates(self):
         self.client.force_authenticate(self.viewer)

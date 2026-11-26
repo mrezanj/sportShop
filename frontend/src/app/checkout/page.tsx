@@ -10,6 +10,7 @@ import {
   fetchProvinces,
   fetchCities,
   fetchShippingMethods,
+  fetchProfile,
   createOrder,
   type Province,
   type City,
@@ -64,6 +65,28 @@ export default function CheckoutPage() {
   useEffect(() => {
     fetchProvinces().then(setProvinces);
   }, []);
+
+  // Pre-fill recipient details from the saved customer profile.
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    fetchProfile(token)
+      .then((profile) => {
+        if (!active) return;
+        setForm((current) => ({
+          ...current,
+          first_name: current.first_name || profile.first_name || '',
+          last_name: current.last_name || profile.last_name || '',
+          mobile: current.mobile || profile.mobile,
+        }));
+      })
+      .catch(() => {
+        // Profile defaults are optional; the customer can enter the details manually.
+      });
+    return () => {
+      active = false;
+    };
+  }, [token]);
 
   // Pre-fill mobile.
   useEffect(() => {
@@ -353,7 +376,7 @@ export default function CheckoutPage() {
 
         <form onSubmit={handleSubmit} className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
-            <div className="border border-gray-200 rounded-xl p-4 bg-white">
+            <div className="border border-rose-200 bg-rose-50/70 rounded-2xl p-4 shadow-sm">
               <h2 className="font-bold text-gray-800 mb-3">اطلاعات گیرنده</h2>
 
               <div className="grid sm:grid-cols-2 gap-3">
@@ -408,7 +431,7 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            <div className="border border-gray-200 rounded-xl p-4 bg-white">
+            <div className="border border-sky-200 bg-sky-50/60 rounded-2xl p-4 shadow-sm">
               <h2 className="font-bold text-gray-800 mb-3">آدرس</h2>
 
               <div className="grid sm:grid-cols-2 gap-3 mb-3">
@@ -475,7 +498,7 @@ export default function CheckoutPage() {
               />
             </div>
 
-            <div className="border border-gray-200 rounded-xl p-4 bg-white">
+            <div className="border border-violet-200 bg-violet-50/60 rounded-2xl p-4 shadow-sm">
               <h2 className="font-bold text-gray-800 mb-3">روش ارسال</h2>
 
               {!form.province ? (
@@ -543,7 +566,7 @@ export default function CheckoutPage() {
               )}
             </div>
 
-            <div className="border border-gray-200 rounded-xl p-4 bg-white">
+            <div className="border border-amber-200 bg-amber-50/60 rounded-2xl p-4 shadow-sm">
               <h2 className="font-bold text-gray-800 mb-3">
                 یادداشت سفارش (اختیاری)
               </h2>
@@ -559,10 +582,10 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          <aside className="bg-pink-50 rounded-xl p-6 h-fit sticky top-24">
+          <aside className="bg-rose-50/80 border border-rose-200 rounded-2xl p-6 h-fit sticky top-24 shadow-sm">
             <h2 className="font-bold text-pink-900 mb-4">خلاصه سفارش</h2>
 
-            <div className="mb-4 rounded-xl border border-pink-200 bg-white p-3">
+            <div className="mb-4 rounded-xl border border-rose-200 bg-white/90 p-3 shadow-sm">
               <label htmlFor="discount-code" className="mb-2 block text-sm font-bold text-gray-800">
                 کد تخفیف
               </label>

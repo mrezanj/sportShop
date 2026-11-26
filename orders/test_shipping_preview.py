@@ -342,3 +342,63 @@ class ShippingPreviewAPITests(
         self.assertEqual(response.data["packaging_cost"], 0)
         self.assertTrue(response.data["shipping"]["is_free"])
         self.assertTrue(response.data["packaging"]["is_free"])
+
+    def test_preview_quote_creates_order_once_with_matching_shipping_snapshot(self):
+        preview_response = self.client.post(
+            self.url,
+            self.payload(),
+            format="json",
+        )
+        self.assertEqual(preview_response.status_code, 200)
+
+        order_payload = {
+            **self.payload(),
+            "quote_token": preview_response.data["quote_token"],
+            "first_name": "آزمایش",
+            "last_name": "کاربر",
+            "mobile": "09123456789",
+            "address": "آدرس کامل آزمایشی برای ثبت سفارش",
+            "postal_code": "1234567890",
+            "notes": "",
+        }
+        create_url = reverse("create-order")
+
+        create_response = self.client.post(
+            create_url,
+            order_payload,
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, 201)
+        order = Order.objects.get(order_number=create_response.data["order_number"])
+        self.assertEqual(
+            order.total_amount,
+            Decimal(str(preview_response.data["total_amount"])),
+        )
+        self.assertEqual(
+            order.shipping_cost,
+            Decimal(str(preview_response.data["shipping_cost"])),
+        )
+        self.assertEqual(
+            order.packaging_cost,
+            Decimal(str(preview_response.data["packaging_cost"])),
+        )
+        self.assertEqual(
+            order.shipping_calculation_snapshot["rate_id"],
+            self.rate.id,
+        )
+        self.assertEqual(
+            order.shipping_calculation_snapshot["city_code"],
+            self.city.code,
+        )
+        reservation = StockReservation.objects.get(order=order)
+        self.assertEqual(reservation.quantity, 2)
+        self.assertEqual(reservation.status, "active")
+
+        replay_response = self.client.post(
+            create_url,
+            order_payload,
+            format="json",
+        )
+        self.assertEqual(replay_response.status_code, 400)
+        self.assertEqual(Order.objects.count(), 1)

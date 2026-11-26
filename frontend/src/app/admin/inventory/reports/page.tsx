@@ -10,13 +10,20 @@ import {
 } from '@/lib/api';
 
 const number = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
-const date = (value: string | null) => value
-  ? new Date(value).toLocaleDateString('fa-IR')
-  : '—';
+const date = (value: string | null) => {
+  if (!value) return '—';
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const parsed = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12)
+    : new Date(value);
+  return new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(parsed);
+};
 const dateTimeParts = (value: string) => {
   const parsed = new Date(value);
   return {
-    date: parsed.toLocaleDateString('fa-IR'),
+    date: parsed.toLocaleDateString('fa-IR-u-ca-persian'),
     time: parsed.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
   };
 };
@@ -31,7 +38,7 @@ const movementRowClass = (type: string, index: number) => {
     reversal: ['bg-slate-100', 'bg-slate-200/80'],
   };
   const [base, alternate] = tones[type] ?? ['bg-slate-100', 'bg-slate-200/70'];
-  return `${index % 2 === 0 ? base : alternate} hover:brightness-[0.98] transition-colors [&>td]:border-b-2 [&>td]:border-white/90`;
+  return `${index % 2 === 0 ? base : alternate} hover:brightness-[0.97] transition-colors [&>td]:border-y [&>td]:border-white/90 [&>td]:shadow-sm [&>td]:first:rounded-r-xl [&>td]:last:rounded-l-xl`;
 };
 
 const movementBadgeClass = (type: string) => {
@@ -105,7 +112,7 @@ export default function InventoryReportsPage() {
 
   if (authLoading) return <div className="min-h-[50vh] grid place-items-center">در حال بررسی دسترسی...</div>;
   if (!user || !token) return <main className="container mx-auto px-4 py-16 text-center">برای مشاهده گزارش انبار وارد حساب شوید. <a className="text-pink-800 underline" href="/login">ورود</a></main>;
-  if (!user.is_staff) return <main className="container mx-auto px-4 py-16 text-center">این بخش فقط برای کارکنان فروشگاه در دسترس است.</main>;
+  if (!user.is_superuser && !user.permissions.includes('inventory.can_view_inventory_reports')) return <main className="container mx-auto px-4 py-16 text-center">برای مشاهده گزارش انبار مجوز لازم را ندارید.</main>;
 
   const currentCount = tab === 'batches' ? batchData?.count ?? 0 : movementData?.count ?? 0;
   const hasPrevious = tab === 'batches' ? !!batchData?.previous : !!movementData?.previous;
@@ -128,7 +135,7 @@ export default function InventoryReportsPage() {
           <button onClick={() => changeTab('movements')} className={tab === 'movements' ? 'rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white' : 'rounded-xl border bg-white px-4 py-2.5 text-sm'}>گردش‌های دفترکل</button>
         </div>
 
-        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm sm:p-6">
           <div className="mb-4 grid gap-3 sm:grid-cols-3">
             <input className={inputClass} value={search} onChange={e => {setSearch(e.target.value);setPage(1);}} placeholder={tab === 'batches' ? 'جست‌وجوی SKU، کالا یا شماره بچ' : 'جست‌وجوی SKU، بچ، سند یا توضیحات'} />
             {tab === 'batches' ? (
@@ -157,12 +164,12 @@ export default function InventoryReportsPage() {
 
           {tab === 'batches' ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px] border-separate border-spacing-0 text-sm">
+              <table className="w-full min-w-[1050px] border-separate border-spacing-y-2 border-spacing-x-0 text-sm">
                 <thead><tr className="bg-slate-200 text-right text-slate-700">
                   <th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold">SKU / کالا</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">شماره بچ</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">وضعیت</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">انقضا</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">فیزیکی</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">رزرو</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">قابل فروش</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">افراد مرتبط</th>
                 </tr></thead>
                 <tbody>
-                  {(batchData?.results ?? []).map((row: InventoryBatchReportRow) => <tr key={row.id} className="bg-slate-100 even:bg-sky-50/80 hover:bg-sky-100 transition-colors [&>td]:border-b-2 [&>td]:border-white">
+                  {(batchData?.results ?? []).map((row: InventoryBatchReportRow) => <tr key={row.id} className="bg-slate-100 even:bg-sky-50 hover:bg-sky-100 transition-colors [&>td]:border-y [&>td]:border-slate-200 [&>td]:shadow-sm [&>td]:first:rounded-r-xl [&>td]:last:rounded-l-xl">
                     <td className="border-b-2 border-slate-200 p-3 text-center align-middle"><strong>{row.sku}</strong><span className="block text-xs text-gray-500">{row.product_name} · {row.brand_name}</span></td>
                     <td className="border-b-2 border-slate-200 p-3 text-center align-middle font-mono text-slate-700">{row.batch_number}</td>
                     <td className="border-b-2 border-slate-200 p-3 text-center align-middle"><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${row.is_expired ? 'bg-rose-100 text-rose-800' : row.status === 'available' ? 'bg-emerald-100 text-emerald-800' : row.status === 'quarantined' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'}`}>{row.is_expired ? 'منقضی' : row.status_display}</span></td>
@@ -181,7 +188,7 @@ export default function InventoryReportsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1250px] border-separate border-spacing-0 text-sm">
+              <table className="w-full min-w-[1250px] border-separate border-spacing-y-2 border-spacing-x-0 text-sm">
                 <thead><tr className="bg-slate-200 text-right text-slate-700">
                   <th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">تاریخ</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">SKU</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">بچ</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">نوع گردش</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">تغییر تعداد</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">شماره سند</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">وضعیت سند</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">بهای واحد (تومان)</th><th className="border-b-2 border-slate-300 p-3 text-center align-middle font-bold whitespace-nowrap">افراد مرتبط</th>
                 </tr></thead>

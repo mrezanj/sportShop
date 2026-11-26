@@ -144,9 +144,10 @@ def add_inventory_document_item(
     if document.document_type in outbound_types and direction != "outbound":
         raise ValidationError("This document type requires outbound direction.")
 
-    if document.document_type == "return":
-        if batch is not None or not new_batch_number:
-            raise ValidationError("Returned goods must be assigned to a new batch.")
+    if document.document_type == "return" and batch is not None:
+        raise ValidationError(
+            "Returned goods must be recorded as a new stock lot."
+        )
 
     if batch is not None:
         if batch.variant_id != variant.id:
@@ -161,11 +162,6 @@ def add_inventory_document_item(
         new_batch_number or new_batch_expiration_date is not None
     ):
         raise ValidationError("Outbound items cannot define new batch information.")
-
-    if direction == "inbound" and batch is None and not new_batch_number:
-        raise ValidationError(
-            "Inbound items require an existing batch or a new batch number."
-        )
 
     if new_batch_number:
         if InventoryBatch.objects.filter(
@@ -266,9 +262,10 @@ def submit_inventory_document(*, user, document_id):
         if document.document_type in outbound_types and item.direction != "outbound":
             raise ValidationError("This document type requires outbound direction.")
 
-        if document.document_type == "return":
-            if item.batch_id is not None or not item.new_batch_number:
-                raise ValidationError("Returned goods must be assigned to a new batch.")
+        if document.document_type == "return" and item.batch_id is not None:
+            raise ValidationError(
+                "Returned goods must be recorded as a new stock lot."
+            )
 
         if item.batch_id is not None:
             if item.batch.variant_id != item.variant_id:
@@ -277,12 +274,6 @@ def submit_inventory_document(*, user, document_id):
             if item.new_batch_number or item.new_batch_expiration_date is not None:
                 raise ValidationError(
                     "An existing batch cannot include new batch information."
-                )
-
-        if item.direction == "inbound":
-            if item.batch is None and not item.new_batch_number:
-                raise ValidationError(
-                    f"SKU {item.variant.sku} requires batch information."
                 )
 
         if item.direction == "outbound" and (
@@ -348,7 +339,10 @@ def review_inventory_document(
     if document.status != "pending_review":
         raise ValidationError("Only documents pending review can be reviewed.")
 
-    if document.created_by_id == user.id:
+    is_executive = user.groups.filter(
+        name__in=("مدیرعامل", "رئیس هیئت‌مدیره")
+    ).exists()
+    if document.created_by_id == user.id and not is_executive:
         raise PermissionDenied("The document creator cannot review the same document.")
 
     document.status = "pending_approval"
@@ -497,22 +491,23 @@ def _approve_inbound_item(item, user, now):
             and item.new_batch_expiration_date < timezone.localdate()
         ):
             raise ValidationError("Cannot create a batch with an expired date.")
-        batch, created = InventoryBatch.objects.get_or_create(
+        if item.new_batch_number and InventoryBatch.objects.filter(
             variant=item.variant,
             batch_number=item.new_batch_number,
-            defaults={
-                "expiration_date": item.new_batch_expiration_date,
-                "status": (
-                    "quarantined"
-                    if item.document.document_type == "return"
-                    else "available"
-                ),
-                "created_by": user,
-            },
-        )
-
-        if not created:
+        ).exists():
             raise ValidationError("The batch number already exists for this SKU.")
+
+        batch = InventoryBatch.objects.create(
+            variant=item.variant,
+            batch_number=item.new_batch_number or "",
+            expiration_date=item.new_batch_expiration_date,
+            status=(
+                "quarantined"
+                if item.document.document_type == "return"
+                else "available"
+            ),
+            created_by=user,
+        )
 
     movement_type = {
         "inbound": "inbound",
@@ -640,10 +635,14 @@ def approve_inventory_document(*, user, document_id, note=""):
 
     if document.document_type not in valid_types:
         raise ValidationError("Invalid inventory document type.")
-    if document.reviewed_by_id == user.id:
+    is_executive = user.groups.filter(
+        name__in=("مدیرعامل", "رئیس هیئت‌مدیره")
+    ).exists()
+    is_ceo = user.groups.filter(name="مدیرعامل").exists()
+    if document.reviewed_by_id == user.id and not is_executive:
         raise PermissionDenied("The reviewer cannot approve the same document.")
 
-    if document.created_by_id == user.id:
+    if document.created_by_id == user.id and not is_executive:
         raise PermissionDenied("The document creator cannot approve the same document.")
 
     items = list(
@@ -691,9 +690,10 @@ def approve_inventory_document(*, user, document_id, note=""):
             and item.new_batch_expiration_date < timezone.localdate()
         ):
             raise ValidationError("Cannot approve an item with an expired batch date.")
-        if document.document_type == "return":
-            if item.batch_id is not None or not item.new_batch_number:
-                raise ValidationError("Returned goods must be assigned to a new batch.")
+        if document.document_type == "return" and item.batch_id is not None:
+            raise ValidationError(
+                "Returned goods must be recorded as a new stock lot."
+            )
         if item.direction == "inbound":
             if document.document_type in {"outbound", "waste"}:
                 raise ValidationError("This document type requires outbound direction.")

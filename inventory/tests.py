@@ -155,6 +155,62 @@ class InventoryServiceTests(TestCase):
             subtotal=100000 * reservation.quantity,
         )
 
+    def test_unbatched_stock_can_be_reserved_and_sold(self):
+        unbatched = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="",
+            created_by=self.user,
+        )
+        self.create_movement(unbatched, 8)
+
+        inventory = get_variant_inventory(
+            self.variant,
+            today=self.today,
+            now=self.now,
+        )
+        self.assertEqual(inventory["physical"], 8)
+        self.assertEqual(inventory["available"], 8)
+
+        reservation = self.create_reservation(quantity=3)
+        allocate_stock_reservation(reservation, now=self.now)
+
+        allocation = ReservationAllocation.objects.get(reservation=reservation)
+        self.assertEqual(allocation.batch_id, unbatched.id)
+        self.assertEqual(allocation.quantity, 3)
+
+        self.create_order_item(reservation)
+        document = record_order_sale(
+            reservation.order,
+            reservations=[reservation],
+            now=self.now,
+        )
+
+        sale_movement = InventoryMovement.objects.get(document=document)
+        self.assertEqual(sale_movement.batch_id, unbatched.id)
+        self.assertEqual(sale_movement.quantity_delta, -3)
+        self.assertEqual(get_batch_physical_quantity(unbatched), 5)
+
+    def test_multiple_unbatched_lots_are_allowed_but_named_batches_stay_unique(self):
+        first = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="",
+            created_by=self.user,
+        )
+        second = InventoryBatch.objects.create(
+            variant=self.variant,
+            batch_number="",
+            created_by=self.user,
+        )
+        self.assertNotEqual(first.id, second.id)
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InventoryBatch.objects.create(
+                    variant=self.variant,
+                    batch_number="BATCH-001",
+                    created_by=self.user,
+                )
+
     def test_get_variants_inventory_returns_grouped_ledger_inventory(self):
         self.create_movement(self.batch, 10)
 
@@ -1766,6 +1822,47 @@ class InventoryDocumentWorkflowTests(TestCase):
             ).exists()
         )
 
+    def test_inbound_document_accepts_optional_batch_and_expiration(self):
+        document = create_inventory_document(
+            user=self.creator,
+            document_number="INBOUND-NO-BATCH-001",
+            document_type="inbound",
+        )
+
+        add_inventory_document_item(
+            user=self.creator,
+            document_id=document.id,
+            variant=self.variant,
+            quantity=4,
+            direction="inbound",
+        )
+        add_inventory_document_item(
+            user=self.creator,
+            document_id=document.id,
+            variant=self.variant,
+            quantity=2,
+            direction="inbound",
+            new_batch_expiration_date=timezone.localdate() + timedelta(days=45),
+        )
+
+        submit_inventory_document(user=self.creator, document_id=document.id)
+        review_inventory_document(user=self.reviewer, document_id=document.id)
+        approve_inventory_document(user=self.approver, document_id=document.id)
+
+        movements = list(
+            InventoryMovement.objects.filter(document=document).select_related("batch")
+        )
+        self.assertEqual(len(movements), 2)
+        self.assertEqual({movement.batch.batch_number for movement in movements}, {""})
+        self.assertEqual(
+            {movement.batch.expiration_date for movement in movements},
+            {None, timezone.localdate() + timedelta(days=45)},
+        )
+        self.assertTrue(
+            all(movement.batch.status == "available" for movement in movements)
+        )
+        self.assertEqual(sum(movement.quantity_delta for movement in movements), 6)
+
     def test_return_document_creates_quarantined_batch(self):
         return_document = create_inventory_document(
             user=self.creator,
@@ -1779,7 +1876,6 @@ class InventoryDocumentWorkflowTests(TestCase):
             variant=self.variant,
             quantity=3,
             direction="inbound",
-            new_batch_number="RETURN-BATCH-001",
         )
 
         submit_inventory_document(
@@ -1801,6 +1897,7 @@ class InventoryDocumentWorkflowTests(TestCase):
 
         self.assertEqual(movement.movement_type, "return")
         self.assertEqual(movement.quantity_delta, 3)
+        self.assertEqual(movement.batch.batch_number, "")
         self.assertEqual(movement.batch.status, "quarantined")
 
         from .services import get_batch_available_quantity
@@ -2590,6 +2687,40 @@ class InventoryReportAPITests(TestCase):
         self.assertNotIn("batch", report)
         self.assertNotIn("expiration_date", report)
 
+    def test_document_history_uses_official_role_title(self):
+        from django.contrib.auth.models import Group
+        from .dashboard_serializers import _person_info
+
+        internal_manager, _ = Group.objects.get_or_create(name="مدیر داخلی")
+        self.user.first_name = "مینا"
+        self.user.last_name = "نوشانی"
+        self.user.save(update_fields=["first_name", "last_name"])
+        self.user.groups.add(internal_manager)
+
+        approve_permission = Permission.objects.get(
+            content_type__app_label="inventory",
+            codename="can_approve_inventory_document",
+        )
+        self.user.user_permissions.add(approve_permission)
+
+        self.assertEqual(
+            _person_info(self.user),
+            ("مینا نوشانی", "مدیر داخلی"),
+        )
+
+    def test_executive_history_keeps_executive_title_despite_broad_permissions(self):
+        from django.contrib.auth.models import Group
+        from .dashboard_serializers import _person_info
+
+        ceo, _ = Group.objects.get_or_create(name="مدیرعامل")
+        self.user.groups.add(ceo)
+        self.user.user_permissions.add(self.permission)
+
+        self.assertEqual(
+            _person_info(self.user),
+            ("inventory_report_user", "مدیرعامل"),
+        )
+
     def test_report_marks_low_stock_variant(self):
         self.user.user_permissions.add(self.permission)
         self.client.force_authenticate(user=self.user)
@@ -2608,6 +2739,55 @@ class InventoryReportAPITests(TestCase):
 
         self.assertEqual(report["minimum_quantity"], 5)
         self.assertTrue(report["low_stock"])
+
+    def test_creator_without_report_permission_cannot_read_global_stock_panels(self):
+        create_permission = Permission.objects.get(
+            content_type__app_label="inventory",
+            codename="can_create_inventory_document",
+        )
+        self.user.user_permissions.add(create_permission)
+        self.client.force_authenticate(user=self.user)
+
+        summary = self.client.get("/api/inventory/summary/")
+        self.assertEqual(summary.status_code, 200)
+        self.assertFalse(summary.data["can_view_reports"])
+        self.assertFalse(summary.data["can_manage_threshold"])
+        self.assertEqual(summary.data["sku_count"], 0)
+        self.assertEqual(summary.data["physical_quantity"], 0)
+
+        self.assertEqual(self.client.get("/api/inventory/low-stock/").status_code, 403)
+        self.assertEqual(self.client.get("/api/inventory/thresholds/").status_code, 403)
+
+    def test_threshold_management_requires_dedicated_permission(self):
+        threshold_permission = Permission.objects.get(
+            content_type__app_label="inventory",
+            codename="can_manage_inventory_thresholds",
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.assertEqual(self.client.get("/api/inventory/thresholds/").status_code, 403)
+        self.assertEqual(
+            self.client.put(
+                f"/api/inventory/thresholds/{self.variant.id}/",
+                {"minimum_quantity": 7},
+                format="json",
+            ).status_code,
+            403,
+        )
+
+        self.user.user_permissions.add(threshold_permission)
+        # Django caches permissions on the User instance after the first has_perm() call.
+        # Reload it so the newly assigned permission is visible to the next request.
+        self.user = User.objects.get(pk=self.user.pk)
+        self.client.force_authenticate(user=self.user)
+        self.assertEqual(self.client.get("/api/inventory/thresholds/").status_code, 200)
+        response = self.client.put(
+            f"/api/inventory/thresholds/{self.variant.id}/",
+            {"minimum_quantity": 7},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["minimum_quantity"], 7)
 
 
 class InventoryDocumentAPITests(TestCase):
@@ -2688,7 +2868,7 @@ class InventoryDocumentAPITests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_complete_inbound_document_workflow(self):
+    def test_complete_unbatched_inbound_document_workflow(self):
         self.client.force_authenticate(user=self.creator)
 
         response = self.client.post(
@@ -2711,7 +2891,6 @@ class InventoryDocumentAPITests(TestCase):
                 "variant": self.variant.id,
                 "quantity": 5,
                 "direction": "inbound",
-                "new_batch_number": "API-BATCH-001",
             },
             format="json",
         )
@@ -2728,6 +2907,15 @@ class InventoryDocumentAPITests(TestCase):
         self.assertEqual(response.data["status"], "pending_review")
 
         self.client.force_authenticate(user=self.reviewer)
+        response = self.client.get("/api/inventory/documents/")
+        self.assertEqual(response.status_code, 200)
+        listed_document = next(
+            item for item in response.data["results"]
+            if item["id"] == document_id
+        )
+        self.assertEqual(listed_document["item_count"], 1)
+
+        self.client.force_authenticate(user=self.reviewer)
 
         response = self.client.post(
             f"/api/inventory/documents/{document_id}/review/",
@@ -2737,6 +2925,14 @@ class InventoryDocumentAPITests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], "pending_approval")
+
+        response = self.client.get("/api/inventory/documents/")
+        self.assertEqual(response.status_code, 200)
+        listed_document = next(
+            item for item in response.data["results"]
+            if item["id"] == document_id
+        )
+        self.assertEqual(listed_document["item_count"], 1)
 
         self.client.force_authenticate(user=self.approver)
 
@@ -2757,7 +2953,7 @@ class InventoryDocumentAPITests(TestCase):
 
         batch = InventoryBatch.objects.get(
             variant=self.variant,
-            batch_number="API-BATCH-001",
+            batch_number="",
         )
 
         movement = InventoryMovement.objects.get(document=document)

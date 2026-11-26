@@ -5,11 +5,14 @@ from users.models import Profile
 from .models import InventoryDocument, InventoryDocumentItem, InventoryDocumentLog
 
 
-
-ROLE_PERMISSIONS = (
-    ("inventory.can_create_inventory_document", "ثبت‌کننده"),
-    ("inventory.can_review_inventory_document", "حسابدار"),
-    ("inventory.can_approve_inventory_document", "مدیر"),
+OFFICIAL_STAFF_ROLES = (
+    "مدیرعامل",
+    "رئیس هیئت‌مدیره",
+    "مدیر داخلی",
+    "حسابدار",
+    "ثبت‌کننده",
+    "مشاور",
+    "مشتری",
 )
 
 
@@ -17,35 +20,33 @@ def _person_info(user):
     if user is None:
         return None, None
 
-    roles = [
-        label
-        for permission, label in ROLE_PERMISSIONS
-        if user.has_perm(permission)
-    ]
-    can_view_reports = user.has_perm(
-        "inventory.can_view_inventory_reports"
+    # Display the person's actual official role, not a role inferred from
+    # broad permissions. Executives intentionally hold several operational
+    # permissions but must remain identified as CEO / Board Chair.
+    if user.is_superuser:
+        return user.get_full_name().strip() or user.username, "ادمین کل سیستم"
+
+    roles = list(
+        user.groups.filter(name__in=OFFICIAL_STAFF_ROLES)
+        .order_by("name")
+        .values_list("name", flat=True)
     )
-
-    is_internal = user.is_staff or bool(roles) or can_view_reports
-
-    if is_internal:
+    if roles:
         display = user.get_full_name().strip() or user.username
-
-        if roles:
-            role = " / ".join(roles)
-        elif can_view_reports:
-            role = "مشاهده‌گر انبار"
-        else:
-            role = "کارمند"
-
-        return display, role
+        # The staff-role workflow guarantees one official role. If legacy
+        # data contains more than one, show the exact stored titles rather
+        # than guessing from permissions or displaying a generic "مدیر".
+        return display, " / ".join(roles)
 
     try:
         profile = user.profile
     except Profile.DoesNotExist:
         profile = None
 
-    return (profile.mobile if profile else user.username), None
+    display = user.get_full_name().strip()
+    if not display:
+        display = profile.mobile if profile and profile.mobile else user.username
+    return display, None
 
 
 class InventoryDocumentListSerializer(serializers.ModelSerializer):

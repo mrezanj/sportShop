@@ -10,7 +10,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.filters import SearchFilter, OrderingFilter
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -34,6 +34,10 @@ from .import_services import import_catalog_file
 def _price_permission(user):
     if not user.is_superuser and not user.has_perm("catalog.can_manage_product_prices"):
         raise PermissionDenied("شما مجوز مدیریت قیمت محصولات را ندارید.")
+
+def _catalog_permission(user):
+    if not user.is_superuser and not user.has_perm("catalog.can_manage_catalog"):
+        raise PermissionDenied("شما مجوز مدیریت کاتالوگ را ندارید.")
 
 
 def _apply_price_updates(rows, mode, user, note, change_type):
@@ -115,9 +119,10 @@ class PriceManagementMixin:
         detail=False,
         methods=["post"],
         url_path="import-catalog",
-        permission_classes=[IsAdminUser],
+        permission_classes=[IsAuthenticated],
     )
     def import_catalog(self, request):
+        _catalog_permission(request.user)
         _price_permission(request.user)
         result = import_catalog_file(
             upload=request.FILES.get("file"),
@@ -129,7 +134,7 @@ class PriceManagementMixin:
         detail=False,
         methods=["post"],
         url_path="bulk-price-update",
-        permission_classes=[IsAdminUser],
+        permission_classes=[IsAuthenticated],
     )
     def bulk_price_update(self, request):
         _price_permission(request.user)
@@ -150,7 +155,7 @@ class PriceManagementMixin:
         detail=False,
         methods=["get"],
         url_path="price-history",
-        permission_classes=[IsAdminUser],
+        permission_classes=[IsAuthenticated],
     )
     def price_history(self, request):
         _price_permission(request.user)
@@ -177,7 +182,7 @@ class PriceManagementMixin:
         detail=False,
         methods=["post"],
         url_path="import-prices",
-        permission_classes=[IsAdminUser],
+        permission_classes=[IsAuthenticated],
     )
     def import_prices(self, request):
         _price_permission(request.user)
@@ -325,7 +330,7 @@ from .serializers import (
 )
 
 
-class CatalogManagementPermission(IsAdminUser):
+class CatalogManagementPermission(IsAuthenticated):
     def has_permission(self, request, view):
         return bool(
             super().has_permission(request, view)

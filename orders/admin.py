@@ -122,6 +122,19 @@ class OrderAdmin(JalaliDateModelAdmin):
         "mark_delivered",
     ]
 
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        # Order data and customer delivery details are immutable in admin.
+        # The shipping-cost permission unlocks only that one operational field.
+        readonly.extend(
+            field.name
+            for field in self.model._meta.concrete_fields
+            if field.editable and field.name != "shipping_cost"
+        )
+        if not request.user.has_perm("orders.can_manage_order_shipping_cost"):
+            readonly.append("shipping_cost")
+        return tuple(dict.fromkeys(readonly))
+
     def has_manage_order_status_permission(self, request):
         return request.user.has_perm("orders.can_manage_order_status")
 

@@ -67,9 +67,9 @@ export default function CartPage() {
             {items.map((item) => (
               <div
                 key={item.variantId}
-                className="border border-gray-200 rounded-xl p-4 flex gap-4 bg-white"
+                className="border border-[#d8c9eb] rounded-2xl p-4 flex gap-4 bg-[#f0eafa] shadow-[0_6px_20px_rgba(88,62,125,0.10)] transition-all hover:bg-[#e9def6] hover:border-[#bca5dc]"
               >
-                <div className="w-24 h-24 bg-pink-50 rounded-lg overflow-hidden flex-shrink-0">
+                <div className="w-24 h-24 bg-white border border-rose-100 rounded-xl overflow-hidden flex-shrink-0">
                   {item.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -142,7 +142,7 @@ export default function CartPage() {
             ))}
           </div>
 
-          <aside className="bg-pink-50 rounded-xl p-6 h-fit sticky top-24">
+          <aside className="bg-[#fff0f6] border border-pink-200 rounded-2xl p-6 h-fit sticky top-24 shadow-[0_6px_20px_rgba(131,24,67,0.06)]">
             <h2 className="font-bold text-pink-900 mb-4">خلاصه سفارش</h2>
 
             <div className="space-y-3 text-sm">
@@ -167,7 +167,7 @@ export default function CartPage() {
                 </span>
               </div>
 
-              <div className="border-t border-pink-300 pt-3 flex justify-between items-center">
+              <div className="border-t-2 border-rose-200 pt-3 flex justify-between items-center">
                 <span className="font-bold text-gray-900">
                   مبلغ نهایی (بدون ارسال)
                 </span>

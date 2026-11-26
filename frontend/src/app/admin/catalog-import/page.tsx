@@ -58,7 +58,7 @@ export default function CatalogImportPage() {
 
   if (authLoading) return <main className="grid min-h-[60vh] place-items-center">در حال بررسی دسترسی...</main>;
   if (!user || !token) return <main className="container mx-auto px-4 py-16 text-center">برای ورود به مدیریت کاتالوگ ابتدا وارد حساب کاربری شوید.</main>;
-  if (!user.is_staff) return <main className="container mx-auto px-4 py-16 text-center text-amber-800">این بخش فقط برای کاربران داخلی فروشگاه است.</main>;
+  if (!user.is_superuser && (!user.permissions.includes('catalog.can_manage_catalog') || !user.permissions.includes('catalog.can_manage_product_prices'))) return <main className="container mx-auto px-4 py-16 text-center text-amber-800">برای ورود گروهی کاتالوگ مجوزهای لازم را ندارید.</main>;
 
   return (
     <main className="min-h-screen bg-page py-8" dir="rtl">

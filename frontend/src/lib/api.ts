@@ -144,6 +144,19 @@ export interface AuthUser {
   id: number;
   mobile: string | null;
   is_staff: boolean;
+  is_superuser: boolean;
+  is_employee: boolean;
+  can_manage_staff: boolean;
+  roles: string[];
+  permissions: string[];
+}
+
+export function hasPermission(user: AuthUser | null, permission: string): boolean {
+  return !!user && (user.is_superuser || user.permissions.includes(permission));
+}
+
+export function hasAnyPermission(user: AuthUser | null, permissions: string[]): boolean {
+  return !!user && (user.is_superuser || permissions.some((permission) => user.permissions.includes(permission)));
 }
 
 export async function requestOTP(
@@ -194,6 +207,8 @@ export async function fetchMe(token: string): Promise<AuthUser> {
 export interface UserProfile {
   mobile: string;
   birth_date: string | null;
+  first_name: string;
+  last_name: string;
 }
 
 export async function fetchProfile(token: string): Promise<UserProfile> {
@@ -212,7 +227,7 @@ export async function fetchProfile(token: string): Promise<UserProfile> {
 }
 
 export async function updateProfile(
-  birthDate: string,
+  payload: { birth_date?: string | null; first_name?: string; last_name?: string },
   token: string
 ): Promise<UserProfile> {
   const res = await fetch(`${API_URL}/auth/profile/`, {
@@ -221,7 +236,7 @@ export async function updateProfile(
       'Content-Type': 'application/json',
       Authorization: `Token ${token}`,
     },
-    body: JSON.stringify({ birth_date: birthDate || null }),
+    body: JSON.stringify(payload),
   });
 
   const data = await res.json();
@@ -432,6 +447,48 @@ export async function fetchOrderDetail(
   return res.json();
 }
 
+export interface InvoiceRecord {
+  invoice_number: string;
+  issued_at: string;
+  snapshot: {
+    document_type: string;
+    official_tax_invoice: boolean;
+    notice: string;
+    currency: string;
+    order_number: string;
+    seller: Record<string, string>;
+    buyer: Record<string, string>;
+    items: {
+      order_item_id: number;
+      sku: string;
+      product_name: string;
+      brand_name: string;
+      variant_label: string;
+      quantity: number;
+      unit_price: string;
+      subtotal: string;
+      discount_amount: string;
+      final_subtotal: string;
+    }[];
+    totals: Record<string, string>;
+    tax: { rate: string; amount: string; description: string };
+    payment: { gateway: string; reference: string; paid_at: string | null; amount: string };
+  };
+}
+
+export async function fetchInvoice(
+  orderNumber: string,
+  token: string
+): Promise<InvoiceRecord> {
+  const res = await fetch(`${API_URL}/payments/invoices/${encodeURIComponent(orderNumber)}/`, {
+    headers: { Authorization: `Token ${token}` },
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || 'فاکتور برای این سفارش در دسترس نیست.');
+  return data as InvoiceRecord;
+}
+
 export interface ReturnRequestItemPayload {
   order_item_id: number;
   quantity: number;
@@ -581,6 +638,8 @@ export interface InventorySummary {
   can_create_document: boolean;
   can_review_document: boolean;
   can_approve_document: boolean;
+  is_executive: boolean;
+  can_view_reports: boolean;
 }
 
 export interface InventoryStockRow {
@@ -679,6 +738,16 @@ export function fetchInventorySummary(token: string) {
 
 export function fetchInventoryLowStock(token: string) {
   return inventoryRequest<{ count: number; results: InventoryStockRow[] }>('low-stock/', token);
+}
+
+export interface InventoryDocumentProductOption {
+  variant_id: number;
+  sku: string;
+  product_name: string;
+}
+
+export function fetchInventoryDocumentProducts(token: string) {
+  return inventoryRequest<InventoryDocumentProductOption[]>('document-products/', token);
 }
 
 export function fetchInventoryThresholds(token: string) {

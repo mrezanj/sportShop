@@ -4,7 +4,7 @@ from django.contrib.auth.models import Permission, User
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import Order, OrderDiscrepancy, OrderItem, OrderStatusHistory
+from .models import Order, OrderDiscrepancy, OrderItem, OrderStatusHistory, ReturnRequest
 from .discrepancy_services import (
     DiscrepancyError,
     open_order_discrepancy,
@@ -134,6 +134,16 @@ class ReturnRequestTests(TestCase):
                     {"order_item_id": self.item.pk, "quantity": 1.5}
                 ],
             )
+
+    def test_customer_cannot_request_range_like_return_quantity(self):
+        with self.assertRaises(ReturnRequestError):
+            create_return_request(
+                order_number=self.order.order_number, user=self.user,
+                reason="مرجوعی", items=[
+                    {"order_item_id": self.item.pk, "quantity": "2-4"}
+                ],
+            )
+        self.assertFalse(ReturnRequest.objects.filter(order=self.order).exists())
 
     def test_customer_cannot_request_return_for_unpaid_order(self):
         self.order.status = "pending"

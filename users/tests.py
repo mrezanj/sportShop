@@ -8,7 +8,8 @@ from django.test import (
     skipUnlessDBFeature,
 )
 from django.db import close_old_connections, connections
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from django.core.cache import cache
@@ -200,9 +201,65 @@ class OTPAPITests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["success"])
         self.assertTrue(response.data["token"])
+        self.assertIn("is_staff", response.data["user"])
+        self.assertIn("is_employee", response.data["user"])
+        self.assertFalse(response.data["user"]["is_staff"])
+        self.assertFalse(response.data["user"]["is_employee"])
         otp.refresh_from_db()
         self.assertTrue(otp.is_used)
         user = User.objects.get(username=self.mobile)
+        self.assertTrue(Profile.objects.filter(user=user, mobile=self.mobile).exists())
+        customer_group = Group.objects.get(name="مشتری")
+        self.assertTrue(user.groups.filter(pk=customer_group.pk).exists())
+        self.assertFalse(customer_group.permissions.exists())
+
+    def test_existing_user_otp_login_preserves_existing_roles(self):
+        user = User.objects.create_user(
+            username=self.mobile,
+            password="test-password",
+        )
+        Profile.objects.create(user=user, mobile=self.mobile)
+        legacy_group = Group.objects.create(name="آزمایش انبار - مدیر")
+        accountant_group = Group.objects.create(name="حسابدار")
+        user.groups.add(legacy_group, accountant_group)
+        otp = self.create_otp()
+
+        response = self.client.post(
+            "/api/auth/verify-otp/",
+            {"mobile": self.mobile, "code": self.raw_code},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertQuerySetEqual(
+            user.groups.order_by("name").values_list("name", flat=True),
+            sorted(["آزمایش انبار - مدیر", "حسابدار"]),
+            transform=lambda value: value,
+        )
+        self.assertFalse(user.groups.filter(name="مشتری").exists())
+        otp.refresh_from_db()
+        self.assertTrue(otp.is_used)
+
+    def test_existing_username_without_profile_is_not_reclassified_as_customer(self):
+        user = User.objects.create_user(
+            username=self.mobile,
+            password="test-password",
+        )
+        legacy_group = Group.objects.create(name="آزمایش انبار - ثبت کننده")
+        user.groups.add(legacy_group)
+        self.create_otp()
+
+        response = self.client.post(
+            "/api/auth/verify-otp/",
+            {"mobile": self.mobile, "code": self.raw_code},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertTrue(user.groups.filter(pk=legacy_group.pk).exists())
+        self.assertFalse(user.groups.filter(name="مشتری").exists())
         self.assertTrue(Profile.objects.filter(user=user, mobile=self.mobile).exists())
 
     def test_wrong_otp_increments_attempt_count(self):
@@ -335,6 +392,40 @@ class OTPAPITests(APITestCase):
     def test_me_requires_authentication(self):
         response = self.client.get("/api/auth/me/")
         self.assertEqual(response.status_code, 401)
+
+    def test_me_marks_business_role_as_employee_without_django_staff_access(self):
+        user = User.objects.create_user(
+            username="business-role-user",
+            password="test-password",
+            is_staff=False,
+        )
+        group = Group.objects.create(name="حسابدار")
+        user.groups.add(group)
+        token = Token.objects.create(user=user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.get("/api/auth/me/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["is_staff"])
+        self.assertTrue(response.data["is_employee"])
+
+    def test_me_does_not_mark_customer_group_as_employee(self):
+        user = User.objects.create_user(
+            username="customer-role-user",
+            password="test-password",
+            is_staff=False,
+        )
+        group = Group.objects.create(name="مشتری")
+        user.groups.add(group)
+        token = Token.objects.create(user=user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.get("/api/auth/me/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["is_staff"])
+        self.assertFalse(response.data["is_employee"])
 
     def test_logout_deletes_auth_token(self):
         user = User.objects.create_user(
@@ -611,6 +702,37 @@ class OTPAPITests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["birth_date"], birth_date.isoformat())
+
+    def test_profile_updates_and_returns_customer_name(self):
+        user = User.objects.create_user(
+            username="profile-name-user",
+            password="test-password",
+        )
+        profile = Profile.objects.create(
+            user=user,
+            mobile="09123334444",
+        )
+        self.client.force_authenticate(user=user)
+
+        response = self.client.patch(
+            "/api/auth/profile/",
+            {"first_name": " رضا ", "last_name": " محمدی "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["first_name"], "رضا")
+        self.assertEqual(response.data["last_name"], "محمدی")
+        self.assertEqual(response.data["mobile"], "09123334444")
+
+        user.refresh_from_db()
+        self.assertEqual(user.first_name, "رضا")
+        self.assertEqual(user.last_name, "محمدی")
+
+        response = self.client.get("/api/auth/profile/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["first_name"], "رضا")
+        self.assertEqual(response.data["last_name"], "محمدی")
 
     def test_profile_requires_authentication(self):
         response = self.client.get("/api/auth/profile/")
@@ -915,4 +1037,493 @@ class OTPThrottleConcurrencyTests(TransactionTestCase):
         self.assertEqual(
             sum(results),
             self.expected_allowed,
+        )
+
+from django.contrib.auth.models import Group, Permission
+from django.test import TestCase
+
+
+class StaffRoleSetupCommandTests(TestCase):
+    def test_command_is_idempotent_and_creates_roles(self):
+        call_command("setup_staff_roles")
+        call_command("setup_staff_roles")
+        expected = {"مدیرعامل", "رئیس هیئت‌مدیره", "مدیر داخلی", "حسابدار", "ثبت‌کننده", "مشاور", "مشتری"}
+        self.assertTrue(expected.issubset(set(Group.objects.values_list("name", flat=True))))
+        self.assertEqual(Group.objects.filter(name__in=expected).count(), len(expected))
+        customer = Group.objects.get(name="مشتری")
+        self.assertFalse(customer.permissions.exists())
+
+    def test_executives_have_equal_business_permissions_without_auth_admin(self):
+        call_command("setup_staff_roles")
+        ceo = Group.objects.get(name="مدیرعامل")
+        chair = Group.objects.get(name="رئیس هیئت‌مدیره")
+        self.assertEqual(set(ceo.permissions.values_list("id", flat=True)), set(chair.permissions.values_list("id", flat=True)))
+        self.assertTrue(ceo.permissions.filter(content_type__app_label="catalog").exists())
+        self.assertFalse(ceo.permissions.filter(content_type__app_label="auth").exists())
+        self.assertFalse(
+            ceo.permissions.filter(
+                content_type__model__in=("otpcode", "otpfailedattempt", "otprequestlimit", "profile")
+            ).exists()
+        )
+        self.assertFalse(ceo.permissions.filter(codename__startswith="delete_").exists())
+
+    def test_registrar_accountant_and_internal_manager_permissions_are_separated(self):
+        call_command("setup_staff_roles")
+        registrar = Group.objects.get(name="ثبت‌کننده")
+        accountant = Group.objects.get(name="حسابدار")
+        internal = Group.objects.get(name="مدیر داخلی")
+
+        self.assertTrue(registrar.permissions.filter(codename="can_create_inventory_document").exists())
+        self.assertFalse(registrar.permissions.filter(codename="can_review_inventory_document").exists())
+        self.assertFalse(registrar.permissions.filter(codename="can_approve_inventory_document").exists())
+
+        self.assertFalse(accountant.permissions.filter(codename="can_create_inventory_document").exists())
+        self.assertTrue(accountant.permissions.filter(codename="can_review_inventory_document").exists())
+        self.assertFalse(accountant.permissions.filter(codename="can_approve_inventory_document").exists())
+
+        self.assertTrue(internal.permissions.filter(codename="can_approve_inventory_document").exists())
+        self.assertFalse(internal.permissions.filter(codename="can_review_inventory_document").exists())
+        self.assertFalse(internal.permissions.filter(codename="can_create_inventory_document").exists())
+
+
+class StaffRoleManagementAPITests(APITestCase):
+    def setUp(self):
+        call_command("setup_staff_roles")
+        self.executive = User.objects.create_user(
+            username="staff-executive",
+            password="test-password",
+        )
+        self.executive.groups.add(Group.objects.get(name="مدیرعامل"))
+        self.token = Token.objects.create(user=self.executive)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+        self.target = User.objects.create_user(
+            username="09120000001",
+            password="test-password",
+        )
+        Profile.objects.create(user=self.target, mobile="09120000001")
+
+    def test_executive_can_list_users_and_assign_business_role(self):
+        response = self.client.get("/api/auth/staff/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(any(row["id"] == self.target.pk for row in response.data["results"]))
+
+        response = self.client.patch(
+            f"/api/auth/staff/{self.target.pk}/role/",
+            {"role": "حسابدار"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["changed"])
+        self.assertEqual(response.data["user"]["roles"], ["حسابدار"])
+        self.target.refresh_from_db()
+        self.assertFalse(self.target.is_staff)
+        self.assertFalse(self.target.is_superuser)
+
+    def test_assigning_customer_removes_legacy_groups_and_direct_permissions(self):
+        legacy_group = Group.objects.create(name="آزمایش انبار - مدیر")
+        permission = Permission.objects.filter(codename="add_user").first()
+        if permission is None:
+            permission = Permission.objects.create(
+                name="Test direct permission",
+                codename="test_direct_permission",
+                content_type=ContentType.objects.get_for_model(User),
+            )
+        legacy_group.permissions.add(permission)
+        self.target.groups.add(legacy_group)
+        self.target.user_permissions.add(permission)
+        self.target.is_staff = True
+        self.target.save(update_fields=["is_staff"])
+
+        response = self.client.patch(
+            f"/api/auth/staff/{self.target.pk}/role/",
+            {"role": "مشتری"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.target.refresh_from_db()
+        self.assertEqual(
+            list(self.target.groups.values_list("name", flat=True)),
+            ["مشتری"],
+        )
+        self.assertFalse(self.target.user_permissions.exists())
+        self.assertFalse(self.target.has_perm(f"{permission.content_type.app_label}.{permission.codename}"))
+        self.assertFalse(self.target.is_staff)
+
+    def test_reassigning_same_role_still_clears_direct_permissions(self):
+        customer = Group.objects.get(name="مشتری")
+        permission = Permission.objects.filter(codename="add_user").first()
+        self.target.groups.add(customer)
+        self.target.user_permissions.add(permission)
+
+        response = self.client.patch(
+            f"/api/auth/staff/{self.target.pk}/role/",
+            {"role": "مشتری"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["changed"])
+        self.target.refresh_from_db()
+        self.assertFalse(self.target.user_permissions.exists())
+
+    def test_assigning_staff_role_replaces_customer_and_legacy_groups(self):
+        customer = Group.objects.get(name="مشتری")
+        legacy = Group.objects.create(name="Inventory Creators")
+        self.target.groups.add(customer, legacy)
+
+        response = self.client.patch(
+            f"/api/auth/staff/{self.target.pk}/role/",
+            {"role": "حسابدار"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.target.refresh_from_db()
+        self.assertEqual(
+            list(self.target.groups.values_list("name", flat=True)),
+            ["حسابدار"],
+        )
+
+    def test_role_assignment_is_idempotent_and_does_not_duplicate_audit(self):
+        url = f"/api/auth/staff/{self.target.pk}/role/"
+        first = self.client.patch(url, {"role": "مشاور"}, format="json")
+        self.assertEqual(first.status_code, 200)
+        second = self.client.patch(url, {"role": "مشاور"}, format="json")
+        self.assertEqual(second.status_code, 200)
+        self.assertFalse(second.data["changed"])
+        self.assertEqual(
+            self.client.get("/api/auth/staff/history/").data.__len__(),
+            1,
+        )
+
+    def test_executive_cannot_change_own_role(self):
+        response = self.client.patch(
+            f"/api/auth/staff/{self.executive.pk}/role/",
+            {"role": "مشتری"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(self.executive.groups.filter(name="مدیرعامل").exists())
+
+    def test_superuser_business_role_endpoint_still_rejects_superuser_targets(self):
+        target = User.objects.create_superuser(
+            username="protected-superuser",
+            email="root@example.com",
+            password="test-password",
+        )
+        response = self.client.patch(
+            f"/api/auth/staff/{target.pk}/role/",
+            {"role": "مشتری"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_superuser_can_revoke_another_superuser_and_demote_it_to_customer(self):
+        actor = User.objects.create_superuser(
+            username="system-admin-one",
+            email="admin-one@example.com",
+            password="test-password",
+        )
+        target = User.objects.create_superuser(
+            username="system-admin-two",
+            email="admin-two@example.com",
+            password="test-password",
+        )
+        legacy = Group.objects.create(name="Legacy Superuser Group")
+        permission = Permission.objects.filter(codename="add_user").first()
+        target.groups.add(legacy)
+        if permission:
+            target.user_permissions.add(permission)
+        target_token = Token.objects.create(user=target)
+        token = Token.objects.create(user=actor)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.post(f"/api/auth/staff/{target.pk}/revoke-superuser/")
+
+        self.assertEqual(response.status_code, 200)
+        target.refresh_from_db()
+        self.assertFalse(target.is_superuser)
+        self.assertFalse(target.is_staff)
+        self.assertEqual(list(target.groups.values_list("name", flat=True)), ["مشتری"])
+        self.assertFalse(target.user_permissions.exists())
+        self.assertFalse(Token.objects.filter(pk=target_token.pk).exists())
+        self.assertEqual(response.data["user"]["roles"], ["مشتری"])
+        history = self.client.get("/api/auth/staff/history/")
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(history.data[0]["new_role"], "مشتری")
+
+    def test_superuser_cannot_revoke_own_access(self):
+        actor = User.objects.create_superuser(
+            username="self-protected-admin",
+            email="self-admin@example.com",
+            password="test-password",
+        )
+        token = Token.objects.create(user=actor)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.post(f"/api/auth/staff/{actor.pk}/revoke-superuser/")
+
+        self.assertEqual(response.status_code, 400)
+        actor.refresh_from_db()
+        self.assertTrue(actor.is_superuser)
+
+    def test_inactive_superuser_can_be_demoted_without_affecting_last_active_admin(self):
+        last_admin = User.objects.create_superuser(
+            username="last-system-admin",
+            email="last-admin@example.com",
+            password="test-password",
+        )
+        inactive_admin = User.objects.create_superuser(
+            username="inactive-system-admin",
+            email="inactive-admin@example.com",
+            password="test-password",
+        )
+        inactive_admin.is_active = False
+        inactive_admin.save(update_fields=["is_active"])
+        token = Token.objects.create(user=last_admin)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.post(f"/api/auth/staff/{inactive_admin.pk}/revoke-superuser/")
+
+        self.assertEqual(response.status_code, 200)
+        inactive_admin.refresh_from_db()
+        self.assertFalse(inactive_admin.is_superuser)
+        self.assertFalse(inactive_admin.is_staff)
+
+    def test_non_superuser_cannot_revoke_superuser_access(self):
+        target = User.objects.create_superuser(
+            username="target-system-admin",
+            email="target-admin@example.com",
+            password="test-password",
+        )
+        response = self.client.post(f"/api/auth/staff/{target.pk}/revoke-superuser/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_non_executive_cannot_list_or_assign_staff_roles(self):
+        accountant = User.objects.create_user(
+            username="staff-accountant",
+            password="test-password",
+        )
+        accountant.groups.add(Group.objects.get(name="حسابدار"))
+        token = Token.objects.create(user=accountant)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        self.assertEqual(self.client.get("/api/auth/staff/").status_code, 403)
+        self.assertEqual(
+            self.client.patch(
+                f"/api/auth/staff/{self.target.pk}/role/",
+                {"role": "مشتری"},
+                format="json",
+            ).status_code,
+            403,
+        )
+
+    def test_is_staff_alone_does_not_make_a_customer_an_employee(self):
+        customer = User.objects.create_user(
+            username="staff-flag-customer",
+            password="test-password",
+            is_staff=True,
+        )
+        customer.groups.add(Group.objects.get(name="مشتری"))
+        token = Token.objects.create(user=customer)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["is_staff"])
+        self.assertFalse(response.data["is_employee"])
+        self.assertFalse(response.data["can_manage_staff"])
+
+    def test_customer_cannot_access_staff_management_apis(self):
+        customer = User.objects.create_user(
+            username="staff-customer",
+            password="test-password",
+        )
+        customer.groups.add(Group.objects.get(name="مشتری"))
+        token = Token.objects.create(user=customer)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        self.assertEqual(self.client.get("/api/auth/staff/").status_code, 403)
+        self.assertEqual(self.client.get("/api/auth/staff/history/").status_code, 403)
+        self.assertEqual(
+            self.client.patch(
+                f"/api/auth/staff/{self.target.pk}/role/",
+                {"role": "حسابدار"},
+                format="json",
+            ).status_code,
+            403,
+        )
+
+    def test_role_history_records_actor_and_previous_role(self):
+        self.target.groups.add(Group.objects.get(name="مشتری"))
+        response = self.client.patch(
+            f"/api/auth/staff/{self.target.pk}/role/",
+            {"role": "مدیر داخلی"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        history = self.client.get("/api/auth/staff/history/")
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(len(history.data), 1)
+        self.assertEqual(history.data[0]["previous_roles"], ["مشتری"])
+        self.assertEqual(history.data[0]["new_role"], "مدیر داخلی")
+
+
+    def test_me_exposes_staff_management_capability_only_to_executives(self):
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["can_manage_staff"])
+        self.assertTrue(response.data["is_superuser"] is False)
+        self.assertEqual(response.data["roles"], ["مدیرعامل"])
+        self.assertIn("catalog.can_manage_catalog", response.data["permissions"])
+        self.assertIn("catalog.can_manage_product_prices", response.data["permissions"])
+
+        accountant = User.objects.create_user(
+            username="staff-accountant-me",
+            password="test-password",
+        )
+        accountant.groups.add(Group.objects.get(name="حسابدار"))
+        token = Token.objects.create(user=accountant)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["can_manage_staff"])
+        self.assertFalse(response.data["is_superuser"])
+        self.assertEqual(response.data["roles"], ["حسابدار"])
+        self.assertNotIn("inventory.can_create_inventory_document", response.data["permissions"])
+        self.assertIn("inventory.can_review_inventory_document", response.data["permissions"])
+        self.assertNotIn("inventory.can_approve_inventory_document", response.data["permissions"])
+        self.assertNotIn("catalog.can_manage_catalog", response.data["permissions"])
+
+        registrar = User.objects.create_user(
+            username="staff-registrar-me",
+            password="test-password",
+        )
+        registrar.groups.add(Group.objects.get(name="ثبت‌کننده"))
+        token = Token.objects.create(user=registrar)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["roles"], ["ثبت‌کننده"])
+        self.assertIn("inventory.can_create_inventory_document", response.data["permissions"])
+        self.assertNotIn("inventory.can_review_inventory_document", response.data["permissions"])
+        self.assertNotIn("inventory.can_approve_inventory_document", response.data["permissions"])
+        self.assertNotIn("inventory.can_view_inventory_reports", response.data["permissions"])
+
+class NormalizeStaffRolesCommandTests(TestCase):
+    def setUp(self):
+        call_command("setup_staff_roles")
+
+    def test_legacy_only_accounts_become_customers_and_direct_grants_are_cleared(self):
+        user = User.objects.create_user(
+            username="legacy-only-user",
+            password="test-password",
+        )
+        legacy = Group.objects.create(name="Inventory Creators")
+        permission = Permission.objects.filter(codename="add_user").first()
+        if permission is None:
+            permission = Permission.objects.create(
+                name="Test direct permission",
+                codename="normalize_test_permission",
+                content_type=ContentType.objects.get_for_model(User),
+            )
+        legacy.permissions.add(permission)
+        user.groups.add(legacy)
+        user.user_permissions.add(permission)
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+
+        call_command("normalize_staff_roles")
+
+        user.refresh_from_db()
+        self.assertEqual(
+            list(user.groups.values_list("name", flat=True)),
+            ["مشتری"],
+        )
+        self.assertFalse(user.user_permissions.exists())
+        self.assertFalse(user.is_staff)
+        self.assertFalse(Group.objects.get(name="مشتری").permissions.exists())
+
+    def test_single_official_role_is_preserved_and_legacy_groups_are_removed(self):
+        user = User.objects.create_user(
+            username="legacy-accountant",
+            password="test-password",
+        )
+        accountant = Group.objects.get(name="حسابدار")
+        legacy = Group.objects.create(name="آزمایش انبار - حسابدار")
+        user.groups.add(accountant, legacy)
+
+        call_command("normalize_staff_roles")
+
+        user.refresh_from_db()
+        self.assertEqual(
+            list(user.groups.values_list("name", flat=True)),
+            ["حسابدار"],
+        )
+
+    def test_registered_role_is_preserved_and_legacy_groups_are_removed(self):
+        user = User.objects.create_user(
+            username="legacy-registrar",
+            password="test-password",
+        )
+        registrar = Group.objects.get(name="ثبت‌کننده")
+        legacy = Group.objects.create(name="آزمایش انبار - ثبت‌کننده")
+        user.groups.add(registrar, legacy)
+
+        call_command("normalize_staff_roles")
+
+        user.refresh_from_db()
+        self.assertEqual(
+            list(user.groups.values_list("name", flat=True)),
+            ["ثبت‌کننده"],
+        )
+
+    def test_conflicting_official_roles_fall_back_to_customer(self):
+        user = User.objects.create_user(
+            username="conflicting-roles",
+            password="test-password",
+        )
+        user.groups.add(
+            Group.objects.get(name="حسابدار"),
+            Group.objects.get(name="مدیر داخلی"),
+        )
+
+        call_command("normalize_staff_roles")
+
+        user.refresh_from_db()
+        self.assertEqual(
+            list(user.groups.values_list("name", flat=True)),
+            ["مشتری"],
+        )
+
+    def test_superuser_groups_and_direct_permissions_are_untouched(self):
+        superuser = User.objects.create_superuser(
+            username="protected-admin",
+            email="admin@example.com",
+            password="test-password",
+        )
+        legacy = Group.objects.create(name="Legacy Admin Group")
+        permission = Permission.objects.filter(codename="add_user").first()
+        superuser.groups.add(legacy)
+        if permission is not None:
+            superuser.user_permissions.add(permission)
+        before_groups = set(superuser.groups.values_list("pk", flat=True))
+        before_permissions = set(
+            superuser.user_permissions.values_list("pk", flat=True)
+        )
+
+        call_command("normalize_staff_roles")
+
+        superuser.refresh_from_db()
+        self.assertTrue(superuser.is_superuser)
+        self.assertTrue(superuser.is_staff)
+        self.assertEqual(
+            set(superuser.groups.values_list("pk", flat=True)),
+            before_groups,
+        )
+        self.assertEqual(
+            set(superuser.user_permissions.values_list("pk", flat=True)),
+            before_permissions,
         )

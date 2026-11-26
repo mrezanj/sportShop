@@ -7,7 +7,8 @@ from django.db import connection, close_old_connections
 from django.db.models import Sum
 from django.test import TransactionTestCase
 from payments.gateways.base import PaymentResult
-from django.contrib.auth.models import User
+from django.contrib import admin
+from django.contrib.auth.models import User, Permission
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.http import Http404
@@ -28,7 +29,8 @@ from orders.shipping_preview import ShippingPreviewSerializer
 from locations.testing import get_test_tehran_city
 from orders.services import cancel_locked_order
 from payments.gateways import get_gateway
-from payments.models import Payment, MockGatewayTransaction
+from payments.models import Payment, Refund, MockGatewayTransaction, Invoice
+from payments.admin import PaymentAdmin, RefundAdmin
 from payments.views import mock_payment_page
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
@@ -1624,6 +1626,66 @@ class PaymentFlowTests(TestCase):
             mock_payment_page(request, payment_id=1)
 
 
+    def test_successful_payment_issues_one_immutable_customer_invoice(self):
+        order = self.create_order(quantity=2)
+        payment = self.start_payment(order)
+
+        mock_request = RequestFactory().post("/", {"status": "success"})
+        mock_response = mock_payment_page(mock_request, payment.id)
+        self.assertEqual(mock_response.status_code, 302)
+
+        response = self.verify(order, payment.authority)
+        self.assertEqual(response.status_code, 200)
+
+        invoice = Invoice.objects.get(order=order)
+        self.assertEqual(invoice.payment_id, payment.id)
+        self.assertEqual(invoice.snapshot["document_type"], "internal_sales_invoice")
+        self.assertFalse(invoice.snapshot["official_tax_invoice"])
+        self.assertEqual(invoice.snapshot["order_number"], order.order_number)
+        self.assertEqual(invoice.snapshot["items"][0]["sku"], self.variant.sku)
+        self.assertEqual(invoice.snapshot["items"][0]["quantity"], 2)
+        self.assertEqual(invoice.snapshot["totals"]["total_amount"], str(order.total_amount))
+
+        repeated = self.verify(order, payment.authority)
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(Invoice.objects.filter(order=order).count(), 1)
+
+
+    def test_failed_payment_does_not_issue_invoice(self):
+        order = self.create_order(quantity=1)
+        payment = self.start_payment(order)
+        mock_request = RequestFactory().post("/", {"status": "cancelled"})
+        mock_response = mock_payment_page(mock_request, payment.id)
+        self.assertEqual(mock_response.status_code, 302)
+
+        response = self.verify(order, payment.authority, status="cancelled")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Invoice.objects.filter(order=order).exists())
+        order.refresh_from_db()
+        self.assertEqual(order.status, "pending")
+
+
+    def test_invoice_endpoint_is_limited_to_order_owner(self):
+        order = self.create_order(quantity=1)
+        payment = self.start_payment(order)
+        mock_request = RequestFactory().post("/", {"status": "success"})
+        mock_response = mock_payment_page(mock_request, payment.id)
+        self.assertEqual(mock_response.status_code, 302)
+        self.assertEqual(self.verify(order, payment.authority).status_code, 200)
+
+        own_response = self.client.get(f"/api/payments/invoices/{order.order_number}/")
+        self.assertEqual(own_response.status_code, 200)
+        self.assertEqual(own_response.data["invoice_number"], Invoice.objects.get(order=order).invoice_number)
+
+        another_user = User.objects.create_user(
+            username="other-invoice-user",
+            password="test-password",
+        )
+        self.client.force_authenticate(user=another_user)
+        foreign_response = self.client.get(f"/api/payments/invoices/{order.order_number}/")
+        self.assertEqual(foreign_response.status_code, 404)
+
+
 @override_settings(DEBUG=True, ACTIVE_PAYMENT_GATEWAY="mock")
 class PaymentTransactionBoundaryTests(TransactionTestCase):
     def test_gateway_request_runs_outside_atomic_transaction(self):
@@ -2485,3 +2547,38 @@ class PaymentTransactionBoundaryTests(TransactionTestCase):
             Payment.objects.filter(order=order).count(),
             1,
         )
+
+
+class PaymentAdminPermissionBoundaryTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="payment-admin-auditor",
+            password="test-password",
+            is_staff=True,
+        )
+        self.payment_admin = PaymentAdmin(Payment, admin.site)
+        self.refund_admin = RefundAdmin(Refund, admin.site)
+
+    def test_payment_records_are_never_editable_in_admin(self):
+        request = SimpleNamespace(user=self.user)
+
+        self.assertFalse(self.payment_admin.has_add_permission(request))
+        self.assertFalse(self.payment_admin.has_change_permission(request))
+        self.assertFalse(self.payment_admin.has_delete_permission(request))
+
+    def test_refund_records_are_read_only_even_for_refund_operators(self):
+        request = SimpleNamespace(user=self.user)
+        self.assertFalse(self.refund_admin.has_change_permission(request))
+
+        permission = Permission.objects.get(
+            content_type__app_label="payments",
+            codename="can_manage_refunds",
+        )
+        self.user.user_permissions.add(permission)
+        self.user = User.objects.get(pk=self.user.pk)
+        request.user = self.user
+
+        self.assertTrue(self.user.has_perm("payments.can_manage_refunds"))
+        self.assertFalse(self.refund_admin.has_add_permission(request))
+        self.assertFalse(self.refund_admin.has_change_permission(request))
+        self.assertFalse(self.refund_admin.has_delete_permission(request))
