@@ -443,6 +443,7 @@ export default function InventoryDashboardPage() {
           <div className="mt-5 flex flex-col items-start gap-2 text-right">
             <StatusPill status={selected.status}/>
             <p className="text-sm text-gray-600">ثبت‌کننده: {selected.created_by_display ?? selected.created_by_username ?? 'سیستم'}{selected.created_by_role ? ` — ${selected.created_by_role}` : ''}</p>
+            <p className="text-sm text-gray-600">تعداد ردیف: {number(selected.items.length)}</p>
           </div>
           {canEditDraft && <section className="mt-6 rounded-xl border border-pink-100 bg-pink-50/40 p-4"><h3 className="font-bold text-pink-950">افزودن کالا به پیش‌نویس</h3><p className="mt-1 text-xs text-gray-500">شماره بچ و تاریخ انقضا اختیاری هستند؛ در صورت نداشتن شماره بچ، موجودی با عنوان «بدون بچ» ثبت می‌شود. خروج کالا با تخصیص خودکار FEFO انجام می‌شود.</p>
             <form onSubmit={addItem} className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
