@@ -1122,3 +1122,20 @@ class StaffRoleManagementAPITests(APITestCase):
         self.assertEqual(len(history.data), 1)
         self.assertEqual(history.data[0]["previous_roles"], ["مشتری"])
         self.assertEqual(history.data[0]["new_role"], "مدیر داخلی")
+
+
+    def test_me_exposes_staff_management_capability_only_to_executives(self):
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["can_manage_staff"])
+
+        accountant = User.objects.create_user(
+            username="staff-accountant-me",
+            password="test-password",
+        )
+        accountant.groups.add(Group.objects.get(name="حسابدار"))
+        token = Token.objects.create(user=accountant)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["can_manage_staff"])
