@@ -10,13 +10,20 @@ import {
 } from '@/lib/api';
 
 const number = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
-const date = (value: string | null) => value
-  ? new Date(value).toLocaleDateString('fa-IR')
-  : '—';
+const date = (value: string | null) => {
+  if (!value) return '—';
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(value);
+  const parsed = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12)
+    : new Date(value);
+  return new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(parsed);
+};
 const dateTimeParts = (value: string) => {
   const parsed = new Date(value);
   return {
-    date: parsed.toLocaleDateString('fa-IR'),
+    date: parsed.toLocaleDateString('fa-IR-u-ca-persian'),
     time: parsed.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
   };
 };
