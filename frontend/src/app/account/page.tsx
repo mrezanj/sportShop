@@ -212,24 +212,6 @@ export default function AccountPage() {
               </div>
             </div>
 
-            <div className="mb-4">
-              <label
-                htmlFor="profile-mobile"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                شماره موبایل
-              </label>
-
-              <input
-                id="profile-mobile"
-                type="text"
-                value={profile?.mobile ?? user?.mobile ?? ''}
-                readOnly
-                dir="ltr"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-100 text-gray-600"
-              />
-            </div>
-
             <div className="mb-5">
               <label
                 htmlFor="birth-date"
