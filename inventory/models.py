@@ -20,7 +20,10 @@ class InventoryBatch(models.Model):
     )
     batch_number = models.CharField(
         max_length=100,
+        blank=True,
+        default="",
         verbose_name="شماره بچ",
+        help_text="در صورت نداشتن شماره بچ واقعی، این فیلد خالی می‌ماند.",
     )
     expiration_date = models.DateField(
         null=True,
@@ -50,6 +53,7 @@ class InventoryBatch(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["variant", "batch_number"],
+                condition=~models.Q(batch_number=""),
                 name="unique_variant_batch_number",
             ),
         ]
@@ -66,7 +70,8 @@ class InventoryBatch(models.Model):
         ordering = ["expiration_date", "id"]
 
     def __str__(self):
-        return f"{self.variant.sku} - {self.batch_number}"
+        batch_label = self.batch_number or "بدون بچ"
+        return f"{self.variant.sku} - {batch_label}"
 
 
 class InventoryDocumentQuerySet(models.QuerySet):
