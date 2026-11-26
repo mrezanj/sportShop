@@ -64,7 +64,7 @@ export default function InventoryImportPage() {
 
   if (authLoading) return <main className="grid min-h-[60vh] place-items-center">در حال بررسی دسترسی...</main>;
   if (!user || !token) return <main className="container mx-auto px-4 py-16 text-center">برای ورود به مدیریت انبار ابتدا وارد حساب کاربری شوید.</main>;
-  if (!user.is_employee) return <main className="container mx-auto px-4 py-16 text-center text-amber-800">این بخش فقط برای کاربران داخلی فروشگاه است.</main>;
+  if (!user.is_superuser && !user.permissions.includes('inventory.can_create_inventory_document')) return <main className="container mx-auto px-4 py-16 text-center text-amber-800">برای ورود گروهی موجودی مجوز ثبت سند انبار لازم است.</main>;
 
   return (
     <main className="min-h-screen bg-page py-8" dir="rtl">
