@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
 from django.db import transaction
 from django.utils import timezone
 from .sms import send_otp_sms, SMSDeliveryError
@@ -222,10 +222,18 @@ class VerifyOTPSerializer(serializers.Serializer):
                 if profile:
                     user = profile.user
                 else:
-                    user, _ = User.objects.get_or_create(
+                    user, created = User.objects.get_or_create(
                         username=mobile,
                         defaults={"is_active": True},
                     )
+
+                    if created:
+                        customer_group, _ = Group.objects.get_or_create(
+                            name="مشتری",
+                        )
+                        # نقش مشتری نباید هیچ مجوز مدیریتی یا عملیاتی داشته باشد.
+                        customer_group.permissions.clear()
+                        user.groups.add(customer_group)
 
                     try:
                         profile = user.profile
