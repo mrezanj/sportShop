@@ -47,7 +47,7 @@ export default async function HomePage() {
             <div>
               <p className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-1.5 text-[11px] font-bold tracking-widest uppercase mb-6 animate-gentle-pulse">
                 <span className="w-1.5 h-1.5 rounded-full bg-pink-300" />
-                مرجع تخصصی ورزش ایران
+               تنها مرجع فروش محصولات ورزشی
               </p>
 
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-black leading-[1.15] mb-6">
@@ -258,7 +258,7 @@ export default async function HomePage() {
       </section>
 
       {/* ===== TRUST BAR (upgraded) ===== */}
-      <section className="border-y border-pink-100 bg-pink-50/70 backdrop-blur-sm">
+      <section className="border-y border-pink-200 bg-pink-100/65 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-7">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             <TrustItem
@@ -287,7 +287,7 @@ export default async function HomePage() {
 
       {/* ===== CATEGORIES ===== */}
       {data.categories.length > 0 && (
-        <section className="bg-rose-50/60 border-y border-rose-100">
+        <section className="bg-rose-100/70 border-y border-rose-200">
           <div className="container mx-auto px-4 py-14">
           <div className="flex items-end justify-between mb-8">
             <div>
@@ -461,7 +461,7 @@ export default async function HomePage() {
 
       {/* ===== BRANDS ===== */}
       {data.brands.length > 0 && (
-        <section className="bg-pink-50/60 border-y border-pink-100">
+        <section className="bg-pink-100/65 border-y border-pink-200">
           <div className="container mx-auto px-4 py-14">
           <div className="text-center mb-8">
             <p className="section-label">برندها</p>
@@ -500,7 +500,7 @@ export default async function HomePage() {
 
       {/* ===== TESTIMONIALS ===== */}
       {data.testimonials.length > 0 && (
-        <section className="bg-rose-50/70 border-y border-rose-100 py-16 my-6">
+        <section className="bg-rose-100/75 border-y border-rose-200 py-16 my-6">
           <div className="container mx-auto px-4">
             <div className="text-center mb-10">
               <p className="section-label">نظرات مشتریان</p>
@@ -625,7 +625,7 @@ function ProductSection({
   products: Product[];
 }) {
   return (
-    <section className="bg-rose-50/60 border-y border-rose-100">
+    <section className="bg-rose-100/70 border-y border-rose-200">
       <div className="container mx-auto px-4 py-14">
       <div className="flex items-end justify-between mb-8">
         <div>
