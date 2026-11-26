@@ -336,9 +336,11 @@ export default function InventoryDashboardPage() {
     (selected.created_by_id !== user?.id || !!summary?.is_executive) &&
     (!!summary?.is_executive || selected.reviewed_by_id !== user?.id);
   const canReject = (!!selected && selected.status === 'pending_review' &&
-    !!summary?.can_review_document && selected.created_by_id !== user?.id) ||
+    !!summary?.can_review_document &&
+    (selected.created_by_id !== user?.id || !!summary?.is_executive)) ||
     (!!selected && selected.status === 'pending_approval' &&
-    !!summary?.can_approve_document && selected.created_by_id !== user?.id &&
+    !!summary?.can_approve_document &&
+    (selected.created_by_id !== user?.id || !!summary?.is_executive) &&
     (!!summary?.is_executive || selected.reviewed_by_id !== user?.id));
   const fixedDirection = selected && selected.document_type !== 'adjustment';
   const itemDirection = selected && ['outbound', 'waste'].includes(selected.document_type)
