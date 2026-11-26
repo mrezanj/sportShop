@@ -195,6 +195,8 @@ export async function fetchMe(token: string): Promise<AuthUser> {
 export interface UserProfile {
   mobile: string;
   birth_date: string | null;
+  first_name: string;
+  last_name: string;
 }
 
 export async function fetchProfile(token: string): Promise<UserProfile> {
@@ -213,7 +215,7 @@ export async function fetchProfile(token: string): Promise<UserProfile> {
 }
 
 export async function updateProfile(
-  birthDate: string,
+  payload: { birth_date?: string | null; first_name?: string; last_name?: string },
   token: string
 ): Promise<UserProfile> {
   const res = await fetch(`${API_URL}/auth/profile/`, {
@@ -222,7 +224,7 @@ export async function updateProfile(
       'Content-Type': 'application/json',
       Authorization: `Token ${token}`,
     },
-    body: JSON.stringify({ birth_date: birthDate || null }),
+    body: JSON.stringify(payload),
   });
 
   const data = await res.json();
