@@ -168,7 +168,7 @@ function InvoicePageContent() {
       </div>
       <style jsx global>{`
         @media print {
-          @page { size: A4; margin: 0; }
+          @page { size: A4 landscape; margin: 8mm; }
           html, body {
             background: #fff !important;
             margin: 0 !important;
@@ -198,7 +198,7 @@ function InvoicePageContent() {
           .invoice-paper {
             width: 100% !important;
             margin: 0 !important;
-            padding: 9mm 10mm !important;
+            padding: 2mm 0 !important;
             border: 0 !important;
             border-radius: 0 !important;
             background: #fff !important;
@@ -226,7 +226,7 @@ function InvoicePageContent() {
             width: 100% !important;
             min-width: 0 !important;
             table-layout: fixed !important;
-            font-size: 8pt !important;
+            font-size: 7pt !important;
           }
           .invoice-items-table th, .invoice-items-table td {
             padding: 1.5mm !important;
