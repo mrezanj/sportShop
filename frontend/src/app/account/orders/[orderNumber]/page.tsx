@@ -246,8 +246,8 @@ function OrderDetailContent() {
                     <div className="flex h-full w-full items-center justify-center text-xs text-pink-300">—</div>
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <Link href={`/products/${item.product_slug}`} className="line-clamp-2 text-sm font-semibold text-gray-900 hover:text-pink-800">
+                <div className="min-w-[220px] flex-1 basis-[calc(100%-5rem)]">
+                  <Link href={`/products/${item.product_slug}`} className="text-sm font-semibold leading-6 text-gray-900 hover:text-pink-800 break-words">
                     {item.product_name}
                   </Link>
                   <p className="mt-1 text-xs text-pink-700">{item.brand_name}</p>
