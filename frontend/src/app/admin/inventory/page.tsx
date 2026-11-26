@@ -315,7 +315,7 @@ export default function InventoryDashboardPage() {
           <Metric title="هشدار کمبود" value={lowStock.length} detail="SKU دارای حداقل تعریف‌شده" warning />
         </section>}
 
-        <section className="rounded-2xl border border-pink-100 bg-white p-4 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-pink-200 bg-pink-50/80 p-4 shadow-sm sm:p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-xl">هشدار کمبود موجودی</h2><p className="text-xs text-gray-500 mt-1">موجودی قابل فروش کمتر از حداقل تعیین‌شده</p></div><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">{number(lowStock.length)} کالا</span></div>
           <StockTable rows={lowStock} />
         </section>
@@ -374,7 +374,7 @@ export default function InventoryDashboardPage() {
           <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead><tr className="border-b text-right text-gray-500"><th className="p-3">SKU / کالا</th><th className="p-3">بچ</th><th className="p-3">جهت</th><th className="p-3">تعداد</th><th className="p-3">بهای واحد</th><th className="p-3">تاریخ انقضا</th>{canEditDraft&&<th className="p-3">عملیات</th>}</tr></thead>
             <tbody>{selected.items.map(item=><tr key={item.id} className="border-b border-gray-50"><td className="p-3"><strong>{item.sku}</strong><span className="block text-xs text-gray-500">{item.product_name}</span></td><td className="p-3">{item.batch_number ?? '—'}{item.new_batch_number ? ` · ${item.new_batch_number}` : ''}</td><td className="p-3">{item.direction==='inbound'?'ورودی':'خروجی'}</td><td className="p-3 tabular-nums">{number(item.quantity)}</td><td className="p-3 tabular-nums">{item.unit_cost===null?'—':number(Number(item.unit_cost))}</td><td className="p-3">{item.batch_expiration_date ?? item.new_batch_expiration_date ?? '—'}</td>{canEditDraft&&<td className="p-3"><button disabled={saving} onClick={()=>void removeItem(item.id)} className="font-bold text-red-700 disabled:opacity-40">حذف</button></td>}</tr>)}</tbody>
           </table>{!selected.items.length&&<p className="py-6 text-center text-sm text-gray-500">هنوز کالایی به سند اضافه نشده است.</p>}</div>
-          {(canEditDraft || canReview || canApprove || canReject) && <section className="mt-6 rounded-xl border border-gray-200 p-4"><h3 className="font-bold">اقدام روی سند</h3>
+          {(canEditDraft || canReview || canApprove || canReject) && <section className="mt-6 rounded-xl border border-pink-200 bg-pink-50/70 p-4"><h3 className="font-bold">اقدام روی سند</h3>
             {(canReview || canApprove || canReject) && <div className="mt-3"><label className="mb-1 block text-xs text-gray-600">یادداشت بررسی / دلیل رد</label><textarea rows={2} value={workflowNote} onChange={e=>setWorkflowNote(e.target.value)} className={inputClass} placeholder="برای رد سند، توضیح الزامی است." /></div>}
             <div className="mt-4 flex flex-wrap gap-2">
               {canEditDraft && <button disabled={saving || selected.items.length===0} onClick={()=>void runWorkflow('submit')} className="rounded-xl bg-pink-800 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">ارسال برای بررسی حسابدار</button>}
