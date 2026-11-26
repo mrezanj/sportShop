@@ -715,6 +715,142 @@ class InventoryDashboardAPITests(TestCase):
             1,
         )
 
+    def test_ceo_can_create_review_and_approve_own_document(self):
+        self.manager.user_permissions.add(
+            Permission.objects.filter(
+                codename__in=[
+                    "can_create_inventory_document",
+                    "can_review_inventory_document",
+                    "can_approve_inventory_document",
+                ]
+            )
+        )
+        self.manager.groups.add(Group.objects.create(name="مدیرعامل"))
+        self.client.force_authenticate(self.manager)
+
+        created = self.client.post(
+            "/api/inventory/documents/create/",
+            {
+                "document_number": "DASH-CEO-FULL-CYCLE",
+                "document_type": "purchase",
+                "reason": "CEO full workflow test",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201)
+        document_id = created.data["id"]
+
+        added = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 4,
+                "direction": "inbound",
+                "new_batch_number": "DASH-CEO-FULL-CYCLE-BATCH",
+            },
+            format="json",
+        )
+        self.assertEqual(added.status_code, 201)
+
+        submitted = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(submitted.status_code, 200)
+
+        reviewed = self.client.post(
+            f"/api/inventory/documents/{document_id}/review/",
+            {"note": "بررسی حسابداری توسط مدیرعامل"},
+            format="json",
+        )
+        self.assertEqual(reviewed.status_code, 200)
+        self.assertEqual(reviewed.data["status"], "pending_approval")
+
+        approved = self.client.post(
+            f"/api/inventory/documents/{document_id}/approve/",
+            {"note": "تأیید نهایی مدیرعامل"},
+            format="json",
+        )
+        self.assertEqual(approved.status_code, 200)
+
+        document = InventoryDocument.objects.get(pk=document_id)
+        self.assertEqual(document.status, "approved")
+        self.assertEqual(document.created_by_id, self.manager.id)
+        self.assertEqual(document.reviewed_by_id, self.manager.id)
+        self.assertEqual(document.approved_by_id, self.manager.id)
+        self.assertEqual(
+            InventoryDocumentLog.objects.filter(
+                document=document,
+                actor=self.manager,
+            ).count(),
+            4,
+        )
+        self.assertEqual(
+            InventoryMovement.objects.filter(document=document).count(),
+            1,
+        )
+        self.assertEqual(
+            InventoryMovement.objects.get(document=document).quantity_delta,
+            4,
+        )
+
+    def test_board_chair_cannot_review_own_document(self):
+        self.manager.user_permissions.add(
+            Permission.objects.filter(
+                codename__in=[
+                    "can_create_inventory_document",
+                    "can_review_inventory_document",
+                ]
+            )
+        )
+        self.manager.groups.add(Group.objects.create(name="رئیس هیئت‌مدیره"))
+        self.client.force_authenticate(self.manager)
+
+        created = self.client.post(
+            "/api/inventory/documents/create/",
+            {
+                "document_number": "DASH-BOARD-SELF-REVIEW",
+                "document_type": "purchase",
+                "reason": "Board chair separation test",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201)
+        document_id = created.data["id"]
+
+        added = self.client.post(
+            f"/api/inventory/documents/{document_id}/items/",
+            {
+                "variant": self.variant.id,
+                "quantity": 2,
+                "direction": "inbound",
+                "new_batch_number": "DASH-BOARD-SELF-REVIEW-BATCH",
+            },
+            format="json",
+        )
+        self.assertEqual(added.status_code, 201)
+        submitted = self.client.post(
+            f"/api/inventory/documents/{document_id}/submit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(submitted.status_code, 200)
+
+        denied = self.client.post(
+            f"/api/inventory/documents/{document_id}/review/",
+            {"note": "Board chair self review attempt"},
+            format="json",
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(
+            InventoryDocument.objects.get(pk=document_id).status,
+            "pending_review",
+        )
+        self.assertFalse(
+            InventoryMovement.objects.filter(document_id=document_id).exists()
+        )
+
     def test_rejected_document_does_not_change_inventory(self):
         creator_permission = Permission.objects.get(
             codename="can_create_inventory_document"
