@@ -1198,7 +1198,7 @@ class StaffRoleManagementAPITests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertTrue(self.executive.groups.filter(name="مدیرعامل").exists())
 
-    def test_superuser_role_cannot_be_changed(self):
+    def test_superuser_business_role_endpoint_still_rejects_superuser_targets(self):
         target = User.objects.create_superuser(
             username="protected-superuser",
             email="root@example.com",
@@ -1210,6 +1210,79 @@ class StaffRoleManagementAPITests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_superuser_can_revoke_another_superuser_and_demote_it_to_customer(self):
+        actor = User.objects.create_superuser(
+            username="system-admin-one",
+            email="admin-one@example.com",
+            password="test-password",
+        )
+        target = User.objects.create_superuser(
+            username="system-admin-two",
+            email="admin-two@example.com",
+            password="test-password",
+        )
+        legacy = Group.objects.create(name="Legacy Superuser Group")
+        permission = Permission.objects.filter(codename="add_user").first()
+        target.groups.add(legacy)
+        if permission:
+            target.user_permissions.add(permission)
+        token = Token.objects.create(user=actor)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.post(f"/api/auth/staff/{target.pk}/revoke-superuser/")
+
+        self.assertEqual(response.status_code, 200)
+        target.refresh_from_db()
+        self.assertFalse(target.is_superuser)
+        self.assertFalse(target.is_staff)
+        self.assertEqual(list(target.groups.values_list("name", flat=True)), ["مشتری"])
+        self.assertFalse(target.user_permissions.exists())
+        self.assertEqual(response.data["user"]["roles"], ["مشتری"])
+        history = self.client.get("/api/auth/staff/history/")
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(history.data[0]["new_role"], "مشتری")
+
+    def test_superuser_cannot_revoke_own_access(self):
+        actor = User.objects.create_superuser(
+            username="self-protected-admin",
+            email="self-admin@example.com",
+            password="test-password",
+        )
+        token = Token.objects.create(user=actor)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.post(f"/api/auth/staff/{actor.pk}/revoke-superuser/")
+
+        self.assertEqual(response.status_code, 400)
+        actor.refresh_from_db()
+        self.assertTrue(actor.is_superuser)
+
+    def test_last_active_superuser_cannot_be_demoted(self):
+        last_admin = User.objects.create_superuser(
+            username="last-system-admin",
+            email="last-admin@example.com",
+            password="test-password",
+        )
+        self.executive.is_active = False
+        self.executive.save(update_fields=["is_active"])
+        token = Token.objects.create(user=last_admin)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.post(f"/api/auth/staff/{self.executive.pk}/revoke-superuser/")
+
+        self.assertEqual(response.status_code, 409)
+        self.executive.refresh_from_db()
+        self.assertTrue(self.executive.is_superuser)
+
+    def test_non_superuser_cannot_revoke_superuser_access(self):
+        target = User.objects.create_superuser(
+            username="target-system-admin",
+            email="target-admin@example.com",
+            password="test-password",
+        )
+        response = self.client.post(f"/api/auth/staff/{target.pk}/revoke-superuser/")
+        self.assertEqual(response.status_code, 403)
 
     def test_non_executive_cannot_list_or_assign_staff_roles(self):
         accountant = User.objects.create_user(
