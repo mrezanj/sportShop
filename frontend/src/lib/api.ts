@@ -144,8 +144,19 @@ export interface AuthUser {
   id: number;
   mobile: string | null;
   is_staff: boolean;
+  is_superuser: boolean;
   is_employee: boolean;
   can_manage_staff: boolean;
+  roles: string[];
+  permissions: string[];
+}
+
+export function hasPermission(user: AuthUser | null, permission: string): boolean {
+  return !!user && (user.is_superuser || user.permissions.includes(permission));
+}
+
+export function hasAnyPermission(user: AuthUser | null, permissions: string[]): boolean {
+  return !!user && (user.is_superuser || permissions.some((permission) => user.permissions.includes(permission)));
 }
 
 export async function requestOTP(
