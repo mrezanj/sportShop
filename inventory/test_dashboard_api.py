@@ -717,7 +717,7 @@ class InventoryDashboardAPITests(TestCase):
 
     def test_ceo_can_create_review_and_approve_own_document(self):
         self.manager.user_permissions.add(
-            Permission.objects.filter(
+            *Permission.objects.filter(
                 codename__in=[
                     "can_create_inventory_document",
                     "can_review_inventory_document",
@@ -797,7 +797,7 @@ class InventoryDashboardAPITests(TestCase):
 
     def test_board_chair_can_create_review_and_approve_own_document(self):
         self.manager.user_permissions.add(
-            Permission.objects.filter(
+            *Permission.objects.filter(
                 codename__in=[
                     "can_create_inventory_document",
                     "can_review_inventory_document",
