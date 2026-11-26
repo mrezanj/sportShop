@@ -1047,7 +1047,7 @@ class StaffRoleSetupCommandTests(TestCase):
     def test_command_is_idempotent_and_creates_roles(self):
         call_command("setup_staff_roles")
         call_command("setup_staff_roles")
-        expected = {"مدیرعامل", "رئیس هیئت‌مدیره", "مدیر داخلی", "حسابدار", "مشاور", "مشتری"}
+        expected = {"مدیرعامل", "رئیس هیئت‌مدیره", "مدیر داخلی", "حسابدار", "ثبت‌کننده", "مشاور", "مشتری"}
         self.assertTrue(expected.issubset(set(Group.objects.values_list("name", flat=True))))
         self.assertEqual(Group.objects.filter(name__in=expected).count(), len(expected))
         customer = Group.objects.get(name="مشتری")
@@ -1067,14 +1067,23 @@ class StaffRoleSetupCommandTests(TestCase):
         )
         self.assertFalse(ceo.permissions.filter(codename__startswith="delete_").exists())
 
-    def test_accountant_and_internal_manager_permissions_are_separated(self):
+    def test_registrar_accountant_and_internal_manager_permissions_are_separated(self):
         call_command("setup_staff_roles")
+        registrar = Group.objects.get(name="ثبت‌کننده")
         accountant = Group.objects.get(name="حسابدار")
         internal = Group.objects.get(name="مدیر داخلی")
+
+        self.assertTrue(registrar.permissions.filter(codename="can_create_inventory_document").exists())
+        self.assertFalse(registrar.permissions.filter(codename="can_review_inventory_document").exists())
+        self.assertFalse(registrar.permissions.filter(codename="can_approve_inventory_document").exists())
+
+        self.assertFalse(accountant.permissions.filter(codename="can_create_inventory_document").exists())
         self.assertTrue(accountant.permissions.filter(codename="can_review_inventory_document").exists())
         self.assertFalse(accountant.permissions.filter(codename="can_approve_inventory_document").exists())
+
         self.assertTrue(internal.permissions.filter(codename="can_approve_inventory_document").exists())
         self.assertFalse(internal.permissions.filter(codename="can_review_inventory_document").exists())
+        self.assertFalse(internal.permissions.filter(codename="can_create_inventory_document").exists())
 
 
 class StaffRoleManagementAPITests(APITestCase):
@@ -1383,10 +1392,25 @@ class StaffRoleManagementAPITests(APITestCase):
         self.assertFalse(response.data["can_manage_staff"])
         self.assertFalse(response.data["is_superuser"])
         self.assertEqual(response.data["roles"], ["حسابدار"])
-        self.assertIn("inventory.can_create_inventory_document", response.data["permissions"])
+        self.assertNotIn("inventory.can_create_inventory_document", response.data["permissions"])
         self.assertIn("inventory.can_review_inventory_document", response.data["permissions"])
         self.assertNotIn("inventory.can_approve_inventory_document", response.data["permissions"])
         self.assertNotIn("catalog.can_manage_catalog", response.data["permissions"])
+
+        registrar = User.objects.create_user(
+            username="staff-registrar-me",
+            password="test-password",
+        )
+        registrar.groups.add(Group.objects.get(name="ثبت‌کننده"))
+        token = Token.objects.create(user=registrar)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["roles"], ["ثبت‌کننده"])
+        self.assertIn("inventory.can_create_inventory_document", response.data["permissions"])
+        self.assertNotIn("inventory.can_review_inventory_document", response.data["permissions"])
+        self.assertNotIn("inventory.can_approve_inventory_document", response.data["permissions"])
+        self.assertNotIn("inventory.can_view_inventory_reports", response.data["permissions"])
 
 class NormalizeStaffRolesCommandTests(TestCase):
     def setUp(self):
@@ -1437,6 +1461,23 @@ class NormalizeStaffRolesCommandTests(TestCase):
         self.assertEqual(
             list(user.groups.values_list("name", flat=True)),
             ["حسابدار"],
+        )
+
+    def test_registered_role_is_preserved_and_legacy_groups_are_removed(self):
+        user = User.objects.create_user(
+            username="legacy-registrar",
+            password="test-password",
+        )
+        registrar = Group.objects.get(name="ثبت‌کننده")
+        legacy = Group.objects.create(name="آزمایش انبار - ثبت‌کننده")
+        user.groups.add(registrar, legacy)
+
+        call_command("normalize_staff_roles")
+
+        user.refresh_from_db()
+        self.assertEqual(
+            list(user.groups.values_list("name", flat=True)),
+            ["ثبت‌کننده"],
         )
 
     def test_conflicting_official_roles_fall_back_to_customer(self):
