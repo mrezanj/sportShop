@@ -65,23 +65,51 @@ const jalaliDateToIso = (value: string): string | null => {
   const normalized = normalizeDigits(value.trim()).replace(/-/g, '/');
   const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(normalized);
   if (!match) return null;
+
   const [year, month, day] = match.slice(1).map(Number);
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  if (year < 1 || month < 1 || month > 12 || day < 1) return null;
 
   const formatter = new Intl.DateTimeFormat('en-US-u-ca-persian-nu-latn', {
     year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'UTC',
   });
-  const candidate = new Date(Date.UTC(year + 621, 2, 20));
-  for (let offset = -3; offset <= 3; offset += 1) {
-    const date = new Date(candidate.getTime() + offset * 86400000);
+  const getJalaliParts = (date: Date) => {
     const parts = Object.fromEntries(
       formatter.formatToParts(date).map(part => [part.type, part.value]),
     );
-    if (Number(parts.year) === year && Number(parts.month) === month && Number(parts.day) === day) {
-      return date.toISOString().slice(0, 10);
+    return {
+      year: Number(parts.year),
+      month: Number(parts.month),
+      day: Number(parts.day),
+    };
+  };
+  const findYearStart = (jalaliYear: number): Date | null => {
+    const approximate = Date.UTC(jalaliYear + 621, 2, 19);
+    for (let offset = -2; offset <= 3; offset += 1) {
+      const candidate = new Date(approximate + offset * 86400000);
+      const parts = getJalaliParts(candidate);
+      if (parts.year === jalaliYear && parts.month === 1 && parts.day === 1) {
+        return candidate;
+      }
     }
-  }
-  return null;
+    return null;
+  };
+
+  const yearStart = findYearStart(year);
+  const nextYearStart = findYearStart(year + 1);
+  if (!yearStart || !nextYearStart) return null;
+
+  const yearLength = Math.round((nextYearStart.getTime() - yearStart.getTime()) / 86400000);
+  const monthLength = month <= 6 ? 31 : month <= 11 ? 30 : yearLength - 336;
+  if (day > monthLength) return null;
+
+  const daysBeforeMonth = month <= 6
+    ? (month - 1) * 31
+    : 186 + (month - 7) * 30;
+  const result = new Date(yearStart.getTime() + (daysBeforeMonth + day - 1) * 86400000);
+  const parts = getJalaliParts(result);
+  if (parts.year !== year || parts.month !== month || parts.day !== day) return null;
+
+  return result.toISOString().slice(0, 10);
 };
 
 const isoToJalaliDate = (value: string) => {
