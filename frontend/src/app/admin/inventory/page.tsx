@@ -27,7 +27,7 @@ import {
 const STATUS_LABELS: Record<string, string> = {
   draft: 'پیش‌نویس',
   pending_review: 'در انتظار بررسی حسابدار',
-  pending_approval: 'در انتظار تأیید مدیر',
+  pending_approval: 'در انتظار تأیید مدیریتی',
   approved: 'تأییدشده',
   rejected: 'ردشده',
   cancelled: 'لغوشده',
@@ -249,7 +249,7 @@ export default function InventoryDashboardPage() {
     }
     if (!window.confirm(
       action === 'submit' ? 'سند برای بررسی حسابدار ارسال شود؟' :
-      action === 'review' ? 'بررسی حسابدار ثبت و سند به مدیر ارجاع شود؟' :
+      action === 'review' ? 'بررسی حسابدار ثبت و سند به مرحله تأیید مدیریتی ارجاع شود؟' :
       action === 'approve' ? 'تأیید نهایی انجام شود و گردش موجودی ثبت گردد؟' :
       'سند رد شود؟'
     )) return;
@@ -298,7 +298,7 @@ export default function InventoryDashboardPage() {
     <main className="min-h-screen bg-page py-8 sm:py-10">
       <div className="container mx-auto max-w-7xl px-4 space-y-7">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div><p className="section-label">مدیریت عملیات فروشگاه</p><h1 className="text-3xl sm:text-4xl">داشبورد انبار</h1><p className="mt-2 text-sm text-gray-500">نمای موجودی، ثبت اسناد و گردش تأیید حسابدار و مدیر داخلی</p></div>
+          <div><p className="section-label">مدیریت عملیات فروشگاه</p><h1 className="text-3xl sm:text-4xl">داشبورد انبار</h1><p className="mt-2 text-sm text-gray-500">نمای موجودی، ثبت اسناد و گردش بررسی حسابدار و تأیید مدیریتی</p></div>
           <div className="flex flex-wrap gap-2">
             {(user.is_superuser || user.permissions.includes('catalog.can_manage_product_prices')) && <a href="/admin/pricing" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900 hover:bg-pink-50">مدیریت قیمت‌ها</a>}
             {summary?.can_view_reports && <a href="/admin/inventory/reports" className="rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-900 hover:bg-pink-50">گزارش موجودی و گردش‌ها</a>}
@@ -317,7 +317,7 @@ export default function InventoryDashboardPage() {
           <Metric title="موجودی قابل فروش" value={summary.available_quantity} detail="پس از کسر رزروها" />
           <Metric title="کالاهای زیر حداقل" value={summary.low_stock_count} detail="نیازمند بررسی تأمین" warning />
           <Metric title="در انتظار بررسی" value={summary.pending_review_count} detail="مرحله حسابدار" />
-          <Metric title="در انتظار تأیید" value={summary.pending_approval_count} detail="مرحله مدیر داخلی" />
+          <Metric title="در انتظار تأیید" value={summary.pending_approval_count} detail="مرحله تأیید مدیریتی" />
           <Metric title="هشدار کمبود" value={lowStock.length} detail="SKU دارای حداقل تعریف‌شده" warning />
         </section>}
 
