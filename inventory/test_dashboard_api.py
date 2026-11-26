@@ -795,12 +795,13 @@ class InventoryDashboardAPITests(TestCase):
             4,
         )
 
-    def test_board_chair_cannot_review_own_document(self):
+    def test_board_chair_can_create_review_and_approve_own_document(self):
         self.manager.user_permissions.add(
             Permission.objects.filter(
                 codename__in=[
                     "can_create_inventory_document",
                     "can_review_inventory_document",
+                    "can_approve_inventory_document",
                 ]
             )
         )
@@ -810,9 +811,9 @@ class InventoryDashboardAPITests(TestCase):
         created = self.client.post(
             "/api/inventory/documents/create/",
             {
-                "document_number": "DASH-BOARD-SELF-REVIEW",
+                "document_number": "DASH-BOARD-FULL-CYCLE",
                 "document_type": "purchase",
-                "reason": "Board chair separation test",
+                "reason": "Board chair full workflow test",
             },
             format="json",
         )
@@ -823,13 +824,14 @@ class InventoryDashboardAPITests(TestCase):
             f"/api/inventory/documents/{document_id}/items/",
             {
                 "variant": self.variant.id,
-                "quantity": 2,
+                "quantity": 3,
                 "direction": "inbound",
-                "new_batch_number": "DASH-BOARD-SELF-REVIEW-BATCH",
+                "new_batch_number": "DASH-BOARD-FULL-CYCLE-BATCH",
             },
             format="json",
         )
         self.assertEqual(added.status_code, 201)
+
         submitted = self.client.post(
             f"/api/inventory/documents/{document_id}/submit/",
             {},
@@ -837,18 +839,40 @@ class InventoryDashboardAPITests(TestCase):
         )
         self.assertEqual(submitted.status_code, 200)
 
-        denied = self.client.post(
+        reviewed = self.client.post(
             f"/api/inventory/documents/{document_id}/review/",
-            {"note": "Board chair self review attempt"},
+            {"note": "بررسی حسابداری توسط رئیس هیئت‌مدیره"},
             format="json",
         )
-        self.assertEqual(denied.status_code, 403)
-        self.assertEqual(
-            InventoryDocument.objects.get(pk=document_id).status,
-            "pending_review",
+        self.assertEqual(reviewed.status_code, 200)
+        self.assertEqual(reviewed.data["status"], "pending_approval")
+
+        approved = self.client.post(
+            f"/api/inventory/documents/{document_id}/approve/",
+            {"note": "تأیید نهایی رئیس هیئت‌مدیره"},
+            format="json",
         )
-        self.assertFalse(
-            InventoryMovement.objects.filter(document_id=document_id).exists()
+        self.assertEqual(approved.status_code, 200)
+
+        document = InventoryDocument.objects.get(pk=document_id)
+        self.assertEqual(document.status, "approved")
+        self.assertEqual(document.created_by_id, self.manager.id)
+        self.assertEqual(document.reviewed_by_id, self.manager.id)
+        self.assertEqual(document.approved_by_id, self.manager.id)
+        self.assertEqual(
+            InventoryDocumentLog.objects.filter(
+                document=document,
+                actor=self.manager,
+            ).count(),
+            4,
+        )
+        self.assertEqual(
+            InventoryMovement.objects.filter(document=document).count(),
+            1,
+        )
+        self.assertEqual(
+            InventoryMovement.objects.get(document=document).quantity_delta,
+            3,
         )
 
     def test_rejected_document_does_not_change_inventory(self):
