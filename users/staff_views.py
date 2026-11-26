@@ -141,7 +141,11 @@ def assign_staff_role(request, user_id):
 
         # Assigning an official role is authoritative: remove legacy/test groups
         # too, so their permissions cannot survive a role change.
-        if len(existing_groups) == 1 and existing_groups[0].pk == selected_group.pk:
+        if (
+            len(existing_groups) == 1
+            and existing_groups[0].pk == selected_group.pk
+            and not target.user_permissions.exists()
+        ):
             return Response({"success": True, "changed": False, "user": _user_role_data(target)})
 
         target.groups.clear()
