@@ -67,7 +67,7 @@ export default function CartPage() {
             {items.map((item) => (
               <div
                 key={item.variantId}
-                className="border border-pink-300/90 rounded-2xl p-4 flex gap-4 bg-[#f8d8e6] shadow-[0_6px_20px_rgba(131,24,67,0.08)] transition-all hover:bg-[#f5c2d8] hover:border-pink-400"
+                className="border border-[#d8c9eb] rounded-2xl p-4 flex gap-4 bg-[#f0eafa] shadow-[0_6px_20px_rgba(88,62,125,0.10)] transition-all hover:bg-[#e9def6] hover:border-[#bca5dc]"
               >
                 <div className="w-24 h-24 bg-white border border-rose-100 rounded-xl overflow-hidden flex-shrink-0">
                   {item.imageUrl ? (
