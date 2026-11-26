@@ -650,6 +650,37 @@ class OTPAPITests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["birth_date"], birth_date.isoformat())
 
+    def test_profile_updates_and_returns_customer_name(self):
+        user = User.objects.create_user(
+            username="profile-name-user",
+            password="test-password",
+        )
+        profile = Profile.objects.create(
+            user=user,
+            mobile="09123334444",
+        )
+        self.client.force_authenticate(user=user)
+
+        response = self.client.patch(
+            "/api/auth/profile/",
+            {"first_name": " رضا ", "last_name": " محمدی "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["first_name"], "رضا")
+        self.assertEqual(response.data["last_name"], "محمدی")
+        self.assertEqual(response.data["mobile"], "09123334444")
+
+        user.refresh_from_db()
+        self.assertEqual(user.first_name, "رضا")
+        self.assertEqual(user.last_name, "محمدی")
+
+        response = self.client.get("/api/auth/profile/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["first_name"], "رضا")
+        self.assertEqual(response.data["last_name"], "محمدی")
+
     def test_profile_requires_authentication(self):
         response = self.client.get("/api/auth/profile/")
         self.assertEqual(response.status_code, 401)
