@@ -330,7 +330,7 @@ export default function InventoryDashboardPage() {
         </section>
 
         {(summary?.can_create_document || summary?.can_review_document || summary?.can_approve_document || summary?.can_view_reports) && (
-        <section className="rounded-2xl border border-pink-100 bg-white p-4 shadow-sm sm:p-6">
+        <section className="rounded-2xl border-2 border-rose-300 bg-rose-50/70 p-4 shadow-sm ring-1 ring-rose-100 sm:p-6">
           <div className="mb-4"><h2 className="text-xl">اسناد انبار</h2><p className="mt-1 text-xs text-gray-500">ایجاد پیش‌نویس، افزودن اقلام و گردش بررسی و تأیید</p></div>
           <div className="mb-4 grid gap-2 sm:grid-cols-4">
             <input value={search} onChange={e => {setSearch(e.target.value);setPage(1);}} placeholder="جست‌وجوی شماره سند یا توضیحات" className={inputClass + ' sm:col-span-2'} />
