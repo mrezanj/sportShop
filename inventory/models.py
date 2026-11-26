@@ -224,6 +224,10 @@ class InventoryDocument(models.Model):
                 "can_view_inventory_reports",
                 "Can view inventory reports",
             ),
+            (
+                "can_manage_inventory_thresholds",
+                "Can manage inventory stock thresholds",
+            ),
         ]
         constraints = [
             models.CheckConstraint(
