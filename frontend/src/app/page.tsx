@@ -258,7 +258,7 @@ export default async function HomePage() {
       </section>
 
       {/* ===== TRUST BAR (upgraded) ===== */}
-      <section className="border-b border-pink-100 bg-white/90 backdrop-blur-sm">
+      <section className="border-y border-pink-100 bg-pink-50/70 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-7">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             <TrustItem
