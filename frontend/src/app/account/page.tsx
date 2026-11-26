@@ -14,6 +14,17 @@ import {
   type UserProfile,
 } from '@/lib/api';
 
+function formatOrderDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('fa-IR', {
+    timeZone: 'Asia/Tehran',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800 border-amber-200',
   paid: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -262,7 +273,7 @@ export default function AccountPage() {
                       <span>{order.items.length} کالا</span>
                       <span className="mx-2">·</span>
                       <span>
-                        {new Date(order.created_at).toLocaleDateString('fa-IR')}
+                        {formatOrderDate(order.created_at)}
                       </span>
                     </div>
 

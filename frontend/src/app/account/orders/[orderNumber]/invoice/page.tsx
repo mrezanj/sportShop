@@ -64,14 +64,14 @@ function InvoicePageContent() {
   const totals = snapshot.totals;
 
   return (
-    <main dir="rtl" className="min-h-screen bg-gray-100 py-8 print:bg-white print:py-0">
-      <div className="mx-auto max-w-5xl px-4 print:max-w-none print:px-0">
-        <div className="mb-4 flex items-center justify-between print:hidden">
+    <main dir="rtl" className="invoice-page-root min-h-screen bg-gray-100 py-8 print:bg-white print:py-0">
+      <div className="invoice-page-shell mx-auto max-w-5xl px-4 print:max-w-none print:px-0">
+        <div className="invoice-screen-actions mb-4 flex items-center justify-between print:hidden">
           <Link href={`/account/orders/${orderNumber}`} className="text-sm text-pink-800 hover:underline">بازگشت به سفارش</Link>
           <button onClick={() => window.print()} className="rounded-lg bg-pink-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-pink-900">چاپ فاکتور</button>
         </div>
 
-        <article className="bg-white p-6 shadow-sm sm:p-10 print:p-0 print:shadow-none">
+        <article className="invoice-paper bg-white p-6 shadow-sm sm:p-10 print:p-0 print:shadow-none">
           <header className="flex flex-wrap items-start justify-between gap-6 border-b-2 border-gray-800 pb-6">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">فاکتور فروش</h1>
@@ -87,12 +87,12 @@ function InvoicePageContent() {
             </div>
           </header>
 
-          <div className="my-6 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm leading-7 text-amber-900 print:bg-white">
+          <div className="invoice-notice my-6 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm leading-7 text-amber-900 print:bg-white">
             {snapshot.notice}
           </div>
 
-          <section className="grid gap-6 sm:grid-cols-2">
-            <div className="rounded-lg border border-gray-200 p-4">
+          <section className="invoice-party-grid grid gap-6 sm:grid-cols-2">
+            <div className="invoice-party-card rounded-lg border border-pink-100 p-4">
               <h2 className="mb-2 font-bold text-gray-900">فروشنده</h2>
               {detail('نام', seller.name)}
               {detail('شناسه ملی', seller.national_id)}
@@ -102,7 +102,7 @@ function InvoicePageContent() {
               {detail('نشانی', seller.address)}
               {detail('کد پستی', seller.postal_code)}
             </div>
-            <div className="rounded-lg border border-gray-200 p-4">
+            <div className="invoice-party-card rounded-lg border border-pink-100 p-4">
               <h2 className="mb-2 font-bold text-gray-900">خریدار / گیرنده</h2>
               {detail('نام', buyer.name)}
               {detail('موبایل', buyer.mobile)}
@@ -113,10 +113,10 @@ function InvoicePageContent() {
             </div>
           </section>
 
-          <section className="mt-8">
+          <section className="invoice-items-section mt-8">
             <h2 className="mb-3 font-bold text-gray-900">اقلام فاکتور</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] border-collapse text-sm">
+            <div className="invoice-items-scroll overflow-x-auto">
+              <table className="invoice-items-table w-full min-w-[760px] border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-100 text-gray-700">
                     <th className="border border-gray-200 p-2">ردیف</th>
@@ -148,7 +148,7 @@ function InvoicePageContent() {
             </div>
           </section>
 
-          <section className="mt-8 mr-auto max-w-md space-y-2 text-sm">
+          <section className="invoice-totals mt-8 mr-auto max-w-md space-y-2 text-sm">
             {detail('جمع کالاها', money(totals.subtotal) + ' تومان')}
             {detail('تخفیف', money(totals.discount_amount) + ' تومان')}
             {detail('مالیات محاسبه‌شده', money(totals.vat_amount) + ' تومان')}
@@ -160,7 +160,7 @@ function InvoicePageContent() {
             </div>
           </section>
 
-          <footer className="mt-10 border-t border-gray-200 pt-4 text-xs leading-6 text-gray-500">
+          <footer className="invoice-print-footer mt-10 border-t border-gray-200 pt-4 text-xs leading-6 text-gray-500">
             <p>شناسه پرداخت: <span dir="ltr">{snapshot.payment.reference || '—'}</span></p>
             <p>این فاکتور بر اساس اطلاعات ثبت‌شده هنگام سفارش تهیه شده است. اطلاعات هویتی یا ثبتی فروشنده که هنوز در سامانه پیکربندی نشده، در این نسخه خالی نمایش داده می‌شود.</p>
           </footer>
@@ -168,8 +168,82 @@ function InvoicePageContent() {
       </div>
       <style jsx global>{`
         @media print {
-          @page { size: A4; margin: 12mm; }
-          body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          @page { size: A4; margin: 0; }
+          html, body {
+            background: #fff !important;
+            margin: 0 !important;
+            min-height: 0 !important;
+          }
+          body {
+            display: block !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .site-header, .site-footer, .invoice-screen-actions {
+            display: none !important;
+          }
+          .invoice-page-root {
+            display: block !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+          }
+          .invoice-page-shell {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .invoice-paper {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 9mm 10mm !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            background: #fff !important;
+            box-shadow: none !important;
+            -webkit-box-decoration-break: clone;
+            box-decoration-break: clone;
+          }
+          .invoice-party-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 4mm !important;
+          }
+          .invoice-party-card {
+            break-inside: avoid;
+            page-break-inside: avoid;
+            padding: 3mm !important;
+          }
+          .invoice-notice {
+            margin: 4mm 0 !important;
+            padding: 2mm 3mm !important;
+            background: #fff !important;
+          }
+          .invoice-items-section { margin-top: 5mm !important; }
+          .invoice-items-scroll { overflow: visible !important; }
+          .invoice-items-table {
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed !important;
+            font-size: 8pt !important;
+          }
+          .invoice-items-table th, .invoice-items-table td {
+            padding: 1.5mm !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+          }
+          .invoice-items-table tr {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+          .invoice-totals, .invoice-print-footer {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+          .invoice-totals { margin-top: 5mm !important; }
+          .invoice-print-footer { margin-top: 6mm !important; }
+          a { color: inherit !important; text-decoration: none !important; }
         }
       `}</style>
     </main>

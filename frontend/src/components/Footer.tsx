@@ -21,7 +21,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
   ];
 
   return (
-    <footer className="relative mt-16 bg-gradient-to-br from-pink-950 via-pink-900 to-pink-950 text-pink-100 overflow-hidden">
+    <footer className="site-footer relative mt-16 bg-gradient-to-br from-pink-950 via-pink-900 to-pink-950 text-pink-100 overflow-hidden">
       {/* Decorative blobs */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-pink-500/10 blur-3xl" />
@@ -47,8 +47,8 @@ export default function Footer({ categories }: { categories: Category[] }) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/logo.png"
-                alt="فروشگاه ورزشی"
-                className="h-12 w-auto"
+                alt="مادوان | Madone"
+                className="h-14 w-auto max-w-[180px] object-contain"
               />
             </Link>
 
@@ -265,7 +265,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
 
         {/* Bottom bar */}
         <div className="mt-12 pt-6 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-pink-200/70">
-          <p>© {persianYear} فروشگاه ورزشی. تمامی حقوق محفوظ است.</p>
+          <p>© {persianYear} مادوان (Madone). تمامی حقوق محفوظ است.</p>
           <p className="flex items-center gap-1">
             ساخته شده با <span className="text-pink-400">♥</span> برای
             ورزشکاران ایران

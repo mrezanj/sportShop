@@ -33,7 +33,7 @@ from orders.models import (
     ShippingRate,
     StockReservation,
 )
-from orders.serializers import CreateOrderSerializer
+from orders.serializers import CreateOrderSerializer, OrderSerializer
 from orders.shipping_preview import ShippingPreviewSerializer
 from locations.testing import get_test_tehran_city
 from payments.models import Payment
@@ -50,6 +50,30 @@ from inventory.models import (
     InventoryDocumentItem,
     InventoryMovement,
 )
+
+
+class OrderDateSerializationTests(TestCase):
+    def test_created_at_is_serialized_as_gregorian_iso_timestamp(self):
+        user = User.objects.create_user(
+            username="order-date-user",
+            password="test-password",
+        )
+        order = Order.objects.create(
+            user=user,
+            first_name="Test",
+            last_name="Customer",
+            mobile="09123456789",
+            province="tehran",
+            city="Tehran",
+            address="Test address",
+            subtotal=Decimal("100000"),
+            vat_amount=Decimal("10000"),
+            total_amount=Decimal("110000"),
+        )
+        serialized_created_at = OrderSerializer(order).data["created_at"]
+        expected_created_at = order.created_at.togregorian().isoformat()
+        self.assertEqual(serialized_created_at, expected_created_at)
+        self.assertRegex(serialized_created_at, r"^20\d{2}-\d{2}-\d{2}T")
 
 
 class CreateOrderReservationTests(TestCase):

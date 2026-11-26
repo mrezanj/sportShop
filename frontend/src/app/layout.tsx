@@ -8,7 +8,7 @@ import SiteChrome from '@/components/SiteChrome';
 import SiteFooter from '@/components/SiteFooter';
 
 export const metadata: Metadata = {
-  title: 'فروشگاه ورزشی | مرجع تخصصی مکمل و پوشاک ورزشی',
+  title: 'مادوان | Madone — مرجع تخصصی مکمل و پوشاک ورزشی',
   description:
     'مرجع تخصصی مکمل‌های ورزشی، پوشاک، تجهیزات باشگاهی و محصولات بدون قند',
 };

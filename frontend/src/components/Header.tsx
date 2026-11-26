@@ -42,7 +42,7 @@ export default function Header({ categories }: { categories: Category[] }) {
 
   return (
     <>
-      <header className="bg-white/95 backdrop-blur-md border-b border-pink-100 shadow-[var(--shadow-header)] sticky top-0 z-40">
+      <header className="site-header bg-white/95 backdrop-blur-md border-b border-pink-100 shadow-[var(--shadow-header)] sticky top-0 z-40">
         <div className="container mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2 sm:gap-4">
           {/* Mobile hamburger */}
           <button
@@ -68,8 +68,8 @@ export default function Header({ categories }: { categories: Category[] }) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logo.png"
-              alt="فروشگاه ورزشی"
-              className="h-10 sm:h-11 w-auto object-contain group-hover:scale-105 transition-transform"
+              alt="مادوان | Madone"
+              className="h-12 sm:h-14 w-auto max-w-[180px] object-contain group-hover:scale-105 transition-transform"
             />
           </Link>
 
@@ -216,7 +216,7 @@ export default function Header({ categories }: { categories: Category[] }) {
 
       {/* Mobile drawer */}
       {menuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden print:hidden">
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => setMenuOpen(false)}
