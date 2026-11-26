@@ -2687,6 +2687,40 @@ class InventoryReportAPITests(TestCase):
         self.assertNotIn("batch", report)
         self.assertNotIn("expiration_date", report)
 
+    def test_document_history_uses_official_role_title(self):
+        from django.contrib.auth.models import Group
+        from .dashboard_serializers import _person_info
+
+        internal_manager, _ = Group.objects.get_or_create(name="مدیر داخلی")
+        self.user.first_name = "مینا"
+        self.user.last_name = "نوشانی"
+        self.user.save(update_fields=["first_name", "last_name"])
+        self.user.groups.add(internal_manager)
+
+        approve_permission = Permission.objects.get(
+            content_type__app_label="inventory",
+            codename="can_approve_inventory_document",
+        )
+        self.user.user_permissions.add(approve_permission)
+
+        self.assertEqual(
+            _person_info(self.user),
+            ("مینا نوشانی", "مدیر داخلی"),
+        )
+
+    def test_executive_history_keeps_executive_title_despite_broad_permissions(self):
+        from django.contrib.auth.models import Group
+        from .dashboard_serializers import _person_info
+
+        ceo, _ = Group.objects.get_or_create(name="مدیرعامل")
+        self.user.groups.add(ceo)
+        self.user.user_permissions.add(self.permission)
+
+        self.assertEqual(
+            _person_info(self.user),
+            ("inventory_report_user", "مدیرعامل"),
+        )
+
     def test_report_marks_low_stock_variant(self):
         self.user.user_permissions.add(self.permission)
         self.client.force_authenticate(user=self.user)
