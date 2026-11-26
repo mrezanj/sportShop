@@ -460,7 +460,7 @@ export default async function HomePage() {
       {/* ===== BRANDS ===== */}
       {data.brands.length > 0 && (
         <section className="py-8 md:py-10">
-          <div className="contents">
+          <div className="container mx-auto px-4">
           <div className="text-center mb-8">
             <p className="section-label">برندها</p>
             <h2 className="text-2xl md:text-3xl font-extrabold text-pink-950">
@@ -499,7 +499,7 @@ export default async function HomePage() {
       {/* ===== TESTIMONIALS ===== */}
       {data.testimonials.length > 0 && (
         <section className="py-10 md:py-14">
-          <div className="contents">
+          <div className="container mx-auto px-4">
             <div className="text-center mb-10">
               <p className="section-label">نظرات مشتریان</p>
               <h2 className="text-2xl md:text-3xl font-extrabold text-pink-950">
