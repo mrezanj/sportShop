@@ -93,8 +93,12 @@ export default function InventoryDashboardPage() {
     try {
       const summaryData = await fetchInventorySummary(token);
       const [lowData, thresholdData] = await Promise.all([
-        fetchInventoryLowStock(token),
-        fetchInventoryThresholds(token),
+        summaryData.can_view_reports
+          ? fetchInventoryLowStock(token)
+          : Promise.resolve({ results: [] as InventoryStockRow[] }),
+        summaryData.can_manage_threshold
+          ? fetchInventoryThresholds(token)
+          : Promise.resolve([] as InventoryStockRow[]),
       ]);
       const canViewDocuments = summaryData.can_create_document ||
         summaryData.can_review_document || summaryData.can_approve_document ||
@@ -310,30 +314,37 @@ export default function InventoryDashboardPage() {
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
         {notice && <div role="status" className="rounded-xl border border-pink-200 bg-pink-50 px-4 py-3 text-sm text-pink-900">{notice}</div>}
 
-        {summary && <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Metric title="تعداد SKU فعال" value={summary.sku_count} detail="تنوع کالای فعال" />
-          <Metric title="موجودی فیزیکی" value={summary.physical_quantity} detail="جمع تعداد در انبار" />
-          <Metric title="موجودی رزروشده" value={summary.reserved_quantity} detail="اختصاص‌یافته به سفارش‌ها" />
-          <Metric title="موجودی قابل فروش" value={summary.available_quantity} detail="پس از کسر رزروها" />
-          <Metric title="کالاهای زیر حداقل" value={summary.low_stock_count} detail="نیازمند بررسی تأمین" warning />
-          <Metric title="در انتظار بررسی" value={summary.pending_review_count} detail="مرحله حسابدار" />
-          <Metric title="در انتظار تأیید" value={summary.pending_approval_count} detail="مرحله تأیید مدیریتی" />
-          <Metric title="هشدار کمبود" value={lowStock.length} detail="SKU دارای حداقل تعریف‌شده" warning />
-        </section>}
+        {summary && (summary.can_view_reports ? (
+          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Metric title="تعداد SKU فعال" value={summary.sku_count} detail="تنوع کالای فعال" />
+            <Metric title="موجودی فیزیکی" value={summary.physical_quantity} detail="جمع تعداد در انبار" />
+            <Metric title="موجودی رزروشده" value={summary.reserved_quantity} detail="اختصاص‌یافته به سفارش‌ها" />
+            <Metric title="موجودی قابل فروش" value={summary.available_quantity} detail="پس از کسر رزروها" />
+            <Metric title="کالاهای زیر حداقل" value={summary.low_stock_count} detail="نیازمند بررسی تأمین" warning />
+            <Metric title="در انتظار بررسی" value={summary.pending_review_count} detail="مرحله حسابدار" />
+            <Metric title="در انتظار تأیید" value={summary.pending_approval_count} detail="مرحله تأیید مدیریتی" />
+            <Metric title="هشدار کمبود" value={lowStock.length} detail="SKU دارای حداقل تعریف‌شده" warning />
+          </section>
+        ) : (
+          <section className="grid grid-cols-2 gap-3 lg:grid-cols-2">
+            <Metric title="اسناد در انتظار بررسی" value={summary.pending_review_count} detail="اسناد قابل مشاهده شما" />
+            <Metric title="اسناد در انتظار تأیید" value={summary.pending_approval_count} detail="اسناد قابل مشاهده شما" />
+          </section>
+        ))}
 
-        <section className="rounded-2xl border border-pink-200 bg-pink-50/80 p-4 shadow-sm sm:p-6">
+        {summary?.can_view_reports && <section className="rounded-2xl border border-pink-200 bg-pink-50/80 p-4 shadow-sm sm:p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-xl">هشدار کمبود موجودی</h2><p className="text-xs text-gray-500 mt-1">موجودی قابل فروش کمتر از حداقل تعیین‌شده</p></div><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">{number(lowStock.length)} کالا</span></div>
           <StockTable rows={lowStock} />
-        </section>
+        </section>}
 
-        <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm sm:p-6">
+        {canManageThreshold && <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm sm:p-6">
           <div className="mb-4"><h2 className="text-xl">مدیریت حداقل موجودی SKU</h2><p className="mt-1 text-xs text-gray-500">تغییر حداقل موجودی با مجوز مدیر انجام می‌شود.</p></div>
           <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b border-gray-100 text-right text-gray-500"><th className="p-3">SKU / محصول</th><th className="p-3">قابل فروش</th><th className="p-3">حداقل فعلی</th><th className="p-3">حداقل جدید</th><th className="p-3">عملیات</th></tr></thead>
             <tbody>{thresholds.slice(0, 30).map(row => <tr key={row.variant_id} className="border-b border-gray-50 last:border-0"><td className="p-3"><strong className="block text-gray-800">{row.sku}</strong><span className="text-xs text-gray-500">{row.product_name}</span></td><td className="p-3 tabular-nums">{number(row.available)}</td><td className="p-3 tabular-nums">{number(row.minimum_quantity)}</td><td className="p-3"><input aria-label={`حداقل موجودی ${row.sku}`} inputMode="numeric" value={thresholdDrafts[row.variant_id] ?? String(row.minimum_quantity)} onChange={e => setThresholdDrafts(prev => ({...prev, [row.variant_id]: e.target.value}))} className="w-24 rounded-lg border border-gray-200 px-3 py-2 outline-none focus:border-pink-500" /></td><td className="p-3"><button disabled={!canManageThreshold || savingThreshold === row.variant_id} onClick={() => void saveThreshold(row)} className="rounded-lg bg-pink-800 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{savingThreshold === row.variant_id ? 'در حال ذخیره' : 'ذخیره'}</button></td></tr>)}</tbody>
           </table></div>
           {!canManageThreshold && <p className="mt-3 text-xs text-amber-700">تغییر حداقل موجودی فقط برای مدیر دارای مجوز تأیید نهایی فعال است.</p>}
           {thresholds.length > 30 && <p className="mt-3 text-xs text-gray-500">در این نما ۳۰ SKU نخست نمایش داده می‌شود.</p>}
-        </section>
+        </section>}
 
         {(summary?.can_create_document || summary?.can_review_document || summary?.can_approve_document || summary?.can_view_reports) && (
         <section className="rounded-2xl border-2 border-rose-300 bg-rose-50/70 p-4 shadow-sm ring-1 ring-rose-100 sm:p-6">
