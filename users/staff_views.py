@@ -119,6 +119,12 @@ def assign_staff_role(request, user_id):
                 {"detail": "برای جلوگیری از قطع دسترسی مدیریتی، تغییر نقش حساب خودتان از این صفحه مجاز نیست."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if target.is_superuser:
+            return Response(
+                {"detail": "برای لغو دسترسی مدیر سیستمی از عملیات اختصاصی لغو دسترسی استفاده کنید."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         selected_group = Group.objects.filter(name=role_name).first()
         if selected_group is None:
             return Response(
