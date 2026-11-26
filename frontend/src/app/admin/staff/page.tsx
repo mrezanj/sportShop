@@ -17,12 +17,29 @@ type HistoryItem = {
 };
 type StaffResponse = { count: number; page: number; page_size: number; results: StaffUser[] };
 
+class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
 const inputClass = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-pink-600 focus:ring-2 focus:ring-pink-100';
 const buttonClass = 'rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-bold text-pink-950 hover:bg-pink-50 disabled:opacity-50';
 const number = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 const date = (value: string) => new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
   dateStyle: 'medium', timeStyle: 'short',
 }).format(new Date(value));
+
+function getRequestErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiRequestError) {
+    if (error.status === 401) return 'نشست ورود معتبر نیست یا منقضی شده است. لطفاً خارج شوید و دوباره وارد شوید.';
+    if (error.status === 403) return 'شما مجوز مدیریت کارکنان و مشاهده این اطلاعات را ندارید. این بخش فقط برای مدیرعامل یا رئیس هیئت‌مدیره مجاز است.';
+    if (error.status >= 500) return 'سرور هنگام دریافت اطلاعات کارکنان با خطا مواجه شد. لطفاً کمی بعد دوباره تلاش کنید.';
+    return error.message;
+  }
+  return error instanceof Error ? error.message : fallback;
+}
 
 export default function StaffManagementPage() {
   const { token, user, loading: authLoading } = useAuth();
@@ -49,7 +66,9 @@ export default function StaffManagementPage() {
       cache: 'no-store',
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data?.detail || 'درخواست با خطا مواجه شد.');
+    if (!response.ok) {
+      throw new ApiRequestError(data?.detail || 'درخواست با خطا مواجه شد.', response.status);
+    }
     return data as T;
   }, [token]);
 
@@ -72,7 +91,7 @@ export default function StaffManagementPage() {
         (row.roles.length === 1 ? row.roles[0] : 'مشتری') as Role,
       ])));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'دریافت اطلاعات کارکنان ناموفق بود.');
+      setError(getRequestErrorMessage(err, 'دریافت اطلاعات کارکنان ناموفق بود.'));
     } finally {
       setLoading(false);
     }
@@ -94,7 +113,7 @@ export default function StaffManagementPage() {
       setNotice(`نقش ${row.full_name || row.mobile || row.username} به «${role}» تغییر کرد.`);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'تغییر نقش انجام نشد.');
+      setError(getRequestErrorMessage(err, 'تغییر نقش انجام نشد.'));
     } finally {
       setSaving(null);
     }
@@ -128,7 +147,7 @@ export default function StaffManagementPage() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold text-slate-900">فهرست حساب‌ها</h2>
-              <p className="mt-1 text-sm text-slate-600">تعداد کل: {number(count)} · نمایش ۲۵ حساب در هر صفحه</p>
+              <p className="mt-1 text-sm text-slate-600">{error ? 'تعداد حساب‌ها به دلیل خطای دریافت مشخص نیست.' : <>تعداد کل: {number(count)} · نمایش ۲۵ حساب در هر صفحه</>}</p>
             </div>
             <button type="button" className={buttonClass} onClick={() => void load()} disabled={loading}>به‌روزرسانی</button>
           </div>
@@ -137,7 +156,11 @@ export default function StaffManagementPage() {
             <button className="rounded-xl bg-pink-800 px-5 py-2.5 text-sm font-bold text-white hover:bg-pink-900">جست‌وجو</button>
           </form>
 
-          {loading ? <p className="py-10 text-center text-slate-600">در حال دریافت اطلاعات...</p> : rows.length === 0 ? (
+          {loading ? <p className="py-10 text-center text-slate-600">در حال دریافت اطلاعات...</p> : error ? (
+            <div className="rounded-xl border border-red-200 bg-white p-8 text-center text-sm text-red-800">
+              اطلاعات فهرست دریافت نشد. پس از رفع خطا، دکمه «به‌روزرسانی» را بزنید.
+            </div>
+          ) : rows.length === 0 ? (
             <p className="rounded-xl bg-white p-8 text-center text-slate-600">حسابی پیدا نشد.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -169,16 +192,16 @@ export default function StaffManagementPage() {
             </div>
           )}
           <div className="mt-4 flex items-center justify-between gap-3">
-            <button type="button" className={buttonClass} disabled={page <= 1 || loading} onClick={() => setPage(value => Math.max(1, value - 1))}>صفحه قبل</button>
+            <button type="button" className={buttonClass} disabled={page <= 1 || loading || Boolean(error)} onClick={() => setPage(value => Math.max(1, value - 1))}>صفحه قبل</button>
             <span className="text-sm text-slate-600">صفحه {number(page)} از {number(Math.max(1, Math.ceil(count / 25)))}</span>
-            <button type="button" className={buttonClass} disabled={page * 25 >= count || loading} onClick={() => setPage(value => value + 1)}>صفحه بعد</button>
+            <button type="button" className={buttonClass} disabled={page * 25 >= count || loading || Boolean(error)} onClick={() => setPage(value => value + 1)}>صفحه بعد</button>
           </div>
         </section>
 
         <section className="rounded-2xl border border-sky-200 bg-sky-50/60 p-4 shadow-sm sm:p-6">
           <h2 className="text-xl font-bold text-slate-900">سوابق تغییر نقش</h2>
           <p className="mt-1 text-sm text-slate-600">۵۰ تغییر آخر به همراه ثبت‌کننده، نقش قبلی و نقش جدید</p>
-          {history.length === 0 ? <p className="mt-4 rounded-xl bg-white p-5 text-sm text-slate-600">هنوز تغییری ثبت نشده است.</p> : (
+          {error ? <p className="mt-4 rounded-xl border border-red-200 bg-white p-5 text-sm text-red-800">سوابق نیز به دلیل خطای دریافت در دسترس نیست.</p> : history.length === 0 ? <p className="mt-4 rounded-xl bg-white p-5 text-sm text-slate-600">هنوز تغییری ثبت نشده است.</p> : (
             <div className="mt-4 space-y-2">
               {history.map(item => (
                 <article key={item.id} className="rounded-xl border border-sky-100 bg-white p-3 text-sm">
