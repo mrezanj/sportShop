@@ -103,14 +103,16 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <h2 className="text-xl font-bold text-pink-900 mb-6 border-r-4 border-pink-800 pr-3">محصولات مشابه</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {similar.map((p) => (
-                <Link key={p.id} href={`/products/${p.slug}`} className="group border border-gray-100 rounded-xl overflow-hidden hover:shadow-lg transition-shadow">
-                  <div className="aspect-square bg-pink-50 overflow-hidden">
+                <Link key={p.id} href={`/products/${p.slug}`} className="group flex flex-col border border-pink-200 rounded-2xl overflow-hidden bg-[#fff8fb] shadow-[0_5px_18px_rgba(131,24,67,0.07)] hover:border-pink-300 hover:bg-[#fff0f6] hover:shadow-[0_10px_24px_rgba(131,24,67,0.13)] transition-all">
+                  <div className="aspect-square bg-[#f7eaf1] p-2 sm:p-3">
+                    <div className="w-full h-full rounded-xl overflow-hidden border border-pink-200/80 bg-white shadow-inner">
                     {p.primary_image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={p.primary_image} alt={p.name_fa} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     ) : <div className="w-full h-full flex items-center justify-center text-pink-300 text-sm">بدون عکس</div>}
+                    </div>
                   </div>
-                  <div className="p-3">
+                  <div className="p-3 flex-1">
                     <p className="text-xs text-pink-600 mb-1">{p.brand.name}</p>
                     <p className="text-sm font-medium text-gray-800 line-clamp-2">{p.name_fa}</p>
                     {p.min_price !== null && <p className="text-sm text-pink-900 font-bold mt-1">{p.min_price.toLocaleString('fa-IR')} تومان</p>}
