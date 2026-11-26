@@ -131,6 +131,9 @@ export default function AccountPage() {
           <div>
             <p className="text-xs text-gray-600 mb-1">حساب کاربری</p>
             <p className="text-lg font-bold text-pink-900">
+              {[profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'حساب کاربری'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1" dir="ltr">
               {profile?.mobile ?? user?.mobile}
             </p>
           </div>
